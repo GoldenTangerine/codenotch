@@ -121,7 +121,7 @@ final class Preferences: ObservableObject {
 
     init(defaults: UserDefaults = .standard, domainName: String? = nil) {
         self.defaults = defaults
-        self.domainName = domainName ?? (defaults === .standard ? Bundle.main.bundleIdentifier : nil)
+        self.domainName = domainName ?? (defaults === UserDefaults.standard ? Bundle.main.bundleIdentifier : nil)
         self.isFirstLaunch = !defaults.bool(forKey: Keys.hasLaunched)
         defaults.set(true, forKey: Keys.hasLaunched)
         self.disconnectedProviders = Set(defaults.stringArray(forKey: Keys.disconnected) ?? [])
