@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Edit position" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "编辑位置"
+          }
+        }
+      }
+    },
     "%@ until %@" : {
       "comment" : "A reached limit: reason, then the clock time it lifts.",
       "extractionState" : "manual",

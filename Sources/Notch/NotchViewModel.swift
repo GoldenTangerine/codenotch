@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏视图模型
+ @Descripttion: 维护显示状态及显示栏和详情卡布局数据。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Notch/NotchViewModel.swift
+ */
 import SwiftUI
 import Combine
 
@@ -40,6 +49,9 @@ final class NotchViewModel: ObservableObject {
     /// Which screen edge the notch is welded to. Everything geometric reads
     /// this through `placement` rather than assuming an axis.
     @Published var edge: NotchEdge = .right
+    @Published var isEditingPosition = false
+    @Published var positionedLeading: CGFloat?
+    @Published var tooltipAlongBounds: ClosedRange<CGFloat>?
     /// The display's own notch, when this edge has to share the bezel with one.
     ///
     /// Set by the window controller from the screen the panel is on, because
@@ -61,8 +73,8 @@ final class NotchViewModel: ObservableObject {
     @Published var screenUsableSize: CGSize = .zero
 
     /// Take the notch geometry of whichever screen the panel is on.
-    func adopt(screen: ScreenDescribing) {
-        let merging = edge == .top ? screen.hardwareNotch : nil
+    func adopt(screen: ScreenDescribing, joinsHardware: Bool = true) {
+        let merging = edge == .top && joinsHardware ? screen.hardwareNotch : nil
         if hardwareNotch != merging { hardwareNotch = merging }
         // `frame`, not `visibleFrame`: the panel is centred on the full screen
         // and may sit under the menu bar, so the menu bar is not room lost.
@@ -268,7 +280,32 @@ final class NotchViewModel: ObservableObject {
     var placement: NotchPlacement { NotchPlacement(edge: edge, panelSize: panelSize) }
 
     /// Room at each end of the stack, for this edge.
-    var slack: CGFloat { slack(cellCount: snapshots.count) }
+    var slack: CGFloat { positionedLeading ?? slack(cellCount: snapshots.count) }
+
+    func tooltipAlong(index: Int, length: CGFloat) -> CGFloat {
+        let wanted = slack + ringCenter(index: index)
+        guard let bounds = tooltipAlongBounds else { return wanted }
+        let lower = bounds.lowerBound + length / 2
+        let upper = bounds.upperBound - length / 2
+        return min(max(lower, upper), max(lower, wanted))
+    }
+
+    func tooltipAlongLength(for snapshot: ProviderSnapshot) -> CGFloat {
+        edge.isVertical ? NotchLayout.cardHeight(
+            windowCount: snapshot.windows.count,
+            sessionCount: activity(for: snapshot.id)?.sessions.count ?? 0,
+            sessionCap: sessionCap,
+            statusMessage: snapshot.statusMessage,
+            blockMessage: snapshot.block?.summary(now: now)
+        ) : NotchLayout.cardWidth
+    }
+
+    func tooltipTailOffset(index: Int, snapshot: ProviderSnapshot) -> CGFloat {
+        let length = tooltipAlongLength(for: snapshot)
+        let offset = slack + ringCenter(index: index) - tooltipAlong(index: index, length: length)
+        let limit = max(0, length / 2 - NotchLayout.cardCorner - NotchLayout.tailHeight / 2)
+        return min(limit, max(-limit, offset))
+    }
 
     func slack(cellCount: Int) -> CGFloat {
         NotchLayout.slack(for: edge, maxCardHeight: maxCardHeight(cellCount: cellCount))

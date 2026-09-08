@@ -1,3 +1,12 @@
+/**
+ @name: 应用内更新记录
+ @Descripttion: 提供各版本首次启动时展示的更新内容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:34:20
+ @LastEditTime: 2026-09-08 14:34:20
+ @FilePath: Sources/Settings/ReleaseNotes.swift
+ */
 import Foundation
 
 /// What one release changed, in the app's own words.
@@ -30,6 +39,27 @@ struct ReleaseNote: Equatable {
 /// `testTheCurrentVersionHasANote`.
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
+        ReleaseNote(
+            version: "1.5.5",
+            headline: "Put the notch where you need it, on any display.",
+            changes: [
+                ReleaseNote.Change(
+                    title: "Drag to position",
+                    detail: "Choose Edit position from the right-click menu, then drag to any screen edge. "
+                          + "Release to save, or press Escape to cancel."
+                ),
+                ReleaseNote.Change(
+                    title: "Your display and position are remembered",
+                    detail: "Move between displays and restore the same position after relaunch. "
+                          + "Disconnecting a display temporarily moves the notch to the main display."
+                ),
+                ReleaseNote.Change(
+                    title: "Fits the corners and the camera notch",
+                    detail: "Details stay visible near corners. The top centre snaps to the camera notch; "
+                          + "other top positions stay below the menu bar."
+                )
+            ]
+        ),
         ReleaseNote(
             version: "1.5.0",
             headline: "Two more providers, and a live account plan that was silently dropped.",

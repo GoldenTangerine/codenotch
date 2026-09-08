@@ -1,3 +1,13 @@
+<!--
+@name: 项目说明
+@Descripttion: 介绍应用功能与开发使用方式。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-08 14:12:37
+@LastEditTime: 2026-09-08 14:12:37
+@FilePath: README.md
+-->
+
 # Codenotch
 
 A macOS app that pins a small black notch to a screen edge, showing how much of
@@ -41,6 +51,14 @@ the default `~/.claude` always comes first, the rest in alphabetical order, so t
 rings never swap places.
 
 ## Placement
+
+Right-click the notch and choose **Edit position** to drag it along any of the
+four edges or onto another display. Release to save; press Escape to cancel.
+The position survives relaunches. A disconnected display temporarily falls back
+to the main display and restores when reconnected, unless you save a new position.
+Changing the edge in Settings centres the notch on that edge of the selected display.
+On a Mac with a hardware notch, dragging near the top centre snaps into it;
+other top positions stay below the menu bar.
 
 The notch lives on any of the four screen edges. Right and left keep a
 vertical column; top and bottom lay the readings out side by side. It pins

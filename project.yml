@@ -1,3 +1,10 @@
+# @name: 应用构建配置
+# @Descripttion: 定义应用版本、构建目标和依赖。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-08 14:34:20
+# @LastEditTime: 2026-09-08 14:34:20
+# @FilePath: project.yml
 name: Codenotch
 options:
   bundleIdPrefix: com.vinz
@@ -16,8 +23,8 @@ settings:
     # Sources/Info.plist reads both from here — hardcoding them there instead
     # silently pins every build to one version, so no customer ever sees an
     # update. Bump CURRENT_PROJECT_VERSION on every release.
-    MARKETING_VERSION: "1.5.0"
-    CURRENT_PROJECT_VERSION: "7"
+    MARKETING_VERSION: "1.5.5"
+    CURRENT_PROJECT_VERSION: "30"
     # Signed with a stable identity on purpose. The app reads Claude Code's
     # OAuth token out of the login keychain, and the keychain's ACL remembers
     # *which signed binary* was allowed. Ad-hoc or unsigned builds get a new

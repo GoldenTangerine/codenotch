@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏视图
+ @Descripttion: 绘制显示栏及定位编辑状态和详情卡。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Notch/NotchRootView.swift
+ */
 import SwiftUI
 
 struct NotchRootView: View {
@@ -43,7 +52,8 @@ struct NotchRootView: View {
                         activity: model.activity(for: snapshot.id),
                         now: model.now,
                         direction: model.edge.tooltipDirection,
-                        sessionCap: model.sessionCap
+                        sessionCap: model.sessionCap,
+                        tailOffset: model.tooltipTailOffset(index: index, snapshot: snapshot)
                     )
                         // Deliberately *no* `.id` here: the card is one object
                         // that travels and resizes between cells, which reads
@@ -90,6 +100,13 @@ struct NotchRootView: View {
             // slide out of the end of it; clipped, they are swallowed by the
             // outline as it closes, which is what a notch should do.
             .clipShape(SideNotchShape(edge: model.edge, joining: model.joinedNotch))
+            .overlay {
+                if model.isEditingPosition {
+                    SideNotchShape(edge: model.edge, joining: model.joinedNotch)
+                        .stroke(Color.accentColor, lineWidth: 1)
+                        .allowsHitTesting(false)
+                }
+            }
             .position(place.point(
                 along: model.notchLeadingInset + model.notchLength / 2,
                 across: model.notchDepth / 2
@@ -196,7 +213,7 @@ struct NotchRootView: View {
                 blockMessage: snapshot.block?.summary(now: model.now)
             )
         return place.point(
-            along: model.slack + model.ringCenter(index: index),
+            along: model.tooltipAlong(index: index, length: model.tooltipAlongLength(for: snapshot)),
             across: model.tooltipInset + (NotchLayout.tailLength + card) / 2
         )
     }

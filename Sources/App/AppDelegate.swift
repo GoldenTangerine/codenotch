@@ -1,3 +1,12 @@
+/**
+ @name: 应用生命周期
+ @Descripttion: 连接应用服务和用户设置。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/App/AppDelegate.swift
+ */
 import AppKit
 import Combine
 import SwiftUI
@@ -81,6 +90,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // this, every launch on any other edge opens with a flash of the
             // right-hand one and then crossfades away from it.
             controller.model.edge = preferences.notchEdge
+            controller.restore(position: preferences.notchPosition)
+            controller.onPositionCommitted = { [weak preferences] in preferences?.notchPosition = $0 }
 
             let updater = Updater()
             self.updater = updater

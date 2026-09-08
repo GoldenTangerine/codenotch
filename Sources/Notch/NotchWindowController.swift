@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏窗口控制器
+ @Descripttion: 管理显示栏定位和鼠标键盘交互。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Notch/NotchWindowController.swift
+ */
 import AppKit
 import SwiftUI
 import Combine
@@ -23,6 +32,32 @@ final class NotchWindowController {
     var onRefreshProvider: ((String) -> Void)?
     /// Open the settings window, asked for by clicking the handle.
     var onOpenSettings: (() -> Void)?
+    var onPositionCommitted: ((NotchPosition) -> Void)?
+    private(set) var savedPosition: NotchPosition?
+    private var previewPosition: NotchPosition?
+    private var editOriginalEdge: NotchEdge = .right
+    private var editWasExpanded = false
+    private weak var previousKeyWindow: NSWindow?
+    private var previousApplication: NSRunningApplication?
+    private var dragStart: CGPoint?
+    private var dragGrabFraction: CGFloat = 0
+    private var didDrag = false
+
+    private var activePosition: NotchPosition {
+        previewPosition ?? savedPosition ?? NotchPosition(edge: model.edge)
+    }
+
+    private var selectedScreen: NSScreen? {
+        if previewPosition == nil && savedPosition == nil {
+            return NotchGeometry.preferredScreen(from: NSScreen.screens)
+        }
+        return NSScreen.notchScreen(for: activePosition)
+    }
+
+    func restore(position: NotchPosition?) {
+        savedPosition = position
+        if let position { model.edge = position.edge }
+    }
 
     private var panel: NotchPanel?
     private var hostingView: NotchHostingView<NotchRootView>?
@@ -60,9 +95,22 @@ final class NotchWindowController {
             for: NSApplication.didChangeScreenParametersNotification
         )
         .sink { [weak self] _ in
-            MainActor.assumeIsolated { self?.relocate() }
+            MainActor.assumeIsolated {
+                self?.finishPositionEditing(commit: false)
+                self?.relocate()
+            }
         }
         .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
+            .sink { [weak self] _ in self?.finishPositionEditing(commit: false, restoreFocus: false) }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)
+            .sink { [weak self] notification in
+                guard let self, notification.object as? NSWindow === self.panel else { return }
+                self.finishPositionEditing(commit: false, restoreFocus: false)
+            }
+            .store(in: &cancellables)
 
         model.$hoveredIndex
             .sink { [weak self] _ in
@@ -85,6 +133,7 @@ final class NotchWindowController {
     }
 
     func stop() {
+        finishPositionEditing(commit: false)
         setPointing(false)
         foldWork?.cancel()
         cursorTimer?.invalidate()
@@ -97,10 +146,25 @@ final class NotchWindowController {
     // MARK: - Placement
 
     func relocate(cellCount: Int? = nil) {
-        guard let screen = NotchGeometry.preferredScreen(from: NSScreen.screens) else { return }
-        model.adopt(screen: screen)
+        guard let screen = selectedScreen else { return }
+        model.adopt(screen: screen, joinsHardware: activePosition.joinsHardware)
         let size = model.panelSize(cellCount: cellCount ?? model.snapshots.count)
-        let frame = NotchGeometry.panelFrame(for: screen, panelSize: size, edge: model.edge)
+        let frame: CGRect
+        if previewPosition != nil || savedPosition != nil {
+            let layout = activePosition.layout(on: screen, panelSize: size,
+                shapeLength: model.shapeLength(cellCount: cellCount ?? model.snapshots.count),
+                endClearance: NotchLayout.orbHotZone)
+            frame = layout.frame
+            model.positionedLeading = layout.leading
+            let usable = screen.visibleFrame
+            let lower = model.edge.isVertical ? max(0, frame.maxY - usable.maxY) : max(0, usable.minX - frame.minX)
+            let upper = model.edge.isVertical ? min(frame.height, frame.maxY - usable.minY) : min(frame.width, usable.maxX - frame.minX)
+            model.tooltipAlongBounds = lower...max(lower, upper)
+        } else {
+            frame = NotchGeometry.panelFrame(for: screen, panelSize: size, edge: model.edge)
+            model.positionedLeading = nil
+            model.tooltipAlongBounds = nil
+        }
         lastVisibleFrame = screen.visibleFrame
 
         if let panel {
@@ -110,6 +174,7 @@ final class NotchWindowController {
             let hosting = NotchHostingView(rootView: NotchRootView(model: model))
             panel.contextMenuProvider = { [weak self] in self?.contextMenu() }
             panel.onClick = { [weak self] in self?.handleClick() }
+            panel.positionEventHandler = { [weak self] in self?.handlePositionEvent($0) ?? false }
 
             // The hosting view goes *inside* a plain container rather than
             // being the content view itself.
@@ -223,7 +288,7 @@ final class NotchWindowController {
         // pointer has to cross. Along it, the card's own extent.
         let cardAcross = model.edge.isVertical ? NotchLayout.cardWidth : cardHeight
         let cardAlong = model.edge.isVertical ? cardHeight : NotchLayout.cardWidth
-        let centre = model.slack + model.ringCenter(index: index)
+        let centre = model.tooltipAlong(index: index, length: cardAlong)
         return placement.rect(
             along: centre - cardAlong / 2,
             across: model.contentInset + NotchLayout.bodyDepth(for: model.edge),
@@ -239,7 +304,7 @@ final class NotchWindowController {
         }
         hostingView?.interactiveRects = rects
         if let panel {
-            panel.ignoresMouseEvents = !rects.contains { $0.contains(localCursor(in: panel.frame)) }
+            panel.ignoresMouseEvents = dragStart == nil && !rects.contains { $0.contains(localCursor(in: panel.frame)) }
         }
     }
 
@@ -288,12 +353,13 @@ final class NotchWindowController {
     /// Has the Dock appeared, gone away, moved or resized since we last placed
     /// the panel? Nothing notifies us, so this is asked rather than told.
     private func followUsableAreaIfItMoved() {
-        guard let screen = NotchGeometry.preferredScreen(from: NSScreen.screens) else { return }
+        guard let screen = selectedScreen else { return }
         guard screen.visibleFrame != lastVisibleFrame else { return }
         relocate()
     }
 
     private func cursorMoved() {
+        guard !model.isEditingPosition else { updateInteractiveRects(); return }
         guard let panel else { return }
         let local = localCursor(in: panel.frame)
         let overTooltip = model.hoveredIndex
@@ -391,6 +457,7 @@ final class NotchWindowController {
     /// A click on a ring refetches that provider; a click anywhere else on the
     /// open notch pins it. The ring is the more specific target, so it wins.
     func handleClick() {
+        guard !model.isEditingPosition else { return }
         guard let panel, model.isExpanded else {
             // Opens it, the same as the pointer arriving would — it must not
             // also pin it. The pill's hot zone is deliberately generous, since
@@ -434,9 +501,11 @@ final class NotchWindowController {
     /// like a bug rather than a choice — hence the crossing rather than a
     /// slide.
     func apply(edge: NotchEdge) {
+        finishPositionEditing(commit: false)
         guard model.edge != edge else { return }
         guard let panel else {   // before there is anything on screen to fade
             model.edge = edge
+            centerSavedPosition(on: edge)
             relocate()
             return
         }
@@ -461,6 +530,7 @@ final class NotchWindowController {
                 // Land folded, and at full strength: the opening *is* the
                 // animation, and fading in underneath it would be two at once.
                 self.model.edge = edge
+                self.centerSavedPosition(on: edge)
                 self.model.isExpanded = false
                 self.relocate()
                 self.updateInteractiveRects()
@@ -488,7 +558,15 @@ final class NotchWindowController {
     private static let arrivalBeat: TimeInterval = 0.05
     private var edgeChange = 0
 
+    private func centerSavedPosition(on edge: NotchEdge) {
+        guard let savedPosition else { return }
+        let centered = NotchPosition(edge: edge, displayID: savedPosition.displayID)
+        self.savedPosition = centered
+        onPositionCommitted?(centered)
+    }
+
     func apply(_ visibility: NotchVisibility) {
+        finishPositionEditing(commit: false)
         switch visibility {
         case .alwaysShow:
             panel?.orderFrontRegardless()
@@ -529,6 +607,7 @@ final class NotchWindowController {
     /// held open by a standing choice, and letting a click release it meant
     /// the setting said one thing and the notch did another.
     func togglePinned() {
+        guard !model.isEditingPosition else { return }
         guard !model.isAlwaysOn else { return }
         model.isPinned.toggle()
         if model.isPinned {
@@ -546,6 +625,118 @@ final class NotchWindowController {
             if abs(along - centre) <= pitch / 2 { return index }
         }
         return nil
+    }
+
+    // MARK: - Position editing
+
+    func beginPositionEditing() {
+        guard !model.isEditingPosition, let panel, let screen = selectedScreen else { return }
+        edgeChange += 1
+        panel.alphaValue = 1
+        foldWork?.cancel()
+        foldWork = nil
+        clearHoverWork?.cancel()
+        clearHoverWork = nil
+        setPointing(false)
+        editOriginalEdge = model.edge
+        editWasExpanded = model.isExpanded
+        previousKeyWindow = NSApp.keyWindow
+        previousApplication = NSWorkspace.shared.frontmostApplication
+        previewPosition = activePosition
+        previewPosition?.displayID = screen.notchDisplayID
+        model.hoveredIndex = nil
+        model.isHoveringSettings = false
+        model.isEditingPosition = true
+        model.isExpanded = true
+        panel.isEditingPosition = true
+        dragGrabFraction = 0
+        NSCursor.openHand.push()
+        panel.makeKey()
+        updateInteractiveRects()
+    }
+
+    func finishPositionEditing(commit: Bool, restoreFocus: Bool = true) {
+        guard model.isEditingPosition else { return }
+        let committed = commit && didDrag ? previewPosition : nil
+        model.isEditingPosition = false
+        panel?.isEditingPosition = false
+        dragStart = nil
+        didDrag = false
+        previewPosition = nil
+        if let committed {
+            savedPosition = committed
+            model.edge = committed.edge
+        } else {
+            model.edge = editOriginalEdge
+        }
+        model.isExpanded = editWasExpanded || model.staysOpen
+        NSCursor.pop()
+        relocate()
+        if let committed { onPositionCommitted?(committed) }
+        if restoreFocus {
+            previousKeyWindow?.makeKey()
+            if let previousApplication, previousApplication.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+               NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+                previousApplication.activate(options: [])
+            }
+        }
+        if panel?.isKeyWindow == true { panel?.resignKey() }
+        previousKeyWindow = nil
+        previousApplication = nil
+        if committed != nil { cursorMoved() }
+    }
+
+    private func handlePositionEvent(_ event: NSEvent) -> Bool {
+        guard model.isEditingPosition else { return false }
+        switch event.type {
+        case .keyDown:
+            if event.keyCode == 53 { finishPositionEditing(commit: false) }
+            return true
+        case .leftMouseDown:
+            guard let panel, liveRect.contains(localCursor(in: panel.frame)) else { return false }
+            dragStart = NSEvent.mouseLocation
+            dragGrabFraction = (placement.along(of: localCursor(in: panel.frame)) - model.slack)
+                / max(1, model.shapeLength) - 0.5
+            didDrag = false
+            NSCursor.closedHand.set()
+            return true
+        case .leftMouseDragged:
+            guard let dragStart else { return true }
+            updatePositionDrag(to: NSEvent.mouseLocation, from: dragStart)
+            return true
+        case .leftMouseUp:
+            guard dragStart != nil else { return true }
+            if didDrag { finishPositionEditing(commit: true) }
+            else {
+                dragStart = nil
+                NSCursor.openHand.set()
+                updateInteractiveRects()
+            }
+            return true
+        case .rightMouseDown, .otherMouseDown, .scrollWheel:
+            return true
+        default:
+            return false
+        }
+    }
+
+    func updatePositionDrag(to point: CGPoint, from start: CGPoint) {
+        guard model.isEditingPosition,
+              didDrag || hypot(point.x - start.x, point.y - start.y) >= 4,
+              let screen = NSScreen.notchScreen(at: point) else { return }
+        didDrag = true
+        let old = activePosition
+        var candidate = NotchPosition.snapped(to: point, on: screen,
+                                             displayID: screen.notchDisplayID, previous: old)
+        model.edge = candidate.edge
+        model.adopt(screen: screen, joinsHardware: candidate.joinsHardware)
+        var center = point
+        if candidate.edge.isVertical { center.y += dragGrabFraction * model.shapeLength }
+        else { center.x -= dragGrabFraction * model.shapeLength }
+        // The pointer chooses the edge; the grab offset only chooses the position along it.
+        candidate = candidate.movingAlong(to: center, on: screen, previous: old)
+        previewPosition = candidate
+        relocate()
     }
 
     // MARK: - Odds and ends
@@ -581,6 +772,13 @@ final class NotchWindowController {
             ? String(localized: "Codenotch is set to Always show. Change it in Settings.")
             : nil
         menu.addItem(keepOpen)
+        let editPosition = NSMenuItem(
+            title: String(localized: "Edit position"),
+            action: #selector(MenuActions.editPosition(_:)), keyEquivalent: ""
+        )
+        editPosition.target = menuActions
+        editPosition.isEnabled = !model.isEditingPosition
+        menu.addItem(editPosition)
         menu.addItem(.separator())
 
         let refresh = NSMenuItem(
@@ -615,7 +813,10 @@ final class NotchWindowController {
     private lazy var menuActions = MenuActions(
         refresh: { [weak self] in self?.onRefresh?() },
         signIn: { [weak self] index in self?.signInItems[safe: index]?.action() },
-        togglePinned: { [weak self] in self?.togglePinned() }
+        togglePinned: { [weak self] in self?.togglePinned() },
+        editPosition: { [weak self] in
+            DispatchQueue.main.async { self?.beginPositionEditing() }
+        }
     )
 }
 
@@ -626,19 +827,23 @@ final class MenuActions: NSObject {
     private let refresh: () -> Void
     private let signIn: (Int) -> Void
     private let pin: () -> Void
+    private let edit: () -> Void
 
     init(
         refresh: @escaping () -> Void,
         signIn: @escaping (Int) -> Void,
-        togglePinned: @escaping () -> Void
+        togglePinned: @escaping () -> Void,
+        editPosition: @escaping () -> Void = {}
     ) {
         self.refresh = refresh
         self.signIn = signIn
         self.pin = togglePinned
+        self.edit = editPosition
     }
 
     @objc func refreshNow(_ sender: Any?) { refresh() }
     @objc func togglePinned(_ sender: Any?) { pin() }
+    @objc func editPosition(_ sender: Any?) { edit() }
 
     @objc func signIn(_ sender: Any?) {
         guard let item = sender as? NSMenuItem else { return }

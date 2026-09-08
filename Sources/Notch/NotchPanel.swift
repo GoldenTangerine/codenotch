@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏窗口
+ @Descripttion: 处理显示栏窗口事件和位置编辑键盘输入。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Notch/NotchPanel.swift
+ */
 import AppKit
 
 /// Borderless, non-activating panel that floats over everything, including the
@@ -12,8 +21,11 @@ final class NotchPanel: NSPanel {
     /// A left click on the visible chrome. Handled here for the same reason the
     /// menu is: the hit test lands on a SwiftUI subview that may consume it.
     var onClick: (() -> Void)?
+    var positionEventHandler: ((NSEvent) -> Bool)?
+    var isEditingPosition = false
 
     override func sendEvent(_ event: NSEvent) {
+        if positionEventHandler?(event) == true { return }
         guard event.type == .rightMouseDown,
               let menu = contextMenuProvider?(),
               let view = contentView,
@@ -50,6 +62,6 @@ final class NotchPanel: NSPanel {
         isReleasedWhenClosed = false
     }
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { isEditingPosition }
     override var canBecomeMain: Bool { false }
 }

@@ -1,3 +1,12 @@
+/**
+ @name: 详情提示卡
+ @Descripttion: 绘制用量详情与跟随锚点的提示箭头。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Features/TooltipCard.swift
+ */
 import SwiftUI
 
 /// The speech-bubble tail, its point aimed at the hovered cell.
@@ -55,6 +64,7 @@ private struct TooltipShell<Content: View>: View {
     /// Which side of the notch the card is on, so the tail goes on the other one.
     let direction: NotchEdge.TooltipDirection
     @ViewBuilder let content: Content
+    var tailOffset: CGFloat = 0
 
     private var card: some View {
         // The same arrangement that makes the notch fold work: the contents
@@ -88,6 +98,8 @@ private struct TooltipShell<Content: View>: View {
         return TooltipTail(direction: direction)
             .fill(Palette.card)
             .frame(width: size.width, height: size.height)
+            .offset(x: direction == .up || direction == .down ? tailOffset : 0,
+                    y: direction == .leading || direction == .trailing ? tailOffset : 0)
     }
 
     var body: some View {
@@ -436,6 +448,7 @@ struct TooltipCard: View {
     /// How many sessions this screen has room to list. Solved from the display
     /// rather than fixed, so a big screen hides nothing.
     var sessionCap: Int = NotchLayout.defaultSessionCap
+    var tailOffset: CGFloat = 0
 
     /// The same figure the hover region uses, so what is drawn and what is
     /// reachable can never drift apart.
@@ -450,7 +463,7 @@ struct TooltipCard: View {
     }
 
     var body: some View {
-        TooltipShell(height: height, direction: direction) {
+        TooltipShell(height: height, direction: direction, content: {
             // Stacked, not replaced in place: during a swap both sets of rows
             // exist for a moment, and in a ZStack they overlap and dissolve
             // instead of shoving each other around. Top-aligned so neither
@@ -471,6 +484,6 @@ struct TooltipCard: View {
                 .transition(.opacity.animation(NotchMotion.crossfade))
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
-        }
+        }, tailOffset: tailOffset)
     }
 }

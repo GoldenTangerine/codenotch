@@ -1,3 +1,12 @@
+/**
+ @name: 应用偏好
+ @Descripttion: 存储用户设置与显示栏位置。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Settings/Preferences.swift
+ */
 import Combine
 import Foundation
 import ServiceManagement
@@ -24,6 +33,19 @@ final class Preferences: ObservableObject {
     /// Which screen edge the notch is welded to.
     @Published var notchEdge: NotchEdge {
         didSet { defaults.set(notchEdge.rawValue, forKey: Keys.edge) }
+    }
+
+    var notchPosition: NotchPosition? {
+        get {
+            defaults.data(forKey: "notchPosition")
+                .flatMap { try? JSONDecoder().decode(NotchPosition.self, from: $0) }
+        }
+        set {
+            guard let newValue else { defaults.removeObject(forKey: "notchPosition"); return }
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: "notchPosition")
+            if notchEdge != newValue.edge { notchEdge = newValue.edge }
+        }
     }
 
     /// Where the app itself shows up: Dock, menu bar, or nowhere.
