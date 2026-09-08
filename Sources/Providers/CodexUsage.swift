@@ -45,7 +45,7 @@ enum CodexUsage {
             ))
         }
         guard !windows.isEmpty else {
-            throw UsageProviderError.nothingMetered("Codex reported no usage windows")
+            throw UsageProviderError.nothingMetered(String(localized: "Codex reported no usage windows"))
         }
         return windows
     }
@@ -59,16 +59,17 @@ enum CodexUsage {
     /// absent and the ring reporting nothing metered at all.
     static func label(windowSeconds: Double, fallback: String) -> String {
         guard windowSeconds > 0 else {
-            return fallback == "primary" ? "Current session" : "Longer window"
+            return fallback == "primary"
+                ? String(localized: "Current session") : String(localized: "Longer window")
         }
         let minutes = windowSeconds / 60
-        if minutes < 60 { return "\(Int(minutes))m limit" }
-        if minutes < 60 * 24 { return "\(Int(minutes / 60))h limit" }
+        if minutes < 60 { return String(localized: "\(Int(minutes))m limit") }
+        if minutes < 60 * 24 { return String(localized: "\(Int(minutes / 60))h limit") }
         let days = Int((minutes / (60 * 24)).rounded())
         switch days {
-        case 7:  return "Weekly limit"
-        case 30: return "Monthly limit"
-        default: return "\(days)d limit"
+        case 7:  return String(localized: "Weekly limit")
+        case 30: return String(localized: "Monthly limit")
+        default: return String(localized: "\(days)d limit")
         }
     }
 }

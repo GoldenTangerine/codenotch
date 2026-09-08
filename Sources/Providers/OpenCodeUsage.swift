@@ -20,10 +20,12 @@ enum OpenCodeUsage {
 
     /// Window ids in headline order. The ring means the rolling window — the
     /// current one, the same subject Claude's session and Codex's primary are.
+    /// Labels resolve once at first use; the language is fixed for the life of
+    /// the process, so a lazy constant can never go stale.
     private static let windows: [(id: String, label: String)] = [
-        ("rolling", "5h limit"),
-        ("weekly", "Weekly limit"),
-        ("monthly", "Monthly limit"),
+        ("rolling", String(localized: "5h limit")),
+        ("weekly", String(localized: "Weekly limit")),
+        ("monthly", String(localized: "Monthly limit")),
     ]
 
     static func windows(fromJSON json: String, now: Date = Date()) throws -> [LimitWindow] {

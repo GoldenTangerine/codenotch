@@ -5,14 +5,14 @@ import Foundation
 enum ResetCopy {
     static func text(for resetsAt: Date, now: Date = Date(), calendar: Calendar = .current) -> String {
         let seconds = resetsAt.timeIntervalSince(now)
-        guard seconds > 0 else { return "Resetting…" }
+        guard seconds > 0 else { return String(localized: "Resetting…") }
 
         // Rounding, not truncation, so 50m40s reads as 51 rather than 50. A
         // value that rounds up to 60 falls through to the absolute form, so
         // "Resets in 60 min" never appears.
         let minutes = Int((seconds / 60).rounded())
         if minutes < 60 {
-            return "Resets in \(max(1, minutes)) min"
+            return String(localized: "Resets in \(max(1, minutes)) min")
         }
 
         let formatter = formatter(for: calendar)
@@ -25,15 +25,28 @@ enum ResetCopy {
             // Day and month only, matching how the vendors write it. A time
             // that far out is noise: nobody plans around 3:55 PM in four weeks.
             formatter.setLocalizedDateFormatFromTemplate("MMM d")
-            return "Resets \(formatter.string(from: resetsAt))"
+            return String(localized: "Resets \(formatter.string(from: resetsAt))")
         }
 
-        // A literal pattern rather than a localised template: the weekday and
-        // AM/PM still come from the locale, but the separator stays a colon.
-        // The template form yields "4.50 PM" in some regions, and both the
-        // design frame and Claude's own usage panel write "4:50 PM".
-        formatter.dateFormat = "E h:mm a"
-        return "Resets \(formatter.string(from: resetsAt))"
+        // A weekday-and-clock, formatted to the locale — see applyClockFormat.
+        applyClockFormat(to: formatter, weekday: true)
+        return String(localized: "Resets \(formatter.string(from: resetsAt))")
+    }
+
+    /// Weekday-and-clock formatting for reset times.
+    ///
+    /// The literal patterns pin the colon and the English word order — the
+    /// template form yields "4.50 PM" in some regions, and both the design
+    /// frame and Claude's own usage panel write "4:50 PM". Under a Chinese
+    /// locale that same literal order reads backwards ("周日 4:50 下午"), so
+    /// Chinese takes the locale's own ordering ("周日下午4:50") instead.
+    static func applyClockFormat(to formatter: DateFormatter, weekday: Bool) {
+        let isChinese = formatter.locale.language.languageCode?.identifier.hasPrefix("zh") ?? false
+        if isChinese {
+            formatter.setLocalizedDateFormatFromTemplate(weekday ? "Ehmm" : "hmm")
+        } else {
+            formatter.dateFormat = weekday ? "E h:mm a" : "h:mm a"
+        }
     }
 
     /// A formatter that renders in the given calendar's own zone.

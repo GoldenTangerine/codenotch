@@ -260,7 +260,10 @@ private struct LimitWindowRow: View {
                 .padding(.top, NotchLayout.labelToBar)
             }
 
-            Text("\(window.usedFraction == nil ? "" : fidelity.qualifier)\(window.summary)")
+            // Plain text, not a LocalizedStringKey: both halves are already
+            // resolved (a fidelity mark and a localised summary), and as
+            // interpolations they would mint a meaningless "%@%@" catalog key.
+            Text((window.usedFraction == nil ? "" : fidelity.qualifier) + window.summary)
                 .font(Typography.cardBody)
                 .foregroundStyle(Palette.textPrimary)
                 .padding(.top, NotchLayout.barToUsed)
@@ -283,7 +286,7 @@ private struct ProviderTooltip: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TooltipHeader(title: "\(snapshot.displayName) Usage", note: readingAge) {
+            TooltipHeader(title: String(localized: "\(snapshot.displayName) Usage"), note: readingAge) {
                 ProviderGlyphView(glyph: snapshot.glyph)
                     .foregroundStyle(Palette.textPrimary)
             }
@@ -346,9 +349,9 @@ private struct SessionRow: View {
 
     private var stateWord: String {
         switch session.state {
-        case .busy:    return "working"
-        case .waiting: return "waiting"
-        case .idle:    return "idle"
+        case .busy:    return String(localized: "working")
+        case .waiting: return String(localized: "waiting")
+        case .idle:    return String(localized: "idle")
         }
     }
 

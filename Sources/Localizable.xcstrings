@@ -1,0 +1,1592 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "%@ until %@" : {
+      "comment" : "A reached limit: reason, then the clock time it lifts.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 至 %@ 恢复"
+          }
+        }
+      }
+    },
+    "%@ Usage" : {
+      "comment" : "Tooltip title: provider name followed by the word for usage.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 用量"
+          }
+        }
+      }
+    },
+    "%lld hr" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 小时"
+          }
+        }
+      }
+    },
+    "%lld hr %lld min" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 小时 %lld 分钟"
+          }
+        }
+      }
+    },
+    "%lld hr %lld min ago" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 小时 %lld 分钟前"
+          }
+        }
+      }
+    },
+    "%lld hr ago" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 小时前"
+          }
+        }
+      }
+    },
+    "%lld left" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "剩余 %lld"
+          }
+        }
+      }
+    },
+    "%lld min" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 分钟"
+          }
+        }
+      }
+    },
+    "%lld min ago" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 分钟前"
+          }
+        }
+      }
+    },
+    "%lld used" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已用 %lld"
+          }
+        }
+      }
+    },
+    "%lld%% Used · %lld%% left" : {
+      "comment" : "Both ends of the same percentage: used, then remaining.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已用 %lld%% · 剩余 %lld%%"
+          }
+        }
+      }
+    },
+    "%lldd limit" : {
+      "comment" : "A window measured in days, e.g. \"30d limit\".",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 天限额"
+          }
+        }
+      }
+    },
+    "%lldh limit" : {
+      "comment" : "A window measured in hours, e.g. \"5h limit\".",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 小时限额"
+          }
+        }
+      }
+    },
+    "%lldm limit" : {
+      "comment" : "A window measured in minutes, e.g. \"45m limit\".",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 分钟限额"
+          }
+        }
+      }
+    },
+    "5h limit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "5 小时限额"
+          }
+        }
+      }
+    },
+    "A normal app icon in the Dock while Codenotch is running." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行期间在程序坞显示常规应用图标。"
+          }
+        }
+      }
+    },
+    "A small icon in the menu bar instead, and nothing in the Dock." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改为在菜单栏显示小图标，程序坞不显示。"
+          }
+        }
+      }
+    },
+    "A small pill at the screen edge that opens when you reach it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕边缘的一枚小胶囊，指针靠近时展开。"
+          }
+        }
+      }
+    },
+    "A wide bar across the top, readings side by side. On a Mac with a notch of its own it runs up to meet it, so the two read as one shape." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "横贯顶部的一条宽栏，读数并排显示。在自带刘海的 Mac 上它会与刘海相接，两者浑然一体。"
+          }
+        }
+      }
+    },
+    "A wide bar resting on top of the Dock, readings side by side." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停在程序坞上方的一条宽栏，读数并排显示。"
+          }
+        }
+      }
+    },
+    "Agentic research" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "智能体研究"
+          }
+        }
+      }
+    },
+    "All models" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有模型"
+          }
+        }
+      }
+    },
+    "Allow access…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许访问…"
+          }
+        }
+      }
+    },
+    "Always show" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "始终显示"
+          }
+        }
+      }
+    },
+    "and %lld more" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有 %lld 个"
+          }
+        }
+      }
+    },
+    "API usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 用量"
+          }
+        }
+      }
+    },
+    "App designed and developed by" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用设计与开发者："
+          }
+        }
+      }
+    },
+    "App icon" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用图标"
+          }
+        }
+      }
+    },
+    "Appearance" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "外观"
+          }
+        }
+      }
+    },
+    "Asks macOS for %@'s saved login again. Choose Always Allow and it will stop asking." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "让 macOS 再次询问 %@ 的已存登录信息。选择「始终允许」后不再询问。"
+          }
+        }
+      }
+    },
+    "Bottom" : {
+      "comment" : "Screen edge.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "底部"
+          }
+        }
+      }
+    },
+    "Check now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即检查"
+          }
+        }
+      }
+    },
+    "Checking…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查…"
+          }
+        }
+      }
+    },
+    "Codenotch is set to Always show. Change it in Settings." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codenotch 已设为「始终显示」，可在设置中更改。"
+          }
+        }
+      }
+    },
+    "Codenotch is up to date." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codenotch 已是最新版本。"
+          }
+        }
+      }
+    },
+    "Codenotch never signs in — each reading is borrowed from the tool that already holds the account. Signing out here stops the credential being read and forgets the numbers, but leaves you signed in to that tool. macOS asks once per tool the first time, and again whenever you sign in to a different account; Always Allow keeps it quiet." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codenotch 从不代为登录——每次读数都借用已登录工具自身的凭据。在这里关闭会停止读取并清除读数，但不会影响你在该工具中的登录状态。macOS 会在每个工具首次读取时询问一次，更换登录账号后也会再次询问；选择「始终允许」即可不再打扰。"
+          }
+        }
+      }
+    },
+    "Codenotch reads usage from tools already signed in on this Mac — it never asks for your password. Install and sign in to any of Claude Code (the terminal tool, not the Claude app), Cursor, Codex, Antigravity, GLM, Grok or OpenCode, and its ring appears in the notch." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codenotch 读取的是这台 Mac 上已登录工具的用量，从不要求你的密码。安装并登录 Claude Code（终端工具，不是 Claude 应用）、Cursor、Codex、Antigravity、GLM、Grok 或 OpenCode 中的任意一个，它的圆环就会出现在刘海里。"
+          }
+        }
+      }
+    },
+    "Codenotch Settings" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codenotch 设置"
+          }
+        }
+      }
+    },
+    "Codenotch was refused access to %@'s saved login. Click this ring to ask again, and choose Always Allow." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codenotch 被拒绝了访问 %@ 已存登录信息的权限。点击此圆环重新请求，并选择「始终允许」。"
+          }
+        }
+      }
+    },
+    "Codex reported no usage windows" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codex 未报告任何用量窗口"
+          }
+        }
+      }
+    },
+    "Connect an assistant to get started" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接一个 AI 助手开始使用"
+          }
+        }
+      }
+    },
+    "Connect the Go plan in OpenCode to read your usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 OpenCode 中连接 Go 套餐后即可读取用量"
+          }
+        }
+      }
+    },
+    "Continue" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续"
+          }
+        }
+      }
+    },
+    "Couldn't reach the update server. Codenotch will try again on its own — nothing is wrong with this copy." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法连接更新服务器。Codenotch 会自行重试——当前副本没有任何问题。"
+          }
+        }
+      }
+    },
+    "Couldn't read usage — %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取用量——%@"
+          }
+        }
+      }
+    },
+    "Couldn't restart Codenotch." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法重启 Codenotch。"
+          }
+        }
+      }
+    },
+    "Current session" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前会话"
+          }
+        }
+      }
+    },
+    "Dock" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "程序坞"
+          }
+        }
+      }
+    },
+    "Down the left-hand edge, clear of a Dock on that side." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沿屏幕左缘排列，避开该侧的程序坞。"
+          }
+        }
+      }
+    },
+    "Down the right-hand edge, clear of a Dock on that side." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沿屏幕右缘排列，避开该侧的程序坞。"
+          }
+        }
+      }
+    },
+    "Edge" : {
+      "comment" : "Which screen edge the notch sits on.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "位置"
+          }
+        }
+      }
+    },
+    "Free queries" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "免费查询"
+          }
+        }
+      }
+    },
+    "General" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通用"
+          }
+        }
+      }
+    },
+    "Grok has nothing metered on this account yet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此账号暂无 Grok 计量数据"
+          }
+        }
+      }
+    },
+    "Hide" : {
+      "comment" : "Notch visibility: show nothing.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "隐藏"
+          }
+        }
+      }
+    },
+    "idle" : {
+      "comment" : "Session state word.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空闲"
+          }
+        }
+      }
+    },
+    "Included usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "套餐内用量"
+          }
+        }
+      }
+    },
+    "Install updates automatically" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动安装更新"
+          }
+        }
+      }
+    },
+    "Integrations" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "集成"
+          }
+        }
+      }
+    },
+    "just now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刚刚"
+          }
+        }
+      }
+    },
+    "Keep open" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保持展开"
+          }
+        }
+      }
+    },
+    "Labs" : {
+      "comment" : "Perplexity Labs quota.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "实验室"
+          }
+        }
+      }
+    },
+    "Language" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语言"
+          }
+        }
+      }
+    },
+    "Left" : {
+      "comment" : "Screen edge.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左侧"
+          }
+        }
+      }
+    },
+    "Longer window" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "长周期窗口"
+          }
+        }
+      }
+    },
+    "macOS is not letting Codenotch read %@'s saved login. Choose Allow access… above, then Always Allow." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 正在阻止 Codenotch 读取 %@ 的已存登录信息。点击上方「允许访问…」，然后选择「始终允许」。"
+          }
+        }
+      }
+    },
+    "macOS refused this — try moving Codenotch to /Applications." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 拒绝了此操作——请尝试将 Codenotch 移动到「应用程序」文件夹。"
+          }
+        }
+      }
+    },
+    "macOS will ask once for permission to read Claude Code's and Antigravity's saved logins. Choose Always Allow — plain Allow makes it ask again every time." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 会询问一次是否允许读取 Claude Code 和 Antigravity 的已存登录信息。请选择「始终允许」——普通「允许」会让它每次都再次询问。"
+          }
+        }
+      }
+    },
+    "MCP (1 month)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MCP（1 个月）"
+          }
+        }
+      }
+    },
+    "Menu bar" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜单栏"
+          }
+        }
+      }
+    },
+    "Monthly limit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每月限额"
+          }
+        }
+      }
+    },
+    "Neither" : {
+      "comment" : "App icon: no Dock tile and no menu bar icon.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "都不要"
+          }
+        }
+      }
+    },
+    "No icon anywhere. Open Codenotch again from Applications to bring these settings back." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "任何地方都不显示图标。从「应用程序」再次打开 Codenotch 即可找回这些设置。"
+          }
+        }
+      }
+    },
+    "No OpenCode Go subscription on this key" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此密钥没有 OpenCode Go 订阅"
+          }
+        }
+      }
+    },
+    "No reading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暂无读数"
+          }
+        }
+      }
+    },
+    "Nothing on screen. Open Codenotch again from Applications to bring these settings back." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕上不再显示。从「应用程序」再次打开 Codenotch 即可找回这些设置。"
+          }
+        }
+      }
+    },
+    "OK" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "好"
+          }
+        }
+      }
+    },
+    "On demand" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按需用量"
+          }
+        }
+      }
+    },
+    "Open %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 %@"
+          }
+        }
+      }
+    },
+    "Open Codenotch at login" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录时打开 Codenotch"
+          }
+        }
+      }
+    },
+    "Opens %@ in your browser. That site has its own sign-in, separate from the credential read here." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在浏览器中打开 %@。该网站有自己的登录状态，与这里读取的凭据相互独立。"
+          }
+        }
+      }
+    },
+    "Opens %@, which is where this account is signed in." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 %@，即此账号的登录所在。"
+          }
+        }
+      }
+    },
+    "Pro searches" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pro 搜索"
+          }
+        }
+      }
+    },
+    "Quit Codenotch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出 Codenotch"
+          }
+        }
+      }
+    },
+    "Quit Codenotch and open it again to finish changing the language." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "退出 Codenotch 并重新打开，即可完成语言切换。"
+          }
+        }
+      }
+    },
+    "Refresh now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即刷新"
+          }
+        }
+      }
+    },
+    "Requests today · no limit published" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今日请求数 · 未公布限额"
+          }
+        }
+      }
+    },
+    "Research" : {
+      "comment" : "Perplexity Research quota.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "研究"
+          }
+        }
+      }
+    },
+    "Resets %@" : {
+      "comment" : "Followed by a formatted date, e.g. \"Resets Thu 4:50 PM\".",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 重置"
+          }
+        }
+      }
+    },
+    "Resets in %lld min" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 分钟后重置"
+          }
+        }
+      }
+    },
+    "Resetting…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重置中…"
+          }
+        }
+      }
+    },
+    "Restart now" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即重启"
+          }
+        }
+      }
+    },
+    "Right" : {
+      "comment" : "Screen edge.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右侧"
+          }
+        }
+      }
+    },
+    "Run `%@` once — it signs in and refreshes the token this reads. Use /login there to change account." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行一次 `%@`——它会完成登录并刷新这里读取的令牌。在其中使用 /login 更换账号。"
+          }
+        }
+      }
+    },
+    "Run grok login — it signs in and refreshes the token this reads." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "运行 grok login——它会完成登录并刷新这里读取的令牌。"
+          }
+        }
+      }
+    },
+    "Set up a GLM Coding Plan key for a coding tool to read your usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为某个编程工具配置 GLM Coding Plan 密钥后即可读取用量"
+          }
+        }
+      }
+    },
+    "Settings…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置…"
+          }
+        }
+      }
+    },
+    "Show" : {
+      "comment" : "Notch visibility picker label.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示"
+          }
+        }
+      }
+    },
+    "Show on hover" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "悬停时显示"
+          }
+        }
+      }
+    },
+    "Sign in to %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 %@"
+          }
+        }
+      }
+    },
+    "Sign in to %@ to read this account." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 %@ 后即可读取此账号。"
+          }
+        }
+      }
+    },
+    "Sign in to %@ to read your usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 %@ 后即可读取用量"
+          }
+        }
+      }
+    },
+    "Sign in to %@…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 %@…"
+          }
+        }
+      }
+    },
+    "Sign in to Antigravity to read your usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 Antigravity 后即可读取用量"
+          }
+        }
+      }
+    },
+    "Sign in to Claude Code in ~/.claude-%@ to read your usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 ~/.claude-%@ 中登录 Claude Code 后即可读取用量"
+          }
+        }
+      }
+    },
+    "Sign in to Claude Code to read your usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 Claude Code 后即可读取用量"
+          }
+        }
+      }
+    },
+    "Sign in to Codex to read your usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "登录 Codex 后即可读取用量"
+          }
+        }
+      }
+    },
+    "Sign in to Cursor in the editor" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在编辑器中登录 Cursor"
+          }
+        }
+      }
+    },
+    "Sign in with %@ to read this account." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通过 %@ 登录后即可读取此账号。"
+          }
+        }
+      }
+    },
+    "Sign in with the tool that owns this account." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在持有此账号的工具中登录。"
+          }
+        }
+      }
+    },
+    "Signed out — nothing is read, and no readings are kept." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已关闭——不再读取，也不保留读数。"
+          }
+        }
+      }
+    },
+    "Signs out of %@ — the session belongs to Codenotch." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会退出 %@ 的登录——该会话属于 Codenotch。"
+          }
+        }
+      }
+    },
+    "Sign out in the %@ window to use another account." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 窗口中退出登录，即可改用其他账号。"
+          }
+        }
+      }
+    },
+    "Switch accounts in %@; the notch follows." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 %@ 中切换账号，刘海会随之更新。"
+          }
+        }
+      }
+    },
+    "Switch accounts in the tool that owns it; the notch follows." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在持有该账号的工具中切换，刘海会随之更新。"
+          }
+        }
+      }
+    },
+    "Switch off to stop reading %@ and forget its readings. %@" : {
+      "comment" : "The trailing sentence is the sign-out caveat for this provider.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭后停止读取 %@ 并清除其读数。%@"
+          }
+        }
+      }
+    },
+    "Switch on to sign in and read %@ again." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启后登录并重新读取 %@。"
+          }
+        }
+      }
+    },
+    "Switch…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "切换…"
+          }
+        }
+      }
+    },
+    "System" : {
+      "comment" : "Language option: follow the macOS language.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跟随系统"
+          }
+        }
+      }
+    },
+    "Takes effect after Codenotch restarts." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重启 Codenotch 后生效。"
+          }
+        }
+      }
+    },
+    "The %@ plan has nothing for Cursor to meter yet" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 套餐暂无可计量的 Cursor 用量"
+          }
+        }
+      }
+    },
+    "The notch stays open with every reading visible." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刘海保持展开，所有读数常显。"
+          }
+        }
+      }
+    },
+    "Top" : {
+      "comment" : "Screen edge.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顶部"
+          }
+        }
+      }
+    },
+    "Unlimited on the %@ plan — nothing to meter" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ 套餐不限量——无需计量"
+          }
+        }
+      }
+    },
+    "Usage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用量"
+          }
+        }
+      }
+    },
+    "Usage (%lld h)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用量（%lld 小时）"
+          }
+        }
+      }
+    },
+    "Usage (%lld wk)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用量（%lld 周）"
+          }
+        }
+      }
+    },
+    "Usage rides on a Z.ai GLM Coding Plan key held by a coding tool — Claude Code's settings.json, ZCode or OpenCode. Set one up there and the notch reads it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用量读取自编程工具持有的 Z.ai GLM Coding Plan 密钥——如 Claude Code 的 settings.json、ZCode 或 OpenCode。在其中配置后，刘海即可读取。"
+          }
+        }
+      }
+    },
+    "Usage rides on the opencode-go key OpenCode stores on sign-in — connect Go inside OpenCode (`opencode auth login`) and the notch reads it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用量读取自 OpenCode 登录时保存的 opencode-go 密钥——在 OpenCode 内连接 Go（`opencode auth login`），刘海即可读取。"
+          }
+        }
+      }
+    },
+    "Version %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本 %@"
+          }
+        }
+      }
+    },
+    "Version %@ is available and will install shortly." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本 %@ 已可用，将很快自动安装。"
+          }
+        }
+      }
+    },
+    "Version %@. Updates install in the background and apply next time Codenotch starts." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "版本 %@。更新在后台安装，下次启动 Codenotch 时生效。"
+          }
+        }
+      }
+    },
+    "via %@" : {
+      "comment" : "Which tool's credential the account is read through.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "经由 %@"
+          }
+        }
+      }
+    },
+    "waiting" : {
+      "comment" : "Session state word.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待中"
+          }
+        }
+      }
+    },
+    "Waiting for the first reading…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "等待首次读数…"
+          }
+        }
+      }
+    },
+    "Weekly" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每周"
+          }
+        }
+      }
+    },
+    "Weekly limit" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每周限额"
+          }
+        }
+      }
+    },
+    "What's New" : {
+      "comment" : "Window title.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新变化"
+          }
+        }
+      }
+    },
+    "What's new in Codenotch" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Codenotch 的新变化"
+          }
+        }
+      }
+    },
+    "working" : {
+      "comment" : "Session state word.",
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作中"
+          }
+        }
+      }
+    },
+    "You stay signed in to %@ — end that session in %@ itself." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在 %@ 中仍保持登录——如需退出，请在 %@ 中操作。"
+          }
+        }
+      }
+    },
+    "You stay signed in to the tool that owns the account." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你在持有该账号的工具中仍保持登录。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

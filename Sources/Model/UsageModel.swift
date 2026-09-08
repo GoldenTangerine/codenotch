@@ -63,15 +63,15 @@ struct LimitWindow: Identifiable, Codable, Equatable {
             // different numbers rather than one seen from either end. That is
             // what made a correct reading look wrong.
             let used = Int((usedFraction * 100).rounded())
-            return "\(used)% Used · \(max(0, 100 - used))% left"
+            return String(localized: "\(used)% Used · \(max(0, 100 - used))% left")
         }
         if let remaining {
-            return remaining == 1 ? "1 left" : "\(remaining) left"
+            return String(localized: "\(remaining) left")
         }
         if let used {
-            return used == 1 ? "1 used" : "\(used) used"
+            return String(localized: "\(used) used")
         }
-        return "No reading"
+        return String(localized: "No reading")
     }
 }
 
@@ -93,10 +93,10 @@ struct UsageBlock: Equatable {
         let formatter = ResetCopy.formatter(for: calendar)
         // The same clock the vendor's own banner uses — "4:13 PM" — rather
         // than a countdown, because that is what you are waiting for.
-        formatter.dateFormat = ResetCopy.daysApart(from: now, to: resetsAt,
-                                                   calendar: calendar) >= 1
-            ? "E h:mm a" : "h:mm a"
-        return "\(reason) until \(formatter.string(from: resetsAt))"
+        ResetCopy.applyClockFormat(to: formatter,
+                                   weekday: ResetCopy.daysApart(from: now, to: resetsAt,
+                                                                calendar: calendar) >= 1)
+        return String(localized: "\(reason) until \(formatter.string(from: resetsAt))")
     }
 }
 
@@ -153,18 +153,18 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// say which door to knock on.
     private var authPrompt: String {
         switch id {
-        case "claude":     return "Sign in to Claude Code to read your usage"
+        case "claude":     return String(localized: "Sign in to Claude Code to read your usage")
         // A profile is signed in by running Claude Code against its directory,
         // which is worth saying: plain `claude` signs the default one in.
         case _ where ClaudeProfile.isClaude(providerID: id):
             let slug = ClaudeProfile.slug(fromProviderID: id) ?? ""
-            return "Sign in to Claude Code in ~/.claude-\(slug) to read your usage"
-        case "cursor":     return "Sign in to Cursor in the editor"
-        case "codex":      return "Sign in to Codex to read your usage"
-        case "gemini":     return "Sign in to Antigravity to read your usage"
-        case "glm":        return "Set up a GLM Coding Plan key for a coding tool to read your usage"
-        case "opencode":   return "Connect the Go plan in OpenCode to read your usage"
-        default:           return "Sign in to \(displayName) to read your usage"
+            return String(localized: "Sign in to Claude Code in ~/.claude-\(slug) to read your usage")
+        case "cursor":     return String(localized: "Sign in to Cursor in the editor")
+        case "codex":      return String(localized: "Sign in to Codex to read your usage")
+        case "gemini":     return String(localized: "Sign in to Antigravity to read your usage")
+        case "glm":        return String(localized: "Set up a GLM Coding Plan key for a coding tool to read your usage")
+        case "opencode":   return String(localized: "Connect the Go plan in OpenCode to read your usage")
+        default:           return String(localized: "Sign in to \(displayName) to read your usage")
         }
     }
 
@@ -176,11 +176,12 @@ struct ProviderSnapshot: Identifiable, Equatable {
         case .accessDenied:
             // Says what happened and what fixes it. "Sign in to Claude Code"
             // would send someone who *is* signed in to fix the wrong thing.
-            return "Codenotch was refused access to \(displayName)'s saved "
-                 + "login. Click this ring to ask again, and choose Always Allow."
+            // One long literal rather than wrapped with +: concatenation would
+            // pick the non-localising overload and never reach the catalog.
+            return String(localized: "Codenotch was refused access to \(displayName)'s saved login. Click this ring to ask again, and choose Always Allow.")
         case .unsupported(let why): return why
-        case .error(let why): return "Couldn't read usage — \(why)"
-        case .stale, .ok:     return "Waiting for the first reading…"
+        case .error(let why): return String(localized: "Couldn't read usage — \(why)")
+        case .stale, .ok:     return String(localized: "Waiting for the first reading…")
         }
     }
 }

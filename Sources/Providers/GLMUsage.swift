@@ -136,16 +136,16 @@ enum GLMUsage {
     /// The frame's wording, for the windows it knows.
     static func label(for limit: Response.Limit) -> String {
         switch id(for: limit) {
-        case "session": return "Current session"
-        case "weekly":  return "Weekly"
-        case "mcp":     return "MCP (1 month)"
+        case "session": return String(localized: "Current session")
+        case "weekly":  return String(localized: "Weekly")
+        case "mcp":     return String(localized: "MCP (1 month)")
         case let id     where id.hasPrefix("window-"):
             switch (limit.unit, limit.number) {
-            case (3?, .some(let number)): return "Usage (\(number) h)"
-            case (6?, .some(let number)): return "Usage (\(number) wk)"
-            default:                      return "Usage"
+            case (3?, .some(let number)): return String(localized: "Usage (\(number) h)")
+            case (6?, .some(let number)): return String(localized: "Usage (\(number) wk)")
+            default:                      return String(localized: "Usage")
             }
-        default:        return "Usage"
+        default:        return String(localized: "Usage")
         }
     }
 

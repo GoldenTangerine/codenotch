@@ -38,12 +38,11 @@ struct SettingsView: View {
                 }
                 // Beside the switches it explains, not stranded at the end of
                 // the page.
-                Text("Codenotch never signs in — each reading is borrowed from the "
-                     + "tool that already holds the account. Signing out here stops "
-                     + "the credential being read and forgets the numbers, but leaves "
-                     + "you signed in to that tool. macOS asks once per tool the "
-                     + "first time, and again whenever you sign in to a different "
-                     + "account; Always Allow keeps it quiet.")
+                //
+                // One long literal rather than wrapped with +: concatenation
+                // picks the non-localising `Text(String)` overload, and the
+                // sentence would never reach the string catalog.
+                Text("Codenotch never signs in — each reading is borrowed from the tool that already holds the account. Signing out here stops the credential being read and forgets the numbers, but leaves you signed in to that tool. macOS asks once per tool the first time, and again whenever you sign in to a different account; Always Allow keeps it quiet.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -91,6 +90,26 @@ struct SettingsView: View {
             // without being asked, and one switch under its own header looked
             // like an oversight rather than a section.
             Section("General") {
+                Picker("Language", selection: $preferences.language) {
+                    ForEach(AppLanguage.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
+                // The override is read once at launch, so a change cannot take
+                // effect in the running process — say so instead of letting
+                // the picker look broken, with the remedy on the same line.
+                if preferences.language != preferences.appliedLanguage {
+                    HStack(alignment: .firstTextBaseline, spacing: 10) {
+                        Text("Takes effect after Codenotch restarts.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 0)
+                        Button("Restart now") { Self.restart() }
+                            .controlSize(.small)
+                    }
+                }
+
                 Toggle("Open Codenotch at login", isOn: $preferences.launchAtLogin)
                 if let problem = preferences.launchAtLoginProblem {
                     Text(problem)
@@ -111,8 +130,7 @@ struct SettingsView: View {
                     // a way to switch it off, is the difference between a
                     // background updater and something that looks like it is
                     // hiding.
-                    Text("Version \(updater.currentVersion). Updates install in the "
-                         + "background and apply next time Codenotch starts.")
+                    Text("Version \(updater.currentVersion). Updates install in the background and apply next time Codenotch starts.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -170,12 +188,41 @@ struct SettingsView: View {
 
     static let authorURL = URL(string: "https://x.com/hivinz_")!
 
+    /// A new instance beside this one, then this one bows out — the language
+    /// override is only read at launch, which is the whole point.
+    static func restart() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL,
+                                           configuration: configuration) { _, error in
+            // The completion arrives on a background queue; AppKit teardown
+            // and NSAlert are both main-thread only.
+            DispatchQueue.main.async {
+                guard error == nil else {
+                    // A click that does nothing reads as a broken button —
+                    // say so and name the manual route.
+                    Log.usage.error("restart failed: \(error!.localizedDescription, privacy: .public)")
+                    let alert = NSAlert()
+                    alert.messageText = String(localized: "Couldn't restart Codenotch.")
+                    alert.informativeText = String(localized: "Quit Codenotch and open it again to finish changing the language.")
+                    alert.addButton(withTitle: String(localized: "OK"))
+                    alert.runModal()
+                    return
+                }
+                // Only bow out once the replacement is actually on its way —
+                // otherwise the click would have killed the app and opened nothing.
+                NSApp.terminate(nil)
+            }
+        }
+    }
+
     /// Narrower than the tabbed version needed: without a row of tab titles to
     /// fit, the width is set by the account rows alone.
     static let width: CGFloat = 500
-    /// Tall enough that Startup and Updates are visible without scrolling —
-    /// four account rows push everything below them a long way down.
-    static let height: CGFloat = 560
+    /// Tall enough that Startup and Updates are visible without scrolling,
+    /// including the language-restart hint that slides in the moment the
+    /// picker changes — that is the one moment the section is being read.
+    static let height: CGFloat = 612
 
     /// Nothing to read from anywhere. On a first launch that is the normal
     /// state, and it is the only moment the sheet has something to explain.
@@ -187,21 +234,14 @@ struct SettingsView: View {
     /// Mac". Someone who uses Claude in a browser reads that sentence, installs
     /// this, sees four blank rings and concludes it is broken — and the
     /// distinction that catches them out is Claude *Code*, not the Claude app.
-    static let setupCopy =
-        "Codenotch reads usage from tools already signed in on this Mac — it "
-        + "never asks for your password. Install and sign in to any of Claude "
-        + "Code (the terminal tool, not the Claude app), Cursor, Codex, "
-        + "Antigravity, GLM, Grok or OpenCode, and its ring appears in the notch."
+    static let setupCopy = String(localized: "Codenotch reads usage from tools already signed in on this Mac — it never asks for your password. Install and sign in to any of Claude Code (the terminal tool, not the Claude app), Cursor, Codex, Antigravity, GLM, Grok or OpenCode, and its ring appears in the notch.")
 
     /// Said before it happens rather than after. A system dialogue asking to
     /// read a *credential*, from an app installed a minute ago, looks alarming
     /// unless it was expected — and choosing Allow instead of Always Allow makes
     /// it return on every read, which is what "it asks every time" turns out to
     /// be.
-    static let keychainCopy =
-        "macOS will ask once for permission to read Claude Code's and "
-        + "Antigravity's saved logins. Choose Always Allow — plain Allow makes "
-        + "it ask again every time."
+    static let keychainCopy = String(localized: "macOS will ask once for permission to read Claude Code's and Antigravity's saved logins. Choose Always Allow — plain Allow makes it ask again every time.")
 
     private var setupNote: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -278,8 +318,7 @@ private struct AccountRow: View {
                 if isConnected, provider.wasRefusedAccess {
                     Button("Allow access…") { retry(provider.id) }
                         .controlSize(.small)
-                        .help("Asks macOS for \(provider.name)'s saved login again. "
-                              + "Choose Always Allow and it will stop asking.")
+                        .help("Asks macOS for \(provider.name)'s saved login again. Choose Always Allow and it will stop asking.")
                 }
 
                 if isConnected, let destination {
@@ -293,9 +332,8 @@ private struct AccountRow: View {
                     .controlSize(.small)
                     .labelsHidden()
                     .help(isConnected
-                          ? "Switch off to stop reading \(provider.name) and forget its "
-                            + "readings. " + provider.signIn.signOutCaveat
-                          : "Switch on to sign in and read \(provider.name) again.")
+                          ? String(localized: "Switch off to stop reading \(provider.name) and forget its readings. \(provider.signIn.signOutCaveat)")
+                          : String(localized: "Switch on to sign in and read \(provider.name) again."))
             }
 
             detail
@@ -331,8 +369,7 @@ private struct AccountRow: View {
             // Not a sign-in problem, so do not send them off to sign in. The
             // credential is right there and macOS is the one saying no — the
             // remedy is the button on this same row.
-            Text("macOS is not letting Codenotch read \(provider.name)'s saved "
-                 + "login. Choose Allow access… above, then Always Allow.")
+            Text("macOS is not letting Codenotch read \(provider.name)'s saved login. Choose Allow access… above, then Always Allow.")
                 .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
         } else {
@@ -356,18 +393,17 @@ private struct AccountRow: View {
 
         var title: String {
             switch self {
-            case .app(_, let name):     return "Open \(name)"
-            case .website(_, let host): return "Open \(host)"
+            case .app(_, let name):     return String(localized: "Open \(name)")
+            case .website(_, let host): return String(localized: "Open \(host)")
             }
         }
 
         var help: String {
             switch self {
             case .app(_, let name):
-                return "Opens \(name), which is where this account is signed in."
+                return String(localized: "Opens \(name), which is where this account is signed in.")
             case .website(_, let host):
-                return "Opens \(host) in your browser. That site has its own sign-in, "
-                     + "separate from the credential read here."
+                return String(localized: "Opens \(host) in your browser. That site has its own sign-in, separate from the credential read here.")
             }
         }
     }

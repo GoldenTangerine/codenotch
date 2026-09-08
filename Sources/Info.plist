@@ -12,6 +12,11 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hans</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>Codenotch</string>
 	<key>CFBundlePackageType</key>
@@ -27,7 +32,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://hivinz.com/appcast.xml</string>
+	<string>https://goldentangerine.github.io/codenotch/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>rmUfT5r49nR+3HdkbR5/YYLghfnAi6L49eOk3sIegSk=</string>
 	<key>SUScheduledCheckInterval</key>

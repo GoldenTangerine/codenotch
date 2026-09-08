@@ -142,7 +142,7 @@ actor AntigravityProvider: UsageProvider {
             status: .ok,
             windows: [
                 LimitWindow(id: "requests",
-                            label: "Requests today · no limit published",
+                            label: String(localized: "Requests today · no limit published"),
                             used: activity.requestsToday)
             ]
         )

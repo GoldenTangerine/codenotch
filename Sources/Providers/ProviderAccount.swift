@@ -20,7 +20,7 @@ struct ProviderAccount: Equatable {
 
     /// One line for the settings row.
     var summary: String {
-        [label, plan.map { $0.capitalized }, "via \(source)"]
+        [label, plan.map { $0.capitalized }, String(localized: "via \(source)")]
             .compactMap { $0 }
             .joined(separator: " · ")
     }
@@ -42,16 +42,16 @@ enum SignInRoute: Equatable {
 
     var actionTitle: String? {
         switch self {
-        case .modal(let name):     return "Sign in to \(name)"
-        case .openApp(_, let name): return "Open \(name)"
+        case .modal(let name):     return String(localized: "Sign in to \(name)")
+        case .openApp(_, let name): return String(localized: "Open \(name)")
         case .guidance:            return nil
         }
     }
 
     var explanation: String {
         switch self {
-        case .modal(let name):      return "Sign in to \(name) to read this account."
-        case .openApp(_, let name): return "Sign in with \(name) to read this account."
+        case .modal(let name):      return String(localized: "Sign in to \(name) to read this account.")
+        case .openApp(_, let name): return String(localized: "Sign in with \(name) to read this account.")
         case .guidance(let text):   return text
         }
     }
@@ -63,9 +63,9 @@ enum SignInRoute: Equatable {
     /// where to go.
     var switchHint: String {
         switch self {
-        case .modal(let name):      return "Sign out in the \(name) window to use another account."
-        case .openApp(_, let name): return "Switch accounts in \(name); the notch follows."
-        case .guidance:             return "Switch accounts in the tool that owns it; the notch follows."
+        case .modal(let name):      return String(localized: "Sign out in the \(name) window to use another account.")
+        case .openApp(_, let name): return String(localized: "Switch accounts in \(name); the notch follows.")
+        case .guidance:             return String(localized: "Switch accounts in the tool that owns it; the notch follows.")
         }
     }
 
@@ -74,11 +74,11 @@ enum SignInRoute: Equatable {
     var signOutCaveat: String {
         switch self {
         case .modal(let name):
-            return "Signs out of \(name) — the session belongs to Codenotch."
+            return String(localized: "Signs out of \(name) — the session belongs to Codenotch.")
         case .openApp(_, let name):
-            return "You stay signed in to \(name) — end that session in \(name) itself."
+            return String(localized: "You stay signed in to \(name) — end that session in \(name) itself.")
         case .guidance:
-            return "You stay signed in to the tool that owns the account."
+            return String(localized: "You stay signed in to the tool that owns the account.")
         }
     }
 }
@@ -92,7 +92,7 @@ extension UsageProvider {
     func account() -> ProviderAccount? { nil }
 
     var signInRoute: SignInRoute {
-        .guidance("Sign in with the tool that owns this account.")
+        .guidance(String(localized: "Sign in with the tool that owns this account."))
     }
 
     /// Nothing of our own to discard, by default.

@@ -31,6 +31,31 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(appPresence.rawValue, forKey: Keys.presence) }
     }
 
+    /// The language the app speaks from its next launch on.
+    ///
+    /// Backed directly by the `AppleLanguages` override in this app's own
+    /// defaults domain rather than by a key of our own: System Settings writes
+    /// the same key for a per-app language, so a choice made there is what the
+    /// picker shows, and there is no second source to drift out of sync.
+    var language: AppLanguage {
+        get { AppLanguage.ownOverride(in: defaults, domainName: domainName) ?? .system }
+        set {
+            objectWillChange.send()
+            newValue.apply(to: defaults)
+        }
+    }
+
+    /// The language choice as it stood when this process launched — what the
+    /// running UI is actually speaking. `language` writes take effect on the
+    /// next launch, so the settings page compares the two to know when to say
+    /// so.
+    let appliedLanguage: AppLanguage
+
+    /// The defaults domain `language` reads its override from. The bundle id
+    /// in the app; injectable because a test's scratch suite is its own
+    /// domain, and nil there means "no override tracking".
+    private let domainName: String?
+
     /// The version whose changes have already been shown.
     ///
     /// Written when the What's New dialogue is dismissed rather than when it
@@ -94,8 +119,9 @@ final class Preferences: ObservableObject {
         Log.usage.info("migrated \(old.count) settings from the previous app name")
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, domainName: String? = nil) {
         self.defaults = defaults
+        self.domainName = domainName ?? (defaults === .standard ? Bundle.main.bundleIdentifier : nil)
         self.isFirstLaunch = !defaults.bool(forKey: Keys.hasLaunched)
         defaults.set(true, forKey: Keys.hasLaunched)
         self.disconnectedProviders = Set(defaults.stringArray(forKey: Keys.disconnected) ?? [])
@@ -113,6 +139,9 @@ final class Preferences: ObservableObject {
         // side of a Mac that no system chrome claims by default.
         self.notchEdge = defaults.string(forKey: Keys.edge)
             .flatMap(NotchEdge.init(rawValue:)) ?? .right
+        // What this launch is running in: the override as it stood before the
+        // picker can touch it.
+        self.appliedLanguage = AppLanguage.ownOverride(in: defaults, domainName: domainName) ?? .system
         // Absent means nothing has been shown yet, which is true of a fresh
         // install — so the current release reads as new to it.
         self.lastSeenVersion = defaults.string(forKey: Keys.lastSeenVersion)
@@ -178,7 +207,7 @@ final class Preferences: ObservableObject {
             // Commonly refused for an app running from a build directory rather
             // than /Applications, which is worth saying plainly.
             Log.usage.error("launch at login failed: \(error.localizedDescription, privacy: .public)")
-            launchAtLoginProblem = "macOS refused this — try moving Codenotch to /Applications."
+            launchAtLoginProblem = String(localized: "macOS refused this — try moving Codenotch to /Applications.")
             launchAtLogin = Self.isRegisteredForLogin
         }
     }

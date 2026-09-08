@@ -25,11 +25,11 @@ final class StatusItemController {
 
         let menu = NSMenu()
         menu.addItem(
-            withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ","
+            withTitle: String(localized: "Settings…"), action: #selector(openSettings), keyEquivalent: ","
         ).target = self
         menu.addItem(.separator())
         menu.addItem(
-            withTitle: "Quit Codenotch", action: #selector(quit), keyEquivalent: "q"
+            withTitle: String(localized: "Quit Codenotch"), action: #selector(quit), keyEquivalent: "q"
         ).target = self
         item.menu = menu
 

@@ -232,7 +232,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
             backing: .buffered,
             defer: false
         )
-        window.title = "Sign in to \(displayName)"
+        window.title = String(localized: "Sign in to \(displayName)")
         window.contentView = webView
         window.center()
         window.isReleasedWhenClosed = false

@@ -18,23 +18,22 @@ enum AppPresence: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .dock:    return "Dock"
-        case .menuBar: return "Menu bar"
-        case .hidden:  return "Neither"
+        case .dock:    return String(localized: "Dock")
+        case .menuBar: return String(localized: "Menu bar")
+        case .hidden:  return String(localized: "Neither")
         }
     }
 
     var explanation: String {
         switch self {
         case .dock:
-            return "A normal app icon in the Dock while Codenotch is running."
+            return String(localized: "A normal app icon in the Dock while Codenotch is running.")
         case .menuBar:
-            return "A small icon in the menu bar instead, and nothing in the Dock."
+            return String(localized: "A small icon in the menu bar instead, and nothing in the Dock.")
         case .hidden:
             // Said here because choosing this removes every visible way back to
             // these settings, and finding that out afterwards is too late.
-            return "No icon anywhere. Open Codenotch again from Applications to "
-                 + "bring these settings back."
+            return String(localized: "No icon anywhere. Open Codenotch again from Applications to bring these settings back.")
         }
     }
 

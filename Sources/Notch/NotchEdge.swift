@@ -56,25 +56,23 @@ enum NotchEdge: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .right:  return "Right"
-        case .left:   return "Left"
-        case .top:    return "Top"
-        case .bottom: return "Bottom"
+        case .right:  return String(localized: "Right")
+        case .left:   return String(localized: "Left")
+        case .top:    return String(localized: "Top")
+        case .bottom: return String(localized: "Bottom")
         }
     }
 
     var explanation: String {
         switch self {
         case .right:
-            return "Down the right-hand edge, clear of a Dock on that side."
+            return String(localized: "Down the right-hand edge, clear of a Dock on that side.")
         case .left:
-            return "Down the left-hand edge, clear of a Dock on that side."
+            return String(localized: "Down the left-hand edge, clear of a Dock on that side.")
         case .top:
-            return "A wide bar across the top, readings side by side. On a Mac "
-                 + "with a notch of its own it runs up to meet it, so the two "
-                 + "read as one shape."
+            return String(localized: "A wide bar across the top, readings side by side. On a Mac with a notch of its own it runs up to meet it, so the two read as one shape.")
         case .bottom:
-            return "A wide bar resting on top of the Dock, readings side by side."
+            return String(localized: "A wide bar resting on top of the Dock, readings side by side.")
         }
     }
 }

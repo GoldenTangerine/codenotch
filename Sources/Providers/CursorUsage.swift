@@ -42,16 +42,16 @@ enum CursorUsage {
         // so does this. Suppressing it hid a correct reading from an account
         // that had genuinely just been switched.
         if let total = percent(plan["totalPercentUsed"]) {
-            windows.append(LimitWindow(id: "included", label: "Included usage",
+            windows.append(LimitWindow(id: "included", label: String(localized: "Included usage"),
                                        usedFraction: total, resetsAt: resetsAt))
         }
         // Reported separately by Cursor, and can be far ahead of the total.
         if let api = percent(plan["apiPercentUsed"]), api > 0 {
-            windows.append(LimitWindow(id: "api", label: "API usage",
+            windows.append(LimitWindow(id: "api", label: String(localized: "API usage"),
                                        usedFraction: api, resetsAt: resetsAt))
         }
         if let onDemand = spendWindow(usage["onDemand"], id: "on_demand",
-                                      label: "On demand", resetsAt: resetsAt) {
+                                      label: String(localized: "On demand"), resetsAt: resetsAt) {
             windows.append(onDemand)
         }
 
@@ -59,9 +59,9 @@ enum CursorUsage {
 
         let membership = (root["membershipType"] as? String) ?? "this"
         if (root["isUnlimited"] as? Bool) == true {
-            throw UsageProviderError.nothingMetered("Unlimited on the \(membership) plan — nothing to meter")
+            throw UsageProviderError.nothingMetered(String(localized: "Unlimited on the \(membership) plan — nothing to meter"))
         }
-        throw UsageProviderError.nothingMetered("The \(membership) plan has nothing for Cursor to meter yet")
+        throw UsageProviderError.nothingMetered(String(localized: "The \(membership) plan has nothing for Cursor to meter yet"))
     }
 
     /// A dollar-denominated bucket, used where a plan states a real ceiling.

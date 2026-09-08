@@ -22,12 +22,13 @@ import Foundation
 /// of connector quotas unrelated to model usage, and is ignored.
 enum PerplexityUsage {
     /// The quotas worth a line, in the order they are shown. The first is the
-    /// headline, so it is the one people actually run out of.
+    /// headline, so it is the one people actually run out of. Labels resolve
+    /// once at first use — the language is fixed for the life of the process.
     private static let counters: [(key: String, label: String)] = [
-        ("remaining_pro", "Pro searches"),
-        ("remaining_research", "Research"),
-        ("remaining_agentic_research", "Agentic research"),
-        ("remaining_labs", "Labs")
+        ("remaining_pro", String(localized: "Pro searches")),
+        ("remaining_research", String(localized: "Research")),
+        ("remaining_agentic_research", String(localized: "Agentic research")),
+        ("remaining_labs", String(localized: "Labs"))
     ]
 
     static func windows(fromJSON json: String) throws -> [LimitWindow] {
@@ -51,7 +52,7 @@ enum PerplexityUsage {
            (detail["kind"] as? String) == "exact",
            let remaining = (detail["remaining"] as? NSNumber)?.intValue {
             windows.append(
-                LimitWindow(id: "free_queries", label: "Free queries", remaining: remaining)
+                LimitWindow(id: "free_queries", label: String(localized: "Free queries"), remaining: remaining)
             )
         }
 
