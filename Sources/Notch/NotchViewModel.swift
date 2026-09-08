@@ -18,6 +18,28 @@ final class NotchViewModel: ObservableObject {
     /// ring per provider, so nothing in the notch looks like a ring without
     /// being one.
     @Published var sessions: [String: [AgentSession]] = [:]
+    @Published var activitySourceIDs: [String: String]?
+    @Published var scrollStart = 0
+
+    func visibleCount(_ count: Int) -> Int {
+        let available = edge.isVertical ? screenUsableSize.height : screenUsableSize.width
+        guard available > 0 else { return count }
+        let slack = NotchLayout.slack(for: edge, maxCardHeight: NotchLayout.maxCardHeight(sessionCap: 0))
+        let room = available - 2 * slack - 2 * flare
+            - NotchLayout.padStart(for: edge) - NotchLayout.padEnd(for: edge)
+        let capacity = max(1, Int((room + NotchLayout.cellSpacing) / NotchLayout.cellPitch(for: edge)))
+        return min(count, capacity)
+    }
+
+    var visibleStart: Int { min(max(0, scrollStart), max(0, snapshots.count - visibleCount(snapshots.count))) }
+    var visibleIndices: Range<Int> { visibleStart..<(visibleStart + visibleCount(snapshots.count)) }
+
+    func scroll(by amount: Int) {
+        let next = min(max(0, visibleStart + amount), max(0, snapshots.count - visibleCount(snapshots.count)))
+        guard next != visibleStart else { return }
+        hoveredIndex = nil
+        scrollStart = next
+    }
 
     /// Which cell the cursor is over, if any. Driven from the window controller
     /// rather than SwiftUI's `.onHover`: the panel ignores mouse events until
@@ -155,7 +177,7 @@ final class NotchViewModel: ObservableObject {
         // the drawn width *is* the shape's length, and that is what has to
         // clear the hardware.
         let drawn = NotchLayout.shapeLength(
-            cellCount: cellCount, edge: edge, flare: flare
+            cellCount: visibleCount(cellCount), edge: edge, flare: flare
         )
         let wanted = hardwareNotch.width + 2 * NotchLayout.cornerRadius
         return max(0, (wanted - drawn) / 2)
@@ -251,20 +273,24 @@ final class NotchViewModel: ObservableObject {
     /// The straight part of the shape, flares excluded.
     var bodyLength: CGFloat {
         NotchLayout.bodyLength(
-            cellCount: snapshots.count, edge: edge
+            cellCount: visibleCount(snapshots.count), edge: edge
         ) + 2 * endSpread
     }
 
     /// Distance along the stack to cell `index`'s ring centre, widening
     /// included so the readings stay in the middle of the bar.
     func ringCenter(index: Int) -> CGFloat {
-        NotchLayout.ringCenter(index: index, edge: edge, flare: flare) + endSpread
+        NotchLayout.ringCenter(index: index - visibleStart, edge: edge, flare: flare) + endSpread
     }
 
     /// A provider with no activity source gets none, rather than borrowing
     /// somebody else's.
     func activity(for providerID: String) -> ActivitySummary? {
-        ActivitySummary(sessions: sessions[providerID] ?? [])
+        if let activitySourceIDs {
+            guard let source = activitySourceIDs[providerID] else { return nil }
+            return ActivitySummary(sessions: sessions[source] ?? [])
+        }
+        return ActivitySummary(sessions: sessions[providerID] ?? [])
     }
 
     var hoveredSnapshot: ProviderSnapshot? {
@@ -334,7 +360,7 @@ final class NotchViewModel: ObservableObject {
     /// it competes with is the depth already spent on the notch body and tail.
     private func cardBudget(cellCount: Int) -> CGFloat {
         if edge.isVertical {
-            return screenSize.height
+            return (screenUsableSize.height > 0 ? screenUsableSize.height : screenSize.height)
                 - shapeLength(cellCount: cellCount)
                 - 2 * NotchLayout.cardCorner
         }
@@ -387,7 +413,7 @@ final class NotchViewModel: ObservableObject {
     /// model back. Taking the count as an argument is the only way to be sure
     /// the panel is sized for the list that caused the change.
     func shapeLength(cellCount: Int) -> CGFloat {
-        NotchLayout.shapeLength(cellCount: cellCount,
+        NotchLayout.shapeLength(cellCount: visibleCount(cellCount),
                                 edge: edge, flare: flare)
             + 2 * endSpread(cellCount: cellCount)
     }

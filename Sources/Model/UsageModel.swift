@@ -1,4 +1,41 @@
+/**
+ @name: 额度展示模型
+ @Descripttion: 统一表示供应商读数、金额及查询状态。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Model/UsageModel.swift
+ */
 import Foundation
+
+struct QuotaQuantity: Codable, Equatable {
+    var remaining: Double?
+    var used: Double?
+    var total: Double?
+    var unit = ""
+    var unlimited = false
+
+    static func format(_ value: Double, compact: Bool = false) -> String {
+        guard value.isFinite else { return "—" }
+        let magnitude = abs(value)
+        if compact && magnitude >= 1e12 {
+            return value.formatted(.number.notation(.scientific).precision(.significantDigits(1...3)))
+        }
+        let divisor: Double = compact ? (magnitude >= 1e9 ? 1e9 : magnitude >= 1e6 ? 1e6 : magnitude >= 1e3 ? 1e3 : 1) : 1
+        let suffix = divisor == 1e9 ? "B" : divisor == 1e6 ? "M" : divisor == 1e3 ? "K" : ""
+        return (value / divisor).formatted(.number.precision(.fractionLength(0...2))) + suffix
+    }
+
+    var summary: String {
+        if unlimited { return String(localized: "Unlimited") }
+        let suffix = unit.isEmpty ? "" : " \(unit)"
+        if let remaining { return String(localized: "\(Self.format(remaining) + suffix) remaining") }
+        if let used { return String(localized: "\(Self.format(used) + suffix) used") }
+        if let total { return String(localized: "\(Self.format(total) + suffix) total") }
+        return String(localized: "No reading")
+    }
+}
 
 /// How much to trust a provider's numbers. The UI never presents a derived or
 /// manual figure as if a vendor had published it.
@@ -42,19 +79,28 @@ struct LimitWindow: Identifiable, Codable, Equatable {
     let used: Int?
     /// Nil when the provider does not say when the window rolls over.
     let resetsAt: Date?
+    let quantity: QuotaQuantity?
 
     init(id: String, label: String, usedFraction: Double? = nil,
-         remaining: Int? = nil, used: Int? = nil, resetsAt: Date? = nil) {
+         remaining: Int? = nil, used: Int? = nil, resetsAt: Date? = nil,
+         quantity: QuotaQuantity? = nil) {
         self.id = id
         self.label = label
         self.usedFraction = usedFraction
         self.remaining = remaining
         self.used = used
         self.resetsAt = resetsAt
+        self.quantity = quantity
     }
 
     /// What the tooltip says on the line under the bar.
     var summary: String {
+        if let quantity {
+            if let used = quantity.used, let total = quantity.total {
+                return "\(QuotaQuantity.format(used)) / \(QuotaQuantity.format(total)) \(quantity.unit) · \(quantity.summary)"
+            }
+            return quantity.summary
+        }
         if let usedFraction {
             // Both ends of the same figure. Vendors do not agree on which to
             // show — Codex writes "87% remaining", Claude writes "% used" — so
@@ -115,6 +161,9 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// Set when something is blocked right now. Deliberately separate from the
     /// windows: it is not a measurement, it is a door being shut.
     var block: UsageBlock?
+    var icon: ProviderIcon?
+    var manualQuery: Bool = false
+    var queryFailure: String?
 
     /// The number on the cell: the provider's declared primary window — for
     /// Claude, the current session.
@@ -136,7 +185,14 @@ struct ProviderSnapshot: Identifiable, Equatable {
 
     /// What the cell prints under the ring.
     var headlineText: String {
-        if let usedFraction { return "\(Int((usedFraction * 100).rounded()))%" }
+        if headline?.quantity?.unlimited == true { return "∞" }
+        if let usedFraction { return "\((usedFraction * 100).rounded().formatted(.number.precision(.fractionLength(0))))%" }
+        if let quantity = headline?.quantity {
+            if let value = quantity.remaining ?? quantity.used ?? quantity.total {
+                let symbol = ["USD": "$", "CNY": "¥", "EUR": "€", "GBP": "£"][quantity.unit.uppercased()] ?? ""
+                return symbol + QuotaQuantity.format(value, compact: true)
+            }
+        }
         if let remaining = headline?.remaining { return "\(remaining)" }
         if let used = headline?.used { return "\(used)" }
         return "—"
@@ -152,6 +208,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// Signing in means something different per provider, so the prompt has to
     /// say which door to knock on.
     private var authPrompt: String {
+        if manualQuery { return String(localized: "Update this provider's credentials in Settings.") }
         switch id {
         case "claude":     return String(localized: "Sign in to Claude Code to read your usage")
         // A profile is signed in by running Claude Code against its directory,

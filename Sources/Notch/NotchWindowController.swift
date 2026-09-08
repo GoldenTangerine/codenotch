@@ -42,6 +42,7 @@ final class NotchWindowController {
     private var dragStart: CGPoint?
     private var dragGrabFraction: CGFloat = 0
     private var didDrag = false
+    private var accumulatedScroll: CGFloat = 0
 
     private var activePosition: NotchPosition {
         previewPosition ?? savedPosition ?? NotchPosition(edge: model.edge)
@@ -318,6 +319,22 @@ final class NotchWindowController {
     /// re-anchored underneath a parked pointer would otherwise sit there with
     /// stale hover state until the user jogged the mouse.
     private func startWatchingCursor() {
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
+            guard let self, let panel = self.panel, self.model.isExpanded,
+                  !self.model.isEditingPosition,
+                  self.liveRect.contains(self.localCursor(in: panel.frame)),
+                  self.model.visibleCount(self.model.snapshots.count) < self.model.snapshots.count else { return event }
+            let delta = abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) ? event.scrollingDeltaY : event.scrollingDeltaX
+            if event.hasPreciseScrollingDeltas {
+                self.accumulatedScroll -= delta
+                if abs(self.accumulatedScroll) >= 24 {
+                    self.model.scroll(by: self.accumulatedScroll > 0 ? 1 : -1)
+                    self.accumulatedScroll = 0
+                }
+            } else if delta != 0 { self.model.scroll(by: delta < 0 ? 1 : -1) }
+            self.updateInteractiveRects()
+            return nil
+        }) { mouseMonitors.append(monitor) }
         let poll = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 // Only on the poll, not on every mouse-moved event: this reads
@@ -620,7 +637,7 @@ final class NotchWindowController {
 
     private func cellIndex(along: CGFloat) -> Int? {
         let pitch = NotchLayout.cellPitch(for: model.edge)
-        for index in model.snapshots.indices {
+        for index in model.visibleIndices {
             let centre = model.slack + model.ringCenter(index: index)
             if abs(along - centre) <= pitch / 2 { return index }
         }

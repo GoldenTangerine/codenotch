@@ -1,3 +1,12 @@
+/**
+ @name: 供应商额度圆环
+ @Descripttion: 展示供应商图标、查询状态与主指标。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Features/ProviderRing.swift
+ */
 import SwiftUI
 
 /// The ring around a provider glyph: a grey track with a coloured arc that
@@ -20,6 +29,7 @@ struct ProviderRing: View {
     var activity: ActivitySummary?
     /// A fetch this cell asked for, in flight.
     var isRefreshing: Bool = false
+    var icon: ProviderIcon?
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var spin: Double = 0
@@ -57,7 +67,7 @@ struct ProviderRing: View {
                         .animation(NotchMotion.reading, value: band)
                 }
 
-                ProviderGlyphView(glyph: glyph)
+                QueryIconView(icon: icon, fallback: glyph)
                     .foregroundStyle(Palette.textPrimary)
                     // A spent limit dims its glyph so the ring reads as "waiting".
                     .opacity(band == .exhausted ? 0.35 : 1)
@@ -173,7 +183,7 @@ struct ProviderCell: View {
                 isStale: snapshot.status.isStale || !snapshot.hasReading,
                 isBlocked: snapshot.block != nil,
                 activity: activity,
-                isRefreshing: isRefreshing
+                isRefreshing: isRefreshing, icon: snapshot.icon
             )
             Text(percentText)
                 .font(Typography.percent)
@@ -182,11 +192,14 @@ struct ProviderCell: View {
                 // wide as the ring, and a label wider than that would be
                 // truncated rather than allowed to overhang into the spacing
                 // that is already there for it.
-                .fixedSize(horizontal: true, vertical: false)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+                .frame(width: NotchLayout.ringDiameter + 4)
                 .frame(height: NotchLayout.percentLineHeight)
                 .contentTransition(.numericText())
                 .animation(NotchMotion.reading, value: percentText)
         }
         .frame(height: NotchLayout.cellExtent)
+        .help(snapshot.headline?.summary ?? snapshot.statusMessage ?? snapshot.displayName)
     }
 }

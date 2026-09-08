@@ -1,3 +1,12 @@
+/**
+ @name: 应用设置界面
+ @Descripttion: 展示供应商管理、外观和应用偏好。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Settings/SettingsView.swift
+ */
 import AppKit
 import SwiftUI
 
@@ -20,6 +29,8 @@ struct SettingsView: View {
     /// the whole remedy: asking again is what puts the prompt back on screen.
     let retry: (String) -> Void
     @ObservedObject var updater: Updater
+    var catalog: QueryCatalog? = nil
+    var usageStore: UsageStore? = nil
 
     var body: some View {
         // One page of grouped sections rather than tabs. Tabs hid three
@@ -29,6 +40,9 @@ struct SettingsView: View {
         // uses for this: each section is a titled, rounded group, so the
         // structure is visible all at once instead of navigated to.
         Form {
+            if let catalog, let usageStore {
+                QueryManagementView(catalog: catalog, store: usageStore)
+            } else {
             Section("Integrations") {
                 if needsSetup { setupNote }
                 ForEach(accounts) {
@@ -46,6 +60,7 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
             }
 
             // One section, because they are one question: what Codenotch
@@ -159,10 +174,10 @@ struct SettingsView: View {
         // hunted for is not really a credit.
         .safeAreaInset(edge: .bottom, spacing: 0) { credit }
         .frame(width: SettingsView.width, height: SettingsView.height)
-        .onAppear { accounts = providers() }
+        .onAppear { if catalog == nil { accounts = providers() } }
         .onReceive(NotificationCenter.default.publisher(
             for: NSWindow.didBecomeKeyNotification
-        )) { _ in accounts = providers() }
+        )) { _ in if catalog == nil { accounts = providers() } }
     }
 
     private var credit: some View {

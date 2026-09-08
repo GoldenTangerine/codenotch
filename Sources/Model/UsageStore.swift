@@ -1,3 +1,12 @@
+/**
+ @name: 额度查询调度
+ @Descripttion: 管理动态供应商、独立刷新及最近成功读数。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Model/UsageStore.swift
+ */
 import AppKit
 import Combine
 import os
@@ -13,7 +22,12 @@ final class UsageStore: ObservableObject {
     /// succeeds. The settings row's only honest basis for offering to ask again.
     @Published private(set) var refusedAccess: Set<String> = []
 
-    private let providers: [UsageProvider]
+    private var providers: [UsageProvider]
+    private var providerTasks: [String: Task<Void, Never>] = [:]
+    private var attempts: [String: Date] = [:]
+    private var backoffs: [String: Date] = [:]
+    private var isReconfiguring = false
+    private var usesConfiguredSchedule: Bool
     /// A response belongs to the connection that started it. Checking only
     /// `disconnected` would accept an old response after a quick off/on toggle.
     private var connectionVersions: [String: UUID] = [:]
@@ -22,6 +36,7 @@ final class UsageStore: ObservableObject {
     /// Filtering the results afterwards would still touch the keychain.
     @Published var disconnected: Set<String> = [] {
         didSet {
+            guard !isReconfiguring else { return }
             guard disconnected != oldValue else { return }
             for id in disconnected.symmetricDifference(oldValue) {
                 connectionVersions[id] = UUID()
@@ -74,9 +89,11 @@ final class UsageStore: ObservableObject {
         idleRefreshInterval: TimeInterval = 5 * 60,
         staleAfter: TimeInterval = 15 * 60,
         archive: UsageArchive = UsageArchive(),
-        disconnected: Set<String> = []
+        disconnected: Set<String> = [],
+        configured: Bool = false
     ) {
         self.providers = providers
+        self.usesConfiguredSchedule = configured || providers.contains { $0 is ConfiguredUsageProvider }
         self.refreshInterval = refreshInterval
         self.idleRefreshInterval = idleRefreshInterval
         self.staleAfter = staleAfter
@@ -107,7 +124,7 @@ final class UsageStore: ObservableObject {
             guard let remembered = lastGood[provider.id] else { return Self.placeholder(provider) }
             var snapshot = remembered.snapshot
             snapshot.status = .stale(since: remembered.fetchedAt)
-            return snapshot
+            return (provider as? ConfiguredUsageProvider)?.decorate(snapshot) ?? snapshot
         }
     }
 
@@ -123,9 +140,9 @@ final class UsageStore: ObservableObject {
     }
 
     func start() {
-        refreshNow()
+        if usesConfiguredSchedule { refreshDue() } else { refreshNow() }
 
-        let timer = Timer(timeInterval: refreshInterval, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: usesConfiguredSchedule ? 1 : refreshInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -135,7 +152,10 @@ final class UsageStore: ObservableObject {
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshNow() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if self.usesConfiguredSchedule { self.refreshDue() } else { self.refreshNow() }
+            }
         }
     }
 
@@ -143,6 +163,9 @@ final class UsageStore: ObservableObject {
         timer?.invalidate()
         timer = nil
         refreshTask?.cancel()
+        providerTasks.values.forEach { $0.cancel() }
+        providerTasks.removeAll()
+        refreshing = []
         isRefreshing = false
         // Block-based observers are not removed by `removeObserver(self)`.
         if let wakeObserver {
@@ -153,6 +176,7 @@ final class UsageStore: ObservableObject {
 
     /// Decides whether this tick is worth a request at all.
     private func tick() {
+        if usesConfiguredSchedule { refreshDue(); return }
         let waited = lastAttempt.map { Date().timeIntervalSince($0) } ?? .greatestFiniteMagnitude
         guard Self.shouldRefresh(
             isBusy: isBusy(),
@@ -173,6 +197,10 @@ final class UsageStore: ObservableObject {
     }
 
     func refreshNow() {
+        if usesConfiguredSchedule {
+            for provider in providers { refresh(providerID: provider.id) }
+            return
+        }
         guard !isRefreshing else {
             Log.usage.notice("refresh skipped: one already in flight")
             return
@@ -211,11 +239,20 @@ final class UsageStore: ObservableObject {
               !disconnected.contains(providerID),
               !refreshing.contains(providerID) else { return }
 
+        if provider is ConfiguredUsageProvider,
+           let until = backoffs[providerID] ?? archive.loadBackoffUntil(providerID: providerID), until > Date() { return }
+
         refreshing.insert(providerID)
+        attempts[providerID] = Date()
         let version = connectionVersions[providerID]
-        Task { [weak self] in
+        providerTasks[providerID] = Task { [weak self] in
             guard let self else { return }
-            defer { self.refreshing.remove(providerID) }
+            defer {
+                if self.connectionVersions[providerID] == version {
+                    self.refreshing.remove(providerID)
+                    self.providerTasks[providerID] = nil
+                }
+            }
             guard let fresh = await self.snapshot(from: provider, version: version) else { return }
             if let index = self.snapshots.firstIndex(where: { $0.id == providerID }) {
                 self.snapshots[index] = fresh
@@ -317,6 +354,7 @@ final class UsageStore: ObservableObject {
 
     private func isCurrent(_ providerID: String, version: UUID?) -> Bool {
         !Task.isCancelled && !disconnected.contains(providerID)
+            && providers.contains { $0.id == providerID }
             && connectionVersions[providerID] == version
     }
 
@@ -325,15 +363,31 @@ final class UsageStore: ObservableObject {
         // provider in the serial refresh. Do not read its credential at all.
         guard isCurrent(provider.id, version: version) else { return nil }
         do {
-            let fresh = try await provider.fetchSnapshot()
+            var fresh = try await provider.fetchSnapshot()
             guard isCurrent(provider.id, version: version) else { return nil }
+            if let current = providers.first(where: { $0.id == provider.id }) as? ConfiguredUsageProvider {
+                fresh = current.decorate(fresh)
+            }
             lastGood[provider.id] = (fresh, Date())
+            if provider is ConfiguredUsageProvider {
+                backoffs[provider.id] = nil
+                archive.saveBackoffUntil(nil, providerID: provider.id)
+            }
             archive.save(lastGood)
             refusedAccess.remove(provider.id)
             Log.usage.debug("\(provider.id, privacy: .public): \(fresh.windows.count) window(s)")
             return fresh
         } catch {
             guard isCurrent(provider.id, version: version) else { return nil }
+            if provider is ConfiguredUsageProvider {
+                if case UsageProviderError.rateLimited(let delay) = error {
+                    let until = Date().addingTimeInterval(max(1, delay))
+                    backoffs[provider.id] = until
+                    archive.saveBackoffUntil(until, providerID: provider.id)
+                }
+                let current = providers.first { $0.id == provider.id } ?? provider
+                return configuredFailure(provider: current, error: error)
+            }
             Log.usage.error("\(provider.id, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             return degraded(provider: provider, error: error)
         }
@@ -430,7 +484,7 @@ final class UsageStore: ObservableObject {
     }
 
     private static func placeholder(_ provider: UsageProvider) -> ProviderSnapshot {
-        ProviderSnapshot(
+        let snapshot = ProviderSnapshot(
             id: provider.id,
             displayName: provider.displayName,
             glyph: provider.glyph,
@@ -438,5 +492,89 @@ final class UsageStore: ObservableObject {
             status: .stale(since: .distantPast),
             windows: []
         )
+        return (provider as? ConfiguredUsageProvider)?.decorate(snapshot) ?? snapshot
+    }
+
+    func reconfigure(providers next: [UsageProvider], disconnected nextDisconnected: Set<String>,
+                     invalidated: Set<String>) {
+        usesConfiguredSchedule = true
+        let old = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
+        let nextIDs = Set(next.map(\.id))
+        let removed = Set(old.keys).subtracting(nextIDs)
+        for provider in next {
+            let before = (old[provider.id] as? ConfiguredUsageProvider)?.entry
+            let after = (provider as? ConfiguredUsageProvider)?.entry
+            let queryChanged = before.map { previous in
+                after.map { !previous.sameQuery(as: $0) } ?? true
+            } ?? true
+            if queryChanged || before?.enabled != after?.enabled || invalidated.contains(provider.id) {
+                connectionVersions[provider.id] = UUID()
+                providerTasks.removeValue(forKey: provider.id)?.cancel()
+                refreshing.remove(provider.id)
+                attempts[provider.id] = nil
+            }
+        }
+        for id in removed.union(invalidated).union(nextDisconnected) {
+            connectionVersions[id] = UUID()
+            providerTasks.removeValue(forKey: id)?.cancel()
+            refreshing.remove(id)
+            refusedAccess.remove(id)
+            lastGood[id] = nil
+            attempts[id] = nil
+            backoffs[id] = nil
+            if removed.contains(id) || invalidated.contains(id) {
+                archive.saveBackoffUntil(nil, providerID: id)
+            }
+            archive.forget(id)
+        }
+        let previous = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0) })
+        providers = next
+        isReconfiguring = true
+        disconnected = nextDisconnected
+        isReconfiguring = false
+        snapshots = next.filter { !nextDisconnected.contains($0.id) }.map { provider in
+            guard !invalidated.contains(provider.id), let snapshot = previous[provider.id] else {
+                return Self.placeholder(provider)
+            }
+            return (provider as? ConfiguredUsageProvider)?.decorate(snapshot) ?? snapshot
+        }
+        for snapshot in snapshots {
+            if let old = lastGood[snapshot.id] { lastGood[snapshot.id] = (snapshot, old.fetchedAt) }
+        }
+        archive.save(lastGood)
+        refreshDue()
+    }
+
+    func refreshDue(now: Date = Date()) {
+        for case let provider as ConfiguredUsageProvider in providers {
+            let schedule = provider.entry.schedule
+            guard provider.entry.enabled, schedule.enabled,
+                  now.timeIntervalSince(attempts[provider.id] ?? .distantPast) >= schedule.interval(busy: isBusy()) else { continue }
+            refresh(providerID: provider.id)
+        }
+    }
+
+    private func configuredFailure(provider: UsageProvider, error: Error) -> ProviderSnapshot {
+        var snapshot = lastGood[provider.id]?.snapshot ?? Self.placeholder(provider)
+        let message: String
+        switch error {
+        case UsageProviderError.needsAuth:
+            message = (provider as? ConfiguredUsageProvider)?.entry.usesLocalAccount == true
+                ? provider.signInRoute.explanation : String(localized: "Update this provider's credentials in Settings.")
+        case UsageProviderError.accessDenied:
+            refusedAccess.insert(provider.id)
+            message = String(localized: "macOS denied credential access. Allow access in provider actions.")
+        case UsageProviderError.credentialExpired:
+            message = String(localized: "The saved token has expired.")
+        case UsageProviderError.rateLimited: message = String(localized: "Rate limited. Waiting before retrying.")
+        case UsageProviderError.badResponse(let status): message = "HTTP \(status)"
+        case let error as QueryError: message = error.localizedDescription
+        case is DecodingError: message = String(localized: "The provider returned an invalid response.")
+        case let error as URLError: message = "Network error (\(error.code.rawValue))."
+        default: message = String(localized: "Query failed.")
+        }
+        snapshot.queryFailure = message
+        snapshot.status = snapshot.hasReading ? .stale(since: lastGood[provider.id]?.fetchedAt ?? Date()) : .error(message)
+        return snapshot
     }
 }

@@ -118,7 +118,8 @@ struct NotchRootView: View {
     /// pulled toward the edge, so the whole thing reads as one movement.
     @ViewBuilder
     private var cells: some View {
-        let stack = ForEach(Array(model.snapshots.enumerated()), id: \.element.id) { index, snapshot in
+        let stack = ForEach(Array(model.visibleIndices), id: \.self) { index in
+            let snapshot = model.snapshots[index]
             ProviderCell(
                 snapshot: snapshot,
                 activity: model.activity(for: snapshot.id),
@@ -138,7 +139,7 @@ struct NotchRootView: View {
                     x: model.isExpanded ? 0 : model.edge.outward.x * Design.px(28),
                     y: model.isExpanded ? 0 : model.edge.outward.y * Design.px(28)
                 )
-                .animation(motion(NotchMotion.stagger(index: index)), value: model.isExpanded)
+                .animation(motion(NotchMotion.stagger(index: index - model.visibleStart)), value: model.isExpanded)
         }
 
         Group {

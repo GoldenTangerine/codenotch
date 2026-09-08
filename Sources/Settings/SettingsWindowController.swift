@@ -1,3 +1,12 @@
+/**
+ @name: 设置窗口控制器
+ @Descripttion: 承载应用设置和供应商管理界面。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Settings/SettingsWindowController.swift
+ */
 import AppKit
 import SwiftUI
 
@@ -19,6 +28,8 @@ final class SettingsWindowController {
     private let switchAccount: (String) -> Bool
     private let retry: (String) -> Void
     private let updater: Updater
+    private let catalog: QueryCatalog?
+    private let usageStore: UsageStore?
 
     init(preferences: Preferences,
          providers: @escaping () -> [ProviderSummary],
@@ -26,7 +37,10 @@ final class SettingsWindowController {
          signOut: @escaping (String) -> Void,
          signIn: @escaping (String) -> Bool,
          switchAccount: @escaping (String) -> Bool,
-         retry: @escaping (String) -> Void) {
+         retry: @escaping (String) -> Void,
+         catalog: QueryCatalog? = nil, usageStore: UsageStore? = nil) {
+        self.catalog = catalog
+        self.usageStore = usageStore
         self.switchAccount = switchAccount
         self.retry = retry
         self.updater = updater
@@ -72,7 +86,7 @@ final class SettingsWindowController {
                                    signIn: signIn,
                                    switchAccount: switchAccount,
                                    retry: retry,
-                                   updater: updater)
+                                   updater: updater, catalog: catalog, usageStore: usageStore)
         )
         window.center()
         window.isReleasedWhenClosed = false

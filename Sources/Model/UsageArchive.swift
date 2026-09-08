@@ -1,3 +1,12 @@
+/**
+ @name: 额度读数缓存
+ @Descripttion: 保存供应商读数和限流退避并兼容旧版本缓存。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Model/UsageArchive.swift
+ */
 import Foundation
 
 /// The last good reading for each provider, remembered across launches.
@@ -16,6 +25,8 @@ struct UsageArchive {
         let fetchedAt: Date
         /// Optional so archives written before this field still decode.
         let headlineID: String?
+        var icon: ProviderIcon?
+        var manualQuery: Bool?
     }
 
     private let defaults: UserDefaults
@@ -80,7 +91,8 @@ struct UsageArchive {
                 fidelity: entry.fidelity,
                 status: .stale(since: entry.fetchedAt),
                 windows: entry.windows,
-                headlineID: entry.headlineID
+                headlineID: entry.headlineID,
+                icon: entry.icon, manualQuery: entry.manualQuery ?? false
             )
             result[entry.id] = (snapshot, entry.fetchedAt)
         }
@@ -96,7 +108,8 @@ struct UsageArchive {
                 fidelity: $0.snapshot.fidelity,
                 windows: $0.snapshot.windows,
                 fetchedAt: $0.fetchedAt,
-                headlineID: $0.snapshot.headlineID
+                headlineID: $0.snapshot.headlineID,
+                icon: $0.snapshot.icon, manualQuery: $0.snapshot.manualQuery
             )
         }
         guard let data = try? JSONEncoder().encode(entries) else { return }

@@ -76,13 +76,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // it drew every provider from the archive and only dropped the
             // switched-off ones once the binding below delivered.
             Log.usage.info("claude profiles: \(self.claudeProfiles.map(\.displayPath).joined(separator: ", "), privacy: .public)")
-            let store = UsageStore(
-                providers: claudeProfiles.map { ClaudeOAuthProvider(profile: $0) }
+            let nativeProviders: [UsageProvider] = claudeProfiles.map { ClaudeOAuthProvider(profile: $0) }
                     + [CursorLocalProvider(), CodexLocalProvider(), AntigravityProvider(),
                        GLMProvider(), GrokLocalProvider(), OpenCodeProvider()]
-                    + webProviders,
-                disconnected: preferences.disconnectedProviders
+                    + webProviders
+            let catalog = QueryCatalog(providers: nativeProviders, disconnected: preferences.disconnectedProviders)
+            let store = UsageStore(
+                providers: catalog.providers(),
+                disconnected: Set(catalog.entries.filter { !$0.enabled }.map(\.id)), configured: true
             )
+            let applyCatalog: (Set<String>) -> Void = { [weak catalog, weak store, weak controller, weak preferences] invalidated in
+                guard let catalog, let store else { return }
+                let disconnected = Set(catalog.entries.filter { !$0.enabled }.map(\.id))
+                store.reconfigure(providers: catalog.providers(), disconnected: disconnected, invalidated: invalidated)
+                preferences?.disconnectedProviders = disconnected
+                controller?.model.activitySourceIDs = Dictionary(uniqueKeysWithValues:
+                    catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) })
+            }
+            catalog.onChange = applyCatalog
+            controller.model.activitySourceIDs = Dictionary(uniqueKeysWithValues:
+                catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) })
+            preferences.disconnectedProviders = Set(catalog.entries.filter { !$0.enabled }.map(\.id))
 
             // The stored edge goes in before the panel is ever put up. The
             // sink below delivers on the next run loop turn, by which time the
@@ -108,7 +122,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 switchAccount: { [weak store] in
                     store?.openAccountSource(providerID: $0) ?? false
                 },
-                retry: { [weak store] in store?.reauthorize(providerID: $0) }
+                retry: { [weak store] in store?.reauthorize(providerID: $0) },
+                catalog: catalog, usageStore: store
             )
             controller.onOpenSettings = { [weak settings] in settings?.show() }
             self.settings = settings
@@ -155,11 +170,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.$notchEdge
                 .receive(on: RunLoop.main)
                 .sink { [weak controller] in controller?.apply(edge: $0) }
-                .store(in: &cancellables)
-
-            preferences.$disconnectedProviders
-                .receive(on: RunLoop.main)
-                .sink { [weak store] in store?.disconnected = $0 }
                 .store(in: &cancellables)
 
             store.$snapshots

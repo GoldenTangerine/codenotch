@@ -195,6 +195,8 @@ final class Preferences: ObservableObject {
     /// update, and wiping data on every Sparkle update would be catastrophic.
     /// It has to be something the user asks for.
     static func eraseAllData() {
+        try? QueryKeychain().removeAll()
+        try? FileManager.default.removeItem(at: ProviderIcon.directory)
         let bundleID = Bundle.main.bundleIdentifier ?? "com.vinz.codenotch"
         UserDefaults.standard.removePersistentDomain(forName: bundleID)
         UserDefaults.standard.synchronize()

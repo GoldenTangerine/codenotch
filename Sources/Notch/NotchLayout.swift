@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏布局尺寸
+ @Descripttion: 计算显示栏及可滚动额度详情的布局尺寸。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Notch/NotchLayout.swift
+ */
 import AppKit
 
 /// Every measurement is quoted in design-frame pixels so it can be checked
@@ -275,6 +284,7 @@ enum NotchLayout {
                            sessionCap: Int = defaultSessionCap,
                            statusMessage: String? = nil,
                            blockMessage: String? = nil) -> CGFloat {
+        let windowCount = min(windowCount, maxWindowCount)
         let header = max(glyphSize, cardTitleLineHeight)
         var height = 2 * cardPadding + header
 

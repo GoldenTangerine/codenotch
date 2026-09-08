@@ -16,7 +16,7 @@ working, done, or waiting on you.
 
 ![Collapsed notch with hover tooltip](docs/design/frame-124-hover-tooltip.png)
 
-Hover a ring for its limit windows and when they reset. Claude's ring shows the
+Hover a ring for its limit windows and when they reset. By default, Claude's ring shows the
 same **current session** window Claude Code's own `/usage` leads with, so the
 two never disagree.
 
@@ -32,23 +32,79 @@ two never disagree.
 | **Grok** | official | The Grok CLI session in `~/.grok/auth.json`, against the same credits billing endpoint `/usage` uses. |
 | **OpenCode** | official | The Go plan's official usage endpoint, with the `opencode-go` key OpenCode itself stores on sign-in. |
 
-Codenotch never signs in anywhere. Every reading is borrowed from a credential
-or session a tool on your Mac already holds — install and sign in to any of
-them, and its ring appears. Switching a provider off in Settings stops its
-credential being read at all and forgets the readings taken from it; it does
-not sign you out of the tool that owns the account, and the row says so.
+Codenotch supports automatic credentials from local tools and independent manual
+credentials. Settings → Providers lets you add multiple accounts for the same
+provider, choose a brand/system/image icon, edit, reorder, disable or delete a query.
+Existing providers and their enabled states migrate on first launch. Deleted
+entries stay deleted; new local profiles can be added from the editor.
+
+Manual queries accept the credential required by the selected endpoint: for
+example, Claude's OAuth access token, Cursor's Cookie, or a GLM API key. Manual
+mode never falls back to another account on this Mac. Credentials are stored in
+Codenotch's own macOS Keychain entries. Disabling a provider stops queries and
+forgets readings; deleting it also removes its saved credentials and icon.
+
+### Query templates
+
+Choose a built-in query, an official balance template (DeepSeek, StepFun,
+SiliconFlow, OpenRouter, Novita), NewAPI, Sub2API, GLM/Kimi/MiniMax Token Plan,
+or custom JavaScript. Templates are editable. **Test query** previews results
+before saving, and **Primary metric** selects the value shown beside the icon.
+Other metrics and reset times appear on hover. Balances without a total are
+shown as amounts, without inventing a percentage; unlimited quotas are distinct
+from zero balances. Long provider lists and quota details can be scrolled.
+
+Each entry has active and idle refresh intervals in **seconds**, defaulting to
+60 and 300. Activity uses the app's existing local session signal; manual
+accounts do not inherit local account sessions. Automatic refresh can be turned
+off independently. Rate-limit responses defer retries, and failures mark the
+last successful reading stale. Changing credentials or the query clears it.
+
+Scripts return `{ request, extractor }`, matching Code Switch R's query shape:
+
+```js
+({
+  request: {
+    url: baseUrl + '/user/balance',
+    method: 'GET',
+    headers: { Authorization: 'Bearer ' + apiKey }
+  },
+  extractor: response => ({
+    key: 'balance', label: 'Balance', remaining: response.balance, unit: 'USD'
+  })
+})
+```
+
+Available variables are `baseUrl`, `apiKey`, `accessToken`, `cookie`, `accountId`
+and `userId`, also accessible through `variables`. Legacy quoted placeholders
+such as `'Bearer {{apiKey}}'` are supported. Store secrets in credential fields
+rather than embedding them in scripts. The extractor may return one item or an
+array of up to 64, with unique `key`, `label`, `used`, `total`, `remaining`,
+`unit`, `unlimited`, `nextReset` (ISO 8601), and `isValid` fields. A progress ring
+requires a positive total and enough data to calculate used quota.
+
+Scripts run in a separate JavaScriptCore helper process with no exposed file or
+command APIs. Codenotch performs the HTTP request using an isolated session;
+redirects are rejected and responses are limited to 2 MB. The configured timeout
+limits the whole query, including the HTTP request and script execution; reaching
+it cancels the request and terminates the script. Automatic and manual built-in
+queries also use this deadline, although a provider may fail earlier under its
+own network timeout. Query templates depend on provider endpoints and may need
+updating when a provider changes its response. Saved scripts are preserved when
+templates change; selecting another query method and then the desired template
+loads its latest code.
 
 It also answers **"is it still working?"** — a thin arc spins inside a
 provider's ring while a session is busy, and becomes a pulsing amber ring when
 one is blocked waiting on you. Hover for every live session by name, where it
 is running, and what it wants.
 
-Two Claude Code logins are two rings. Anyone who keeps a work account apart with
-`CLAUDE_CONFIG_DIR=~/.claude-work claude` gets a **Claude (work)** ring beside the
-personal one, with its own limits, its own sessions and its own row in Settings.
-Any `~/.claude-<slug>` directory Claude Code has run against is found at launch;
-the default `~/.claude` always comes first, the rest in alphabetical order, so the
-rings never swap places.
+Two Claude Code logins can have separate rings. A work profile created with
+`CLAUDE_CONFIG_DIR=~/.claude-work claude` can be selected under **Add provider →
+Automatic → Local provider**, with its own limits and sessions.
+Available `~/.claude-<slug>` directories are discovered at launch. The initial
+list places the default first and the other profiles alphabetically; subsequent
+ordering follows your saved provider list.
 
 ## Placement
 

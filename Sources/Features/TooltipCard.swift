@@ -131,6 +131,7 @@ private struct TooltipHeader<Mark: View>: View {
             Text(title)
                 .font(Typography.cardTitle)
                 .foregroundStyle(Palette.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.7).help(title)
             if let note {
                 Spacer(minLength: Design.px(20))
                 Text(note)
@@ -278,6 +279,7 @@ private struct LimitWindowRow: View {
             Text((window.usedFraction == nil ? "" : fidelity.qualifier) + window.summary)
                 .font(Typography.cardBody)
                 .foregroundStyle(Palette.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.7).help(window.summary)
                 .padding(.top, NotchLayout.barToUsed)
         }
     }
@@ -290,6 +292,7 @@ private struct ProviderTooltip: View {
     /// Only worth saying when the numbers are not current. A remembered reading
     /// has to be dated, or it quietly passes itself off as live.
     private var readingAge: String? {
+        if snapshot.queryFailure != nil { return String(localized: "Refresh failed") }
         guard snapshot.hasReading, let since = snapshot.status.staleSince,
               since != .distantPast
         else { return nil }
@@ -299,9 +302,10 @@ private struct ProviderTooltip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TooltipHeader(title: String(localized: "\(snapshot.displayName) Usage"), note: readingAge) {
-                ProviderGlyphView(glyph: snapshot.glyph)
+                QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph)
                     .foregroundStyle(Palette.textPrimary)
             }
+            .help(snapshot.queryFailure ?? snapshot.displayName)
 
             if let block = snapshot.block {
                 BlockedRow(text: block.summary(now: now))
@@ -314,12 +318,20 @@ private struct ProviderTooltip: View {
                     .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, NotchLayout.headerToBlock)
-            } else {
-                ForEach(Array(snapshot.windows.enumerated()), id: \.element.id) { index, window in
-                    LimitWindowRow(window: window, fidelity: snapshot.fidelity, now: now)
-                        .padding(.top, index == 0 ? NotchLayout.headerToBlock : NotchLayout.blockSpacing)
+            } else if snapshot.windows.count > NotchLayout.maxWindowCount {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) { windowRows }
                 }
-            }
+                .frame(height: NotchLayout.cardHeight(windowCount: NotchLayout.maxWindowCount)
+                    - 2 * NotchLayout.cardPadding - max(NotchLayout.glyphSize, NotchLayout.cardTitleLineHeight))
+            } else { windowRows }
+        }
+    }
+
+    private var windowRows: some View {
+        ForEach(Array(snapshot.windows.enumerated()), id: \.element.id) { index, window in
+            LimitWindowRow(window: window, fidelity: snapshot.fidelity, now: now)
+                .padding(.top, index == 0 ? NotchLayout.headerToBlock : NotchLayout.blockSpacing)
         }
     }
 }
