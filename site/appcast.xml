@@ -8,7 +8,7 @@
             <sparkle:version>4</sparkle:version>
             <sparkle:shortVersionString>1.3.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://hivinz.com/Codenotch.dmg" length="4951832" type="application/octet-stream" sparkle:edSignature="UJsE7kb6LXPHaeB+KRtV/j53z3udgMztuIrt4/iB9o5CYNkeYuuDeswhQ8EJ48+ZNnJmcLGKxT/LYpCs7UmFBw=="/>
+            <enclosure url="https://goldentangerine.github.io/codenotch/Codenotch.dmg" length="4951832" type="application/octet-stream" sparkle:edSignature="UJsE7kb6LXPHaeB+KRtV/j53z3udgMztuIrt4/iB9o5CYNkeYuuDeswhQ8EJ48+ZNnJmcLGKxT/LYpCs7UmFBw=="/>
         </item>
     </channel>
 </rss>

@@ -23,6 +23,11 @@ ifeq (,$(shell security find-identity -v -p codesigning 2>/dev/null | grep -c "D
 DEV_SIGN := CODE_SIGN_IDENTITY="-" DEVELOPMENT_TEAM="" CODE_SIGN_STYLE=Automatic
 endif
 
+# Extra build-setting overrides for the release tooling: the tag-triggered
+# GitHub workflow passes MARKETING_VERSION and CURRENT_PROJECT_VERSION in from
+# the tag here, so the version lives in the tag rather than in project.yml.
+XC_FLAGS ?=
+
 .PHONY: gen build test run clean
 
 gen:
@@ -80,7 +85,7 @@ archive: gen
 	@# real one in /Applications. This stops the whole tree being indexed.
 	@touch build/.metadata_never_index
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
-		-configuration Release -archivePath $(RELEASE_DIR)/$(APP_NAME).xcarchive archive
+		-configuration Release -archivePath $(RELEASE_DIR)/$(APP_NAME).xcarchive $(XC_FLAGS) archive
 	printf '%s\n' \
 		'<?xml version="1.0" encoding="UTF-8"?>' \
 		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
@@ -133,7 +138,7 @@ SPARKLE_BIN = $(shell dirname $$(find $$HOME/Library/Developer/Xcode/DerivedData
 PAGES_DIR := site
 # Where the dmg actually sits. The enclosure URL the appcast advertises has to
 # match it exactly, or an update downloads and then fails to verify.
-DOWNLOAD_PREFIX := https://hivinz.com/
+DOWNLOAD_PREFIX := https://goldentangerine.github.io/codenotch/
 
 appcast: $(DMG)
 	@test -n "$(SPARKLE_BIN)" || (echo "Sparkle tools not found — run make build first" && exit 1)
