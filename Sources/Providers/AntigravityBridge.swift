@@ -1,3 +1,12 @@
+/**
+ @name: AntigravityBridge 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Providers/AntigravityBridge.swift
+ */
 import Foundation
 import os
 
@@ -161,7 +170,7 @@ enum AntigravityBridge {
                     id: bucket.bucketId ?? group.displayName ?? "quota",
                     // The group names the models; the bucket only ever says
                     // "Weekly Limit Remaining", which is the same for both.
-                    label: group.displayName ?? bucket.displayName ?? "Usage",
+                    label: group.displayName ?? bucket.displayName ?? String(localized: "Usage"),
                     usedFraction: 1 - remaining,
                     resetsAt: bucket.resetTime.flatMap(AntigravityCredentials.parse)
                 )

@@ -1,3 +1,12 @@
+/**
+ @name: StatusItemController 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/App/StatusItemController.swift
+ */
 import AppKit
 
 /// The menu bar icon, present only while `AppPresence.menuBar` is chosen.
@@ -61,7 +70,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func rebuild(menu: NSMenu, now: Date) {
         menu.removeAllItems()
         if snapshots.isEmpty {
-            let empty = NSMenuItem(title: "Waiting for the first reading…", action: nil, keyEquivalent: "")
+            let empty = NSMenuItem(title: String(localized: "Waiting for the first reading…"), action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
         } else {
@@ -77,14 +86,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         }
         menu.addItem(.separator())
         menu.addItem(
-            withTitle: "Refresh all", action: #selector(refreshAll), keyEquivalent: "r"
+            withTitle: String(localized: "Refresh all"), action: #selector(refreshAll), keyEquivalent: "r"
         ).target = self
         menu.addItem(
-            withTitle: "Settings…", action: #selector(openSettings), keyEquivalent: ","
+            withTitle: String(localized: "Settings…"), action: #selector(openSettings), keyEquivalent: ","
         ).target = self
         menu.addItem(.separator())
         menu.addItem(
-            withTitle: "Quit Codenotch", action: #selector(quit), keyEquivalent: "q"
+            withTitle: String(localized: "Quit Codenotch"), action: #selector(quit), keyEquivalent: "q"
         ).target = self
     }
 

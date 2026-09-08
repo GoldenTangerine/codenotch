@@ -1,3 +1,12 @@
+/**
+ @name: AccentColor 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Settings/AccentColor.swift
+ */
 import AppKit
 import SwiftUI
 
@@ -22,7 +31,7 @@ enum AccentColorChoice: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .system:   return "Device accent color"
+        case .system:   return String(localized: "Device accent color")
         case .pink:     return "#FF33E1"
         case .red:      return "#EB4236"
         case .orange:   return "#EB8436"

@@ -1,3 +1,12 @@
+/**
+ @name: AntigravityProvider 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Providers/AntigravityProvider.swift
+ */
 import Foundation
 import os
 
@@ -252,7 +261,7 @@ actor AntigravityProvider: UsageProvider {
             guard let limit = bucket.limit, limit > 0,
                   let used = bucket.used, used >= 0, used <= limit * 1.5
             else { return nil }
-            let label = bucket.displayName ?? bucket.name ?? "Usage"
+            let label = bucket.displayName ?? bucket.name ?? String(localized: "Usage")
             return LimitWindow(id: bucket.name ?? label,
                                label: label,
                                usedFraction: used / limit,

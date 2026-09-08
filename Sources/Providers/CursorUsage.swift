@@ -46,7 +46,7 @@ import Foundation
 /// used to do. Enterprise is the opposite: there is no percentage field, so
 /// `used`/`limit` on `overall` is the reading.
 enum CursorUsage {
-    static let modelsLabel = "Auto usage"
+    static let modelsLabel = String(localized: "Auto usage")
 
     /// The window the ring should mean. Cursor Models when that field exists,
     /// never the blended total, never API — and on an enterprise/team plan,
@@ -97,11 +97,11 @@ enum CursorUsage {
         // provider's headlineID still resolves.
         if windows.isEmpty,
            let overall = spendWindow(usage["overall"], id: "included",
-                                     label: "Included usage", resetsAt: resetsAt) {
+                                     label: String(localized: "Included usage"), resetsAt: resetsAt) {
             windows.append(overall)
         }
         if let teamOnDemand = spendWindow(team["onDemand"], id: "team_on_demand",
-                                          label: "Team on demand", resetsAt: resetsAt),
+                                          label: String(localized: "Team on demand"), resetsAt: resetsAt),
            (teamOnDemand.usedFraction ?? 0) > 0 {
             windows.append(teamOnDemand)
         }

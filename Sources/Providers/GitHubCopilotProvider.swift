@@ -1,3 +1,12 @@
+/**
+ @name: GitHubCopilotProvider 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Providers/GitHubCopilotProvider.swift
+ */
 import Foundation
 
 /// Reads GitHub Copilot quotas from GitHub's endpoint used by its editors.
@@ -18,7 +27,7 @@ actor GitHubCopilotProvider: UsageProvider {
     }
 
     nonisolated var signInRoute: SignInRoute {
-        .guidance("Sign in with GitHub CLI using `gh auth login`, then enable GitHub Copilot.")
+        .guidance(String(localized: "Sign in with GitHub CLI using `gh auth login`, then enable GitHub Copilot."))
     }
 
     nonisolated func account() -> ProviderAccount? {
@@ -178,7 +187,7 @@ enum GitHubCopilotUsage {
             return window(id: key, quota: quota, root: root)
         }
         guard !windows.isEmpty else {
-            throw UsageProviderError.nothingMetered("GitHub Copilot reported no metered quotas")
+            throw UsageProviderError.nothingMetered(String(localized: "GitHub Copilot reported no metered quotas"))
         }
         return windows
     }
@@ -228,9 +237,9 @@ enum GitHubCopilotUsage {
 
     private static func label(for id: String) -> String {
         switch id {
-        case "premium_interactions": return "Premium requests"
-        case "chat":                return "Chat requests"
-        case "completions":         return "Completions"
+        case "premium_interactions": return String(localized: "Premium requests")
+        case "chat":                return String(localized: "Chat requests")
+        case "completions":         return String(localized: "Completions")
         default:
             return id.replacingOccurrences(of: "_", with: " ").capitalized
         }

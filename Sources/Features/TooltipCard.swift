@@ -311,6 +311,7 @@ private struct LimitWindowRow: View {
 }
 
 private struct CodeSwitchTooltip: View {
+    @Environment(\.codenotchAccentColor) private var accentColor
     let snapshot: ProviderSnapshot
     let details: CodeSwitchDetails
     let now: Date
@@ -327,8 +328,23 @@ private struct CodeSwitchTooltip: View {
                     Text("Code Switch R · \(details.platform)")
                         .foregroundStyle(Palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    Text(details.activityText)
-                        .foregroundStyle(Palette.textPrimary)
+                    if details.provider.status == "active" {
+                        HStack(spacing: 4) {
+                            Text("Calling")
+                                .foregroundStyle(accentColor)
+                            Text("·")
+                                .foregroundStyle(Palette.textSecondary)
+                            Text(verbatim: String(details.provider.activeRequests))
+                                .bold()
+                                .monospacedDigit()
+                                .foregroundStyle(Palette.ample)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(details.activityText)
+                    } else {
+                        Text(details.activityText)
+                            .foregroundStyle(Palette.textPrimary)
+                    }
                     if details.provider.loading {
                         Text("Loading…").foregroundStyle(Palette.textSecondary)
                     } else if details.provider.quotas.isEmpty {

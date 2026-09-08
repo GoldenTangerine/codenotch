@@ -1,6 +1,2712 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+  "Complete Chinese copy and clearer live request counts.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "补齐中文文案，让实时调用数量更醒目。"
+        }
+      }
+    }
+  },
+  "Chinese throughout the new features": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "补齐新增功能的中文"
+        }
+      }
+    }
+  },
+  "Settings, menus, notifications, provider guidance, session activity, reset countdowns and release history now use localized copy.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "设置、菜单、通知、供应商说明、会话活动、重置倒计时和更新历史现已完整接入本地化。"
+        }
+      }
+    }
+  },
+  "Live request counts stand out": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "实时调用数量更醒目"
+        }
+      }
+    }
+  },
+  "In Code Switch R details, Calling follows your accent color while the count stays bold green with monospaced digits.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Code Switch R 详情中的“调用中”跟随强调色，数量独立显示为绿色加粗，并使用等宽数字。"
+        }
+      }
+    }
+  },
+    "Calling": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调用中"
+          }
+        }
+      }
+    },
+  "no requests today": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "今日暂无请求"
+        }
+      }
+    }
+  },
+  "~%lld request today": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "今日约 %lld 次请求"
+        }
+      }
+    }
+  },
+  "~%lld requests today": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "今日约 %lld 次请求"
+        }
+      }
+    }
+  },
+  "Working": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "正在工作"
+        }
+      }
+    }
+  },
+  "Untitled chat": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "未命名对话"
+        }
+      }
+    }
+  },
+  "needs your input": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "等待你回应"
+        }
+      }
+    }
+  },
+  "Working in %@": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "正在 %@ 中工作"
+        }
+      }
+    }
+  },
+  "GLM Token Plan": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "GLM 令牌套餐"
+        }
+      }
+    }
+  },
+  "Kimi Token Plan": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Kimi 令牌套餐"
+        }
+      }
+    }
+  },
+  "MiniMax Token Plan": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "MiniMax 令牌套餐"
+        }
+      }
+    }
+  },
+  "\"12% used · 88% left\", so a reading lines up with whichever end your vendor happens to show.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "“已用 12% · 剩余 88%”，方便与供应商显示的用量或余额对照。"
+        }
+      }
+    }
+  },
+  "%@ (missing)": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "%@（缺失）"
+        }
+      }
+    }
+  },
+  "%@ is at %lld%%": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "%@ 已用 %lld%%"
+        }
+      }
+    }
+  },
+  "%@ left": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "剩余 %@"
+        }
+      }
+    }
+  },
+  "%@ limit reached": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "%@ 已达限额"
+        }
+      }
+    }
+  },
+  "%@ used": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已用 %@"
+        }
+      }
+    }
+  },
+  "%@ · this month": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "%@ · 本月"
+        }
+      }
+    }
+  },
+  "%@%% Used · %@%% left": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已用 %@%% · 剩余 %@%%"
+        }
+      }
+    }
+  },
+  "%@: %@": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "%@: %@"
+        }
+      }
+    }
+  },
+  "%lld%% of its %@ limit used.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已用 %lld%%（%@ 限额）。"
+        }
+      }
+    }
+  },
+  "10 seconds": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "10 秒"
+        }
+      }
+    }
+  },
+  "3 seconds": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "3 秒"
+        }
+      }
+    }
+  },
+  "5 seconds": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "5 秒"
+        }
+      }
+    }
+  },
+  "@hivinz_": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "@hivinz_"
+        }
+      }
+    }
+  },
+  "A CLI-only Cursor login now gets a ring, and enterprise/team plans read their real usage instead of reporting nothing to meter.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "仅登录 Cursor CLI 也能显示用量环，企业及团队套餐会读取实际用量，不再显示无计量数据。"
+        }
+      }
+    }
+  },
+  "A Displays picker in Appearance offers the main display or all of them; a second picker pins a single notch to a named screen.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "外观设置新增显示器选项，可选择主显示器或所有显示器，也可将单个用量环固定到指定屏幕。"
+        }
+      }
+    }
+  },
+  "A brief window right after sleep, where macOS won't allow a keychain prompt yet, was mistaken for being signed out — which erased the reading and left \"waiting for the first reading\" on screen. It now ages the number instead of throwing it away, and picks back up on its own.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Mac 刚从睡眠唤醒时，系统可能暂时不允许钥匙串提示，此前会被误判为退出登录并清空读数。现在会保留旧读数，并自动恢复刷新。"
+        }
+      }
+    }
+  },
+  "A card is centred on the ring it belongs to, so the first and last providers threw half of it past the end of the panel — and what fell off was the title. The panel now keeps room for it.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "详情卡片以所属用量环为中心，首尾供应商的卡片曾超出面板并截断标题。现在面板会预留足够空间。"
+        }
+      }
+    }
+  },
+  "A countdown instead of a reset date": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "重置时间支持倒计时"
+        }
+      }
+    }
+  },
+  "A crashed or abandoned chat could read as \"still working\" for a day or more. It now notices when the writing has actually stopped.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "崩溃或已放弃的对话可能持续一天以上显示“正在工作”。现在会识别实际写入是否已经停止。"
+        }
+      }
+    }
+  },
+  "A limit renewing in four weeks said \"Mon\", which read as this Monday. It says \"28 Sep\".": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "四周后重置的限额曾显示为“周一”，容易被误认为本周一。现在会显示具体日期，如“9 月 28 日”。"
+        }
+      }
+    }
+  },
+  "A months-old duplicate can no longer win": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "不再误用数月前的重复凭据"
+        }
+      }
+    }
+  },
+  "A paused limit is shown as paused": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "暂停的限额会明确显示"
+        }
+      }
+    }
+  },
+  "A reading under one percent shows a tenth (\"<0.1%\") instead of rounding to nothing.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "低于 1% 的用量会显示小数或“<0.1%”，不再直接取整为零。"
+        }
+      }
+    }
+  },
+  "A real Codex account went unmetered": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "修复 Codex 账户限额遗漏"
+        }
+      }
+    }
+  },
+  "A ring says when it crosses 80% and 100%": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "用量达到 80% 和 100% 时提醒"
+        }
+      }
+    }
+  },
+  "A ring survives waking your Mac": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Mac 唤醒后保留用量环"
+        }
+      }
+    }
+  },
+  "A stray click no longer pins the notch open": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "误点击不再导致用量环一直展开"
+        }
+      }
+    }
+  },
+  "A stuck Claude ring recovers on its own": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Claude 用量环卡住后可自动恢复"
+        }
+      }
+    }
+  },
+  "A system notification once per crossing, muted per provider from its own settings row.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "每次跨越阈值发送一次系统通知，可在各供应商的设置行中单独静音。"
+        }
+      }
+    }
+  },
+  "A system notification the moment a provider's headline limit crosses 80%, and again at 100% — once per crossing, and again only after the window rolls over. Mute one from the bell beside its row in Accounts.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "供应商主要限额达到 80% 和 100% 时分别发送一次系统通知；同一周期不重复提醒。可通过账户列表旁的铃铛单独静音。"
+        }
+      }
+    }
+  },
+  "A tooltip with something to explain reserved one line for it however much it said.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "此前详情提示无论内容多长都只预留一行，导致说明被截断。"
+        }
+      }
+    }
+  },
+  "A way back from a declined keychain prompt": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "拒绝钥匙串授权后可以重试"
+        }
+      }
+    }
+  },
+  "API Key": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "API 密钥"
+        }
+      }
+    }
+  },
+  "API key": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "API 密钥"
+        }
+      }
+    }
+  },
+  "Accent color": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "强调色"
+        }
+      }
+    }
+  },
+  "Accounts": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "账户"
+        }
+      }
+    }
+  },
+  "Active providers appear after your local entries, with the default provider shown when idle. Requires Code Switch R v2.11.16 or later on the same Mac.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "活跃供应商显示在本地条目之后，空闲时显示默认供应商。需要在同一台 Mac 上运行 Code Switch R v2.11.16 或更新版本。"
+        }
+      }
+    }
+  },
+  "Add accounts with independent credentials, icons, query scripts and refresh settings.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "添加账户，为每个账户独立配置凭据、图标、查询脚本和刷新设置。"
+        }
+      }
+    }
+  },
+  "Add, reorder and customize providers, with separate credentials and icons for each account.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "添加、排序和自定义供应商，为每个账户分别设置凭据与图标。"
+        }
+      }
+    }
+  },
+  "Agent": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "代理"
+        }
+      }
+    }
+  },
+  "Alert when %@ crosses 80%% and 100%% of a limit.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "当 %@ 的限额达到 80%% 和 100%% 时提醒。"
+        }
+      }
+    }
+  },
+  "Alerts for %@ are muted. Click to unmute.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "%@ 的提醒已静音。点击取消静音。"
+        }
+      }
+    }
+  },
+  "All displays": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "所有显示器"
+        }
+      }
+    }
+  },
+  "Always show no longer turns itself off": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "始终显示不再自行关闭"
+        }
+      }
+    }
+  },
+  "Antigravity shows its actual quota": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Antigravity 显示实际配额"
+        }
+      }
+    }
+  },
+  "Antigravity's real numbers, and a switch that stays off.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Antigravity 使用真实用量，关闭的开关保持关闭。"
+        }
+      }
+    }
+  },
+  "App": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "应用"
+        }
+      }
+    }
+  },
+  "Appearance's Reset time picker can show \"Resets in 3h 20m\" instead of a date and time.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "外观中的重置时间选项支持显示“3 小时 20 分钟后重置”，也可继续使用日期和时间。"
+        }
+      }
+    }
+  },
+  "As many sessions as your screen can hold": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "根据屏幕空间展示会话"
+        }
+      }
+    }
+  },
+  "Auto usage": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "自动用量"
+        }
+      }
+    }
+  },
+  "Automatic connection recovery": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "自动恢复连接"
+        }
+      }
+    }
+  },
+  "Cancel": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "取消"
+        }
+      }
+    }
+  },
+  "Chat requests": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "聊天请求"
+        }
+      }
+    }
+  },
+  "Choose Edit position from the right-click menu, then drag to any screen edge. Release to save, or press Escape to cancel.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "从右键菜单选择“编辑位置”，然后拖到任意屏幕边缘。松开保存，按 Escape 取消。"
+        }
+      }
+    }
+  },
+  "Choose a primary metric, refresh intervals and timeout for each query. Failed refreshes keep the last successful reading.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "为每个查询选择主要指标、刷新间隔和超时时间。刷新失败时保留最后一次成功读数。"
+        }
+      }
+    }
+  },
+  "Choose an accent colour": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "选择强调色"
+        }
+      }
+    }
+  },
+  "Choose where Codenotch appears": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "选择 Codenotch 的显示位置"
+        }
+      }
+    }
+  },
+  "Claude Code files a new keychain entry on every token rotation. An account signed in for a while could pick an old, expired one at random and show \"waiting for the first reading\" forever.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Claude Code 每次轮换令牌都会新增钥匙串条目。登录较久的账户此前可能随机读到过期条目，一直等待首次读数。"
+        }
+      }
+    }
+  },
+  "Claude reads its own CLI's /usage first, touching the keychain only as a fallback; Antigravity's language server is asked before it.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Claude 优先读取自身 CLI 的 /usage，仅在必要时回退到钥匙串；Antigravity 优先查询自身语言服务器。"
+        }
+      }
+    }
+  },
+  "Claude, Cursor, Codex and Gemini": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Claude、Cursor、Codex 和 Gemini"
+        }
+      }
+    }
+  },
+  "Clicking near the screen edge before the notch had even opened could leave it stuck open with nothing on screen explaining why.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "用量环尚未展开时点击屏幕边缘，曾可能让它一直展开且没有任何说明。"
+        }
+      }
+    }
+  },
+  "Clicking the notch toggled the same flag the setting used, so a stray click quietly put it back to showing on hover.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "点击用量环曾修改与设置相同的开关，误点击就会悄悄恢复为悬停显示。"
+        }
+      }
+    }
+  },
+  "Code Switch R · %@": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Code Switch R · %@"
+        }
+      }
+    }
+  },
+  "Codenotch already knows the moment an agent stops working or stops to ask you something. Clicking the notch while it is open brings that session's app to the front — the app, not the tab: only some terminals let anything outside them choose a tab, so the tooltip names the session instead.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Codenotch 会在代理结束工作或等待你回应时立即获知。用量环展开时点击可将会话所属应用切到前台；只有部分终端支持从外部切换标签页，因此详情提示会显示会话名称。"
+        }
+      }
+    }
+  },
+  "Codenotch reads usage from tools already signed in on this Mac — it never asks for your password. Install and sign in to any of Claude Code (the terminal tool, not the Claude app), Cursor (the editor or cursor-agent), Codex, Antigravity, GLM, Grok, OpenCode, GitHub Copilot or a Gemini API key (via Gemini CLI, OpenCode or Hermes), and its ring appears in the notch.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Codenotch 从这台 Mac 上已登录的工具读取用量，绝不会索要密码。安装并登录 Claude Code（终端工具，而非 Claude 应用）、Cursor（编辑器或 cursor-agent）、Codex、Antigravity、GLM、Grok、OpenCode、GitHub Copilot，或通过 Gemini CLI、OpenCode、Hermes 使用 Gemini API 密钥后，即可显示对应的用量环。"
+        }
+      }
+    }
+  },
+  "Codex is read live instead of from a log": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Codex 改为实时读取"
+        }
+      }
+    }
+  },
+  "Codex reads live, and Always show stays on.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Codex 实时读取，始终显示保持开启。"
+        }
+      }
+    }
+  },
+  "Codex's live reading only recognised a 5-hour and a 7-day window. A free-plan account's real limit was a 30-day one, which fell through unnoticed and showed as nothing metered on an account that was genuinely tracked.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Codex 的实时读取此前只识别 5 小时和 7 天周期，遗漏免费套餐的 30 天限额。现在能正确显示该限额。"
+        }
+      }
+    }
+  },
+  "Completions": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "代码补全"
+        }
+      }
+    }
+  },
+  "Configure a local provider.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "请配置本地供应商。"
+        }
+      }
+    }
+  },
+  "Connected": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已连接"
+        }
+      }
+    }
+  },
+  "Contributors can build without Xcode signing": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "贡献者无需 Xcode 签名即可构建"
+        }
+      }
+    }
+  },
+  "Contributors can build without a certificate": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "贡献者无需证书即可构建"
+        }
+      }
+    }
+  },
+  "Cookie": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Cookie"
+        }
+      }
+    }
+  },
+  "Cursor sessions stop reporting work that already ended": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Cursor 会话不再显示已结束的工作"
+        }
+      }
+    }
+  },
+  "Custom provider queries with reliable refresh status.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "自定义供应商查询，刷新状态更可靠。"
+        }
+      }
+    }
+  },
+  "Declining no longer looks like being signed out, and Allow access… asks macOS again.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "拒绝授权不再被视为退出登录，点击“允许访问…”可再次请求 macOS 授权。"
+        }
+      }
+    }
+  },
+  "Desktop": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "桌面应用"
+        }
+      }
+    }
+  },
+  "Details stay visible near corners. The top centre snaps to the camera notch; other top positions stay below the menu bar.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "靠近角落时详情仍完整可见。顶部中央会吸附到摄像头刘海，其他顶部位置保持在菜单栏下方。"
+        }
+      }
+    }
+  },
+  "Device accent color": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "设备强调色"
+        }
+      }
+    }
+  },
+  "Display": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "显示器"
+        }
+      }
+    }
+  },
+  "Displays": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "显示器"
+        }
+      }
+    }
+  },
+  "Distant resets show a date": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "较远的重置时间显示日期"
+        }
+      }
+    }
+  },
+  "Drag to position": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "拖动定位"
+        }
+      }
+    }
+  },
+  "Drag to reorder": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "拖动排序"
+        }
+      }
+    }
+  },
+  "Drag to reorder the rings": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "拖动调整用量环顺序"
+        }
+      }
+    }
+  },
+  "Drag to reorder. The notch draws the rings in this order.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "拖动排序。用量环将按此顺序显示。"
+        }
+      }
+    }
+  },
+  "Each display gets its own notch, and hovering one opens only that one.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "每台显示器都有独立的用量环，悬停时只展开当前屏幕上的用量环。"
+        }
+      }
+    }
+  },
+  "Each read from the tool already signed in on this Mac. Codenotch never asks for a password.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "分别从这台 Mac 上已登录的工具读取，Codenotch 绝不会索要密码。"
+        }
+      }
+    }
+  },
+  "Every session, and a tooltip that fits on the screen.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "完整显示会话，详情提示适应屏幕。"
+        }
+      }
+    }
+  },
+  "Far fewer keychain prompts": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "大幅减少钥匙串提示"
+        }
+      }
+    }
+  },
+  "Fewer keychain prompts for Claude and Antigravity": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "减少 Claude 和 Antigravity 的钥匙串提示"
+        }
+      }
+    }
+  },
+  "Fills the ring against a ceiling you choose; Google publishes none for an API key.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "按你设定的上限显示用量环；Google 未为 API 密钥提供统一上限。"
+        }
+      }
+    }
+  },
+  "Finished": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已完成"
+        }
+      }
+    }
+  },
+  "Fits the corners and the camera notch": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "适应屏幕角落与摄像头刘海"
+        }
+      }
+    }
+  },
+  "Follow active window": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "跟随活跃窗口"
+        }
+      }
+    }
+  },
+  "Follow your active Code Switch R providers.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "跟随 Code Switch R 当前活跃的供应商。"
+        }
+      }
+    }
+  },
+  "For": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "持续"
+        }
+      }
+    }
+  },
+  "GLM added": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "新增 GLM"
+        }
+      }
+    }
+  },
+  "Gemini monthly token budget": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Gemini 每月令牌预算"
+        }
+      }
+    }
+  },
+  "GitHub Copilot is a new ring": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "新增 GitHub Copilot 用量环"
+        }
+      }
+    }
+  },
+  "GitHub Copilot reported no metered quotas": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "GitHub Copilot 未返回可计量配额"
+        }
+      }
+    }
+  },
+  "Google account": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Google 账户"
+        }
+      }
+    }
+  },
+  "Google will not answer Codenotch directly, so it asks Antigravity's own language server instead — the same place Antigravity's usage panel gets its figure.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Google 不允许 Codenotch 直接查询，因此改为通过 Antigravity 自身的语言服务器读取，与其用量面板使用相同数据源。"
+        }
+      }
+    }
+  },
+  "Grok is a new ring": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "新增 Grok 用量环"
+        }
+      }
+    }
+  },
+  "Hide Sidebar": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "隐藏侧边栏"
+        }
+      }
+    }
+  },
+  "Hover to inspect quota periods, request activity and statistics, with offline brand icons and explicit inactive periods.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "悬停查看配额周期、请求活动和统计数据，内置品牌图标，并明确标注未生效周期。"
+        }
+      }
+    }
+  },
+  "In the Dock, in the menu bar, or nowhere at all.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "可显示在程序坞、菜单栏，或完全隐藏。"
+        }
+      }
+    }
+  },
+  "Independent refresh settings": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "独立刷新设置"
+        }
+      }
+    }
+  },
+  "It joins your Mac's own notch": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "与 Mac 自带刘海融合"
+        }
+      }
+    }
+  },
+  "It only ever watched the files the CLI and the VS Code extension write, so work done in the desktop app never made it spin.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "此前只监测 CLI 和 VS Code 扩展写入的文件，桌面应用中的工作不会触发旋转。现在也能识别桌面应用。"
+        }
+      }
+    }
+  },
+  "It stopped being read but its last reading was kept, so the ring came back at the next launch.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "此前停止读取后仍保留旧读数，导致下次启动时用量环重新出现。"
+        }
+      }
+    }
+  },
+  "Its %@ limit is spent — resets %@": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "其 %@ 限额已耗尽，将于 %@ 重置"
+        }
+      }
+    }
+  },
+  "Its %@ limit is spent.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "其 %@ 限额已耗尽。"
+        }
+      }
+    }
+  },
+  "Keep a work login apart with CLAUDE_CONFIG_DIR? It now gets its own ring, its own limits, and its own row in Settings, beside your personal one.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "通过 CLAUDE_CONFIG_DIR 区分工作账户？现在它拥有独立用量环、限额和设置条目，与个人账户并列显示。"
+        }
+      }
+    }
+  },
+  "Keep multiple accounts, manual credentials, query scripts, language settings and Code Switch R integration. Existing configurations can add Copilot and Gemini API from Add provider.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "保留多账户、手动凭据、查询脚本、语言设置和 Code Switch R 联动。已有配置可通过“添加供应商”加入 Copilot 和 Gemini API。"
+        }
+      }
+    }
+  },
+  "Keychain error (%d).": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "钥匙串错误（%d）。"
+        }
+      }
+    }
+  },
+  "Linked entries hide when Code Switch R stops and return when it reconnects. Disable integration in Settings at any time.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Code Switch R 停止时隐藏联动条目，重新连接后恢复。可随时在设置中关闭联动。"
+        }
+      }
+    }
+  },
+  "Live tray providers": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "活跃托盘供应商"
+        }
+      }
+    }
+  },
+  "Long enough to notice, short enough to ignore.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "短暂展开，足以看到提醒。"
+        }
+      }
+    }
+  },
+  "Long enough to read the session's name and reach for it.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "留出阅读会话名称并点击的时间。"
+        }
+      }
+    }
+  },
+  "Long messages are no longer cut off": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "长消息不再被截断"
+        }
+      }
+    }
+  },
+  "Main display": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "主显示器"
+        }
+      }
+    }
+  },
+  "Manage providers and manual queries": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "管理供应商与手动查询"
+        }
+      }
+    }
+  },
+  "Manage providers and query quotas with your own credentials.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "使用自己的凭据管理供应商并查询配额。"
+        }
+      }
+    }
+  },
+  "Manual credentials and query scripts": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "手动凭据与查询脚本"
+        }
+      }
+    }
+  },
+  "Minutes under an hour; otherwise the reset date and time.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "不足一小时显示分钟数，否则显示重置日期和时间。"
+        }
+      }
+    }
+  },
+  "Monthly budget": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "每月预算"
+        }
+      }
+    }
+  },
+  "More displays, providers and alerts, with your custom queries preserved.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "新增显示器、供应商和提醒功能，保留你的自定义查询。"
+        }
+      }
+    }
+  },
+  "Move between displays and restore the same position after relaunch. Disconnecting a display temporarily moves the notch to the main display.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "支持跨显示器移动，重启后恢复原位置。显示器断开时，用量环暂时移到主显示器。"
+        }
+      }
+    }
+  },
+  "Moves to the display containing the window receiving keyboard input.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "跟随当前接收键盘输入的窗口所在显示器。"
+        }
+      }
+    }
+  },
+  "Multiple Claude Code accounts": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "多个 Claude Code 账户"
+        }
+      }
+    }
+  },
+  "Mute alerts": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "静音提醒"
+        }
+      }
+    }
+  },
+  "New Provider": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "新供应商"
+        }
+      }
+    }
+  },
+  "No Gemini CLI, OpenCode or Hermes sessions found": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "未找到 Gemini CLI、OpenCode 或 Hermes 会话"
+        }
+      }
+    }
+  },
+  "None": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "无"
+        }
+      }
+    }
+  },
+  "Not connected": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "未连接"
+        }
+      }
+    }
+  },
+  "Not selected": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "未选中"
+        }
+      }
+    }
+  },
+  "Notch": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "用量环"
+        }
+      }
+    }
+  },
+  "Nothing is connected, so the notch has no rings to draw.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "尚未连接任何供应商，因此没有可显示的用量环。"
+        }
+      }
+    }
+  },
+  "Nothing on screen. The readings stay in the menu bar menu when App icon is Menu bar. Otherwise, open Codenotch again from Applications to bring these settings back.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "屏幕上不显示用量环。应用图标设为菜单栏时，仍可从菜单查看读数；否则请从“应用程序”重新打开 Codenotch 返回设置。"
+        }
+      }
+    }
+  },
+  "Notifications": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "通知"
+        }
+      }
+    }
+  },
+  "Nudge it clear of another menu-bar app anchored to the same spot; remembered per edge.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "沿当前边缘微调用量环，避开同一位置的其他菜单栏应用；每个边缘分别记忆位置。"
+        }
+      }
+    }
+  },
+  "On the top edge it takes the hardware's shape, so the two read as one rather than as a bar parked underneath.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "位于顶部边缘时会采用硬件刘海的形状，使两者融为一体。"
+        }
+      }
+    }
+  },
+  "Once a token expired, every check went back to the keychain — a prompt a minute. It now reads the secret only when the owning app has changed it, and never retries a refusal on a timer.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "令牌过期后，此前每次检查都会访问钥匙串，可能每分钟弹出提示。现在仅在所属应用更新凭据后重新读取，拒绝授权后也不会定时重试。"
+        }
+      }
+    }
+  },
+  "One momentary failure — the Mac waking from sleep, most often — used to lock the ring until the app restarted. It now clears itself on the next check.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "此前一次短暂失败（通常发生在 Mac 唤醒时）就可能卡住用量环，必须重启应用。现在下一次检查即可自动恢复。"
+        }
+      }
+    }
+  },
+  "Open the notch for a moment": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "短暂展开用量环"
+        }
+      }
+    }
+  },
+  "OpenCode's Go plan is a new ring": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "新增 OpenCode Go 套餐用量环"
+        }
+      }
+    }
+  },
+  "Opening Settings could still read a switched-off provider's account, and a reply already in flight could restore a reading you had just asked it to forget.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "此前打开设置仍可能读取已关闭供应商的账户，进行中的请求也可能恢复刚刚清除的读数。"
+        }
+      }
+    }
+  },
+  "Pin the notch to one display, or show it on every one": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "固定到一台显示器，或在所有显示器上显示"
+        }
+      }
+    }
+  },
+  "Pinned to %@.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已固定到 %@。"
+        }
+      }
+    }
+  },
+  "Play %@": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "播放 %@"
+        }
+      }
+    }
+  },
+  "Play a sound": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "播放声音"
+        }
+      }
+    }
+  },
+  "Premium requests": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "高级请求"
+        }
+      }
+    }
+  },
+  "Put the notch anywhere": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "自由放置用量环"
+        }
+      }
+    }
+  },
+  "Put the notch where you need it, on any display.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "在任意显示器上，将用量环放到需要的位置。"
+        }
+      }
+    }
+  },
+  "Quotas, balances and daily usage": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "配额、余额与每日用量"
+        }
+      }
+    }
+  },
+  "Read Cursor from cursor-agent, and enterprise plans correctly": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "通过 cursor-agent 读取 Cursor，正确支持企业套餐"
+        }
+      }
+    }
+  },
+  "Reads GitHub's Copilot quota endpoint using the GitHub CLI session already on the Mac.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "使用这台 Mac 上已有的 GitHub CLI 登录状态读取 Copilot 配额接口。"
+        }
+      }
+    }
+  },
+  "Reads the Go plan's official usage endpoint with the key OpenCode itself stores on sign-in — no second sign-in.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "使用 OpenCode 登录时保存的密钥读取 Go 套餐官方用量接口，无需再次登录。"
+        }
+      }
+    }
+  },
+  "Refresh all": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "全部刷新"
+        }
+      }
+    }
+  },
+  "Refresh indicators recover correctly": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "刷新指示器正确恢复"
+        }
+      }
+    }
+  },
+  "Reset date": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "重置日期"
+        }
+      }
+    }
+  },
+  "Reset time": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "重置时间"
+        }
+      }
+    }
+  },
+  "Resets in %lld Day %lldh": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "%lld 天 %lld 小时后重置"
+        }
+      }
+    }
+  },
+  "Resets in %lld Days %lldh": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "%lld 天 %lld 小时后重置"
+        }
+      }
+    }
+  },
+  "Resets in %lldh %lldm": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "%lld 小时 %lld 分钟后重置"
+        }
+      }
+    }
+  },
+  "Right, left, top or bottom. It keeps clear of the Dock and the menu bar, and follows when the Dock moves.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "支持左、右、上、下四个边缘，自动避开程序坞和菜单栏，并随程序坞位置调整。"
+        }
+      }
+    }
+  },
+  "Run `%@` once — it signs in and is what these readings come from. Use /login there to change account.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "先运行一次 `%@` 完成登录，用量将从该工具读取。可在其中使用 /login 切换账户。"
+        }
+      }
+    }
+  },
+  "Run `cursor-agent login` once — the notch reads that session. The Cursor editor works the same way, if you have it.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "先运行一次 `cursor-agent login`，用量环将读取该会话。已安装 Cursor 编辑器时，也可使用其登录状态。"
+        }
+      }
+    }
+  },
+  "Say when a session ends": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "会话结束时提醒"
+        }
+      }
+    }
+  },
+  "Scoped": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "独立配置"
+        }
+      }
+    }
+  },
+  "Selected": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "已选中"
+        }
+      }
+    }
+  },
+  "Settings keeps your configured providers and accounts; drag a provider row by its handle to change the order the notch draws them in.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "设置保留已配置的供应商和账户；拖动供应商行的手柄，可调整用量环显示顺序。"
+        }
+      }
+    }
+  },
+  "Show Sidebar": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "显示侧边栏"
+        }
+      }
+    }
+  },
+  "Sign in with GitHub CLI to read your Copilot usage": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "使用 GitHub CLI 登录以读取 Copilot 用量"
+        }
+      }
+    }
+  },
+  "Sign in with GitHub CLI using `gh auth login`, then enable GitHub Copilot.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "使用 `gh auth login` 登录 GitHub CLI，然后启用 GitHub Copilot。"
+        }
+      }
+    }
+  },
+  "Signing out no longer leaves a spinner running. An older request cannot clear the indicator for a newer refresh.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "退出登录后不再持续显示加载动画，旧请求也不会清除新一轮刷新的指示状态。"
+        }
+      }
+    }
+  },
+  "Some limits are reached while the headline still shows room. The ring reads as spent and says when it lifts.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "部分限额可能在主要指标仍有余量时耗尽。用量环会显示已耗尽，并注明解除时间。"
+        }
+      }
+    }
+  },
+  "Stays until you have had a chance to look up.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "保持展开，留出抬头查看的时间。"
+        }
+      }
+    }
+  },
+  "Sub-1% usage no longer reads as 0%": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "低于 1% 的用量不再显示为 0%"
+        }
+      }
+    }
+  },
+  "SuperGrok's weekly Grok Build allowance, read from the same billing endpoint the CLI uses, with the session in ~/.grok/auth.json.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "使用 ~/.grok/auth.json 中的会话，从 CLI 使用的同一计费接口读取 SuperGrok 每周 Grok Build 额度。"
+        }
+      }
+    }
+  },
+  "Switch this on to give it a ring in the notch.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "启用后在用量环中显示此供应商。"
+        }
+      }
+    }
+  },
+  "Switching a provider off now really stops it": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "关闭供应商后真正停止读取"
+        }
+      }
+    }
+  },
+  "Switching a provider off now sticks": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "关闭供应商后保持关闭"
+        }
+      }
+    }
+  },
+  "Team on demand": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "团队按需用量"
+        }
+      }
+    }
+  },
+  "Terminal": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "终端"
+        }
+      }
+    }
+  },
+  "That display is disconnected. Codenotch follows the active window until it returns.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "该显示器已断开。恢复连接前，Codenotch 将跟随活跃窗口。"
+        }
+      }
+    }
+  },
+  "The Codex ring notices the desktop app": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Codex 用量环支持桌面应用活动"
+        }
+      }
+    }
+  },
+  "The device accent by default, or a fixed colour for the ring's positive state — the amber and red warning colours stay fixed regardless.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "默认使用设备强调色，也可为正常用量状态指定颜色；琥珀色和红色警告颜色保持不变。"
+        }
+      }
+    }
+  },
+  "The figure came from a file Codex writes during a turn, so it was as old as the last time you used it — three days stale in one case. Codenotch now asks Codex itself, and matches its own panel.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "此前读取 Codex 在对话中写入的文件，读数可能停留在上次使用时，甚至过期三天。现在直接查询 Codex，与其自身面板保持一致。"
+        }
+      }
+    }
+  },
+  "The first release.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "首次发布。"
+        }
+      }
+    }
+  },
+  "The in-app update history now includes the provider query features and these fixes.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "应用内更新历史现已包含供应商查询功能及相关修复。"
+        }
+      }
+    }
+  },
+  "The list was capped at four whatever you were running on. It is now solved for the display: ten on a large one, and \"and N more\" only when there is genuinely no room for the rest.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "此前无论屏幕大小都最多显示四个会话。现在按屏幕空间决定数量，大屏可显示十个，仅在确实放不下时显示“还有 N 个”。"
+        }
+      }
+    }
+  },
+  "The notch appears only on the display with the menu bar.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "用量环仅显示在带有菜单栏的显示器上。"
+        }
+      }
+    }
+  },
+  "The notch draws these in this order. Drag one by its handle to move it.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "用量环按此顺序显示。拖动手柄可调整顺序。"
+        }
+      }
+    }
+  },
+  "The notch opens itself for a few seconds and sounds a chime when an agent stops working or starts waiting on you; a click jumps to it.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "代理结束工作或等待你回应时，用量环会短暂展开并播放提示音；点击可跳转到对应应用。"
+        }
+      }
+    }
+  },
+  "The ones that need you come first": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "优先显示需要你回应的会话"
+        }
+      }
+    }
+  },
+  "The sound plays on the ordinary output, not the interface sound-effects channel — so it is still heard with “Play user interface sound effects” switched off in System Settings → Sound.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "声音通过普通音频输出播放，不使用界面音效通道。因此即使在“系统设置 → 声音”中关闭“播放用户界面音效”，仍可听到提醒。"
+        }
+      }
+    }
+  },
+  "There is nothing to sign in to: the count is added up from what Gemini CLI, OpenCode and Hermes recorded about their own calls. Your API key is never read.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "无需登录：用量根据 Gemini CLI、OpenCode 和 Hermes 记录的调用数据汇总，绝不会读取你的 API 密钥。"
+        }
+      }
+    }
+  },
+  "These have no ring to place. Switch one on and it joins the end of the list above.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "这些供应商尚未启用用量环。启用后会添加到上方列表末尾。"
+        }
+      }
+    }
+  },
+  "Threshold alerts": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "阈值提醒"
+        }
+      }
+    }
+  },
+  "Time remaining": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "剩余时间"
+        }
+      }
+    }
+  },
+  "Time until usage resets, such as 3 Days 3h or 3h 20m.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "显示距离用量重置的时间，例如 3 天 3 小时或 3 小时 20 分钟。"
+        }
+      }
+    }
+  },
+  "Tokens this month · billed per token, no limit": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "本月令牌 · 按令牌计费，无上限"
+        }
+      }
+    }
+  },
+  "Tokens this month · budget %@": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "本月令牌 · 预算 %@"
+        }
+      }
+    }
+  },
+  "Tokens today": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "今日令牌"
+        }
+      }
+    }
+  },
+  "Tooltips are no longer cut off": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "详情提示不再被截断"
+        }
+      }
+    }
+  },
+  "Two more accounts, four community fixes, and honest duplicates.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "新增两个账户支持、四项社区修复，并正确处理重复凭据。"
+        }
+      }
+    }
+  },
+  "Two more providers, and a live account plan that was silently dropped.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "新增两个供应商，并补上此前遗漏的账户套餐限额。"
+        }
+      }
+    }
+  },
+  "Unavailable display": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "显示器不可用"
+        }
+      }
+    }
+  },
+  "Unmute alerts": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "取消静音"
+        }
+      }
+    }
+  },
+  "Updated release history": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "更新版本历史"
+        }
+      }
+    }
+  },
+  "Usage reads both ways": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "同时显示已用与剩余"
+        }
+      }
+    }
+  },
+  "Use API keys, access tokens or cookies with built-in queries, presets or custom JavaScript.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "使用 API 密钥、访问令牌或 Cookie，搭配内置查询、预设或自定义 JavaScript。"
+        }
+      }
+    }
+  },
+  "Waiting on you": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "等待你回应"
+        }
+      }
+    }
+  },
+  "Waiting, then busy, then idle — so if anything is summarised away, it is what matters least.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "按等待回应、忙碌、空闲排序；空间不足时，优先保留更重要的会话。"
+        }
+      }
+    }
+  },
+  "Waking from sleep no longer erases a reading.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "从睡眠唤醒后不再清空读数。"
+        }
+      }
+    }
+  },
+  "When a session ends": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "会话结束时"
+        }
+      }
+    }
+  },
+  "Your custom providers stay with you": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "保留你的自定义供应商"
+        }
+      }
+    }
+  },
+  "Your display and position are remembered": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "记住显示器与位置"
+        }
+      }
+    }
+  },
+  "Your providers and accounts": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "你的供应商与账户"
+        }
+      }
+    }
+  },
+  "Z.ai's Coding Plan reads live now too, with a key borrowed from whichever tool already holds one.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "Z.ai Coding Plan 也支持实时读取，使用已有工具中保存的密钥。"
+        }
+      }
+    }
+  },
+  "macOS will ask once for permission to read Claude Code's, Antigravity's and cursor-agent's saved logins. Choose Always Allow — plain Allow makes it ask again every time.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "macOS 会请求读取 Claude Code、Antigravity 和 cursor-agent 保存的登录信息。请选择“始终允许”；仅选择“允许”会导致每次读取都再次询问。"
+        }
+      }
+    }
+  },
+  "make build and make test now sign themselves automatically when the maintainer's Developer ID isn't present — no Apple account needed to work on this.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "没有维护者的 Developer ID 时，make build 和 make test 会自动使用临时签名，开发无需 Apple 账户。"
+        }
+      }
+    }
+  },
+  "make build and make test sign themselves automatically when the maintainer's certificate isn't present, and CI now runs the suite on every push and pull request.": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "没有维护者证书时，make build 和 make test 会自动使用临时签名；CI 会在每次推送和拉取请求时运行测试。"
+        }
+      }
+    }
+  },
+  "metered": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "按量计费"
+        }
+      }
+    }
+  },
+  "tokens": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "令牌"
+        }
+      }
+    }
+  },
+  "⌥-drag the pill along its edge": {
+    "extractionState": "manual",
+    "localizations": {
+      "zh-Hans": {
+        "stringUnit": {
+          "state": "translated",
+          "value": "按住 ⌥ 沿边缘拖动用量环"
+        }
+      }
+    }
+  },
     "Period has not started": {
       "extractionState": "manual",
       "localizations": {

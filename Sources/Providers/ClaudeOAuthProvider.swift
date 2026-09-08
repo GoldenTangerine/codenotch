@@ -433,7 +433,7 @@ struct UsageResponse: Decodable {
         case "weekly_sonnet": return "Sonnet"
         // Only reached when the response names no model for the window, which
         // is the one case where there is nothing better to call it.
-        case "weekly_scoped", "scoped": return "Scoped"
+        case "weekly_scoped", "scoped": return String(localized: "Scoped")
         default:
             return kind
                 .replacingOccurrences(of: "weekly_", with: "")

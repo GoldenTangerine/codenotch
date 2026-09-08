@@ -1,3 +1,12 @@
+/**
+ @name: GeminiAPICredentials 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Providers/GeminiAPICredentials.swift
+ */
 import Foundation
 
 /// Who is paying for the Gemini calls this ring counts — as far as that can be
@@ -43,10 +52,10 @@ enum GeminiAPICredentials {
         guard !tools.isEmpty else { return nil }
         let isGoogleAccount = authType == "oauth-personal"
         return ProviderAccount(
-            label: isGoogleAccount ? "Google account" : "API key",
+            label: isGoogleAccount ? String(localized: "Google account") : String(localized: "API key"),
             // "metered" rather than a plan name: a bare key is not on a plan,
             // it is charged per token at a price that changes under the app.
-            plan: isGoogleAccount ? nil : "metered",
+            plan: isGoogleAccount ? nil : String(localized: "metered"),
             // The tools that wrote the numbers, which is the honest answer to
             // "whose reading is this" when no credential was borrowed at all.
             source: tools.joined(separator: ", "),

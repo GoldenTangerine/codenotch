@@ -24,7 +24,7 @@ final class ConfiguredUsageProvider: UsageProvider {
     }
 
     var signInRoute: SignInRoute {
-        entry.usesLocalAccount ? automatic?.signInRoute ?? .guidance("Configure a local provider.")
+        entry.usesLocalAccount ? automatic?.signInRoute ?? .guidance(String(localized: "Configure a local provider."))
             : .guidance(String(localized: "Update this provider's credentials in Settings."))
     }
 

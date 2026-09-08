@@ -1,3 +1,12 @@
+/**
+ @name: ResetCopy 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Model/ResetCopy.swift
+ */
 import Foundation
 
 enum ResetTimeFormat: String, CaseIterable, Identifiable {
@@ -8,17 +17,17 @@ enum ResetTimeFormat: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .automatic: return "Reset date"
-        case .remaining: return "Time remaining"
+        case .automatic: return String(localized: "Reset date")
+        case .remaining: return String(localized: "Time remaining")
         }
     }
 
     var explanation: String {
         switch self {
         case .automatic:
-            return "Minutes under an hour; otherwise the reset date and time."
+            return String(localized: "Minutes under an hour; otherwise the reset date and time.")
         case .remaining:
-            return "Time until usage resets, such as 3 Days 3h or 3h 20m."
+            return String(localized: "Time until usage resets, such as 3 Days 3h or 3h 20m.")
         }
     }
 }
@@ -36,12 +45,14 @@ enum ResetCopy {
             let hours = minutes / 60
             let days = hours / 24
             if days > 0 {
-                return "Resets in \(days) \(days == 1 ? "Day" : "Days") \(hours % 24)h"
+                return days == 1
+                    ? String(localized: "Resets in \(days) Day \(hours % 24)h")
+                    : String(localized: "Resets in \(days) Days \(hours % 24)h")
             }
             if hours > 0 {
-                return "Resets in \(hours)h \(minutes % 60)m"
+                return String(localized: "Resets in \(hours)h \(minutes % 60)m")
             }
-            return "Resets in \(minutes) min"
+            return String(localized: "Resets in \(minutes) min")
         }
 
         // Rounding, not truncation, so 50m40s reads as 51 rather than 50. A

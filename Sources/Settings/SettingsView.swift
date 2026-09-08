@@ -23,10 +23,10 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
 
     var title: String {
         switch self {
-        case .accounts:      return "Accounts"
-        case .appearance:    return "Appearance"
-        case .notifications: return "Notifications"
-        case .general:       return "General"
+        case .accounts:      return String(localized: "Accounts")
+        case .appearance:    return String(localized: "Appearance")
+        case .notifications: return String(localized: "Notifications")
+        case .general:       return String(localized: "General")
         }
     }
 
@@ -352,8 +352,7 @@ struct SettingsView: View {
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else {
-                    Text("The notch draws these in this order. Drag one by its "
-                         + "handle to move it.")
+                    Text("The notch draws these in this order. Drag one by its handle to move it.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -388,8 +387,7 @@ struct SettingsView: View {
                     }
                     // Says what switching one back on will do, which is the
                     // only question this group raises.
-                    Text("These have no ring to place. Switch one on and it "
-                         + "joins the end of the list above.")
+                    Text("These have no ring to place. Switch one on and it joins the end of the list above.")
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -532,25 +530,17 @@ struct SettingsView: View {
                 // is "that's done", the other is "you are the hold-up". Each
                 // has a preview beside it — picking an alert sound you cannot
                 // hear until the next time it fires is guesswork.
-                SoundRow(label: "Finished", name: $preferences.sessionEndSoundName,
+                SoundRow(label: String(localized: "Finished"), name: $preferences.sessionEndSoundName,
                          pickerEnabled: preferences.sessionEndSound)
-                SoundRow(label: "Waiting on you", name: $preferences.sessionBlockedSoundName,
+                SoundRow(label: String(localized: "Waiting on you"), name: $preferences.sessionBlockedSoundName,
                          pickerEnabled: preferences.sessionEndSound)
 
-                Text("Codenotch already knows the moment an agent stops working "
-                     + "or stops to ask you something. Clicking the notch while "
-                     + "it is open brings that session's app to the front — the "
-                     + "app, not the tab: only some terminals let anything "
-                     + "outside them choose a tab, so the tooltip names the "
-                     + "session instead.")
+                Text("Codenotch already knows the moment an agent stops working or stops to ask you something. Clicking the notch while it is open brings that session's app to the front — the app, not the tab: only some terminals let anything outside them choose a tab, so the tooltip names the session instead.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("The sound plays on the ordinary output, not the interface "
-                     + "sound-effects channel — so it is still heard with "
-                     + "\u{201C}Play user interface sound effects\u{201D} "
-                     + "switched off in System Settings → Sound.")
+                Text("The sound plays on the ordinary output, not the interface sound-effects channel — so it is still heard with “Play user interface sound effects” switched off in System Settings → Sound.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -561,10 +551,7 @@ struct SettingsView: View {
             // about notifications in general — but the mechanism it silences
             // belongs to this pane's subject.
             Section("Threshold alerts") {
-                Text("A system notification the moment a provider's headline limit "
-                     + "crosses 80%, and again at 100% — once per crossing, and "
-                     + "again only after the window rolls over. Mute one from the "
-                     + "bell beside its row in Accounts.")
+                Text("A system notification the moment a provider's headline limit crosses 80%, and again at 100% — once per crossing, and again only after the window rolls over. Mute one from the bell beside its row in Accounts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -682,12 +669,12 @@ struct SettingsView: View {
     private var displayExplanation: String {
         switch preferences.displayPreference {
         case .followActiveWindow:
-            return "Moves to the display containing the window receiving keyboard input."
+            return String(localized: "Moves to the display containing the window receiving keyboard input.")
         case .display(let id):
             if let display = displays.first(where: { $0.id == id }) {
-                return "Pinned to \(display.name)."
+                return String(localized: "Pinned to \(display.name).")
             }
-            return "That display is disconnected. Codenotch follows the active window until it returns."
+            return String(localized: "That display is disconnected. Codenotch follows the active window until it returns.")
         }
     }
 
@@ -931,7 +918,7 @@ private struct AccentColorSwatch: View {
         .buttonStyle(.plain)
         .help(choice.title)
         .accessibilityLabel(choice.title)
-        .accessibilityValue(isSelected ? "Selected" : "Not selected")
+        .accessibilityValue(isSelected ? String(localized: "Selected") : String(localized: "Not selected"))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
@@ -1051,8 +1038,8 @@ private struct AccountRow: View {
                     .padding(.vertical, 4)
                 }
                 .help(isOrderable
-                      ? "Drag to reorder. The notch draws the rings in this order."
-                      : "Switch this on to give it a ring in the notch.")
+                      ? String(localized: "Drag to reorder. The notch draws the rings in this order.")
+                      : String(localized: "Switch this on to give it a ring in the notch."))
                 // Two mechanisms, neither of which covers both halves.
                 // `pointerStyle` draws the hand on an ordinary hover but cannot
                 // re-evaluate under a pointer that has not moved, which is the
@@ -1085,8 +1072,8 @@ private struct AccountRow: View {
                     }
                     .buttonStyle(.borderless)
                     .help(isMuted
-                          ? "Alerts for \(provider.name) are muted. Click to unmute."
-                          : "Alert when \(provider.name) crosses 80% and 100% of a limit.")
+                          ? String(localized: "Alerts for \(provider.name) are muted. Click to unmute.")
+                          : String(localized: "Alert when \(provider.name) crosses 80% and 100% of a limit."))
                 }
 
                 // Prefers the app that owns the account, and falls back to the
@@ -1197,8 +1184,7 @@ private struct AccountRow: View {
                     Text("tokens")
                 }
                 .foregroundStyle(.secondary)
-                .help("Fills the ring against a ceiling you choose; Google publishes "
-                      + "none for an API key.")
+                .help("Fills the ring against a ceiling you choose; Google publishes none for an API key.")
             }
         }
     }

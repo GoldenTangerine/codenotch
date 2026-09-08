@@ -1,3 +1,12 @@
+/**
+ @name: 会话与用量展示
+ @Descripttion: 读取本地活动并提供本地化展示文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 23:00:00
+ @LastEditTime: 2026-09-08 23:00:00
+ @FilePath: Sources/Sessions/CursorActivityMonitor.swift
+ */
 import AppKit
 import Combine
 import Foundation
@@ -180,10 +189,10 @@ final class CursorActivityMonitor: ObservableObject, AgentActivityMonitor {
 
         return AgentSession(
             id: "cursor.\(id)",
-            name: (head["name"] as? String) ?? "Untitled chat",
+            name: (head["name"] as? String) ?? String(localized: "Untitled chat"),
             detail: (head["subtitle"] as? String) ?? "Cursor",
             state: state,
-            waitingFor: blocked ? "needs your input" : nil,
+            waitingFor: blocked ? String(localized: "needs your input") : nil,
             since: since
         )
     }

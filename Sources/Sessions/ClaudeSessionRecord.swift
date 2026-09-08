@@ -1,3 +1,12 @@
+/**
+ @name: ClaudeSessionRecord 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Sessions/ClaudeSessionRecord.swift
+ */
 import Foundation
 
 /// One entry in `~/.claude/sessions/<pid>.json`, as Claude Code writes it.
@@ -51,10 +60,10 @@ struct ClaudeSessionRecord {
 
     static func surface(_ entrypoint: String?) -> String {
         switch entrypoint {
-        case "claude-desktop", "claude-desktop-3p": return "Desktop"
+        case "claude-desktop", "claude-desktop-3p": return String(localized: "Desktop")
         case "claude-vscode":                       return "VS Code"
-        case "local-agent":                         return "Agent"
-        default:                                    return "Terminal"
+        case "local-agent":                         return String(localized: "Agent")
+        default:                                    return String(localized: "Terminal")
         }
     }
 

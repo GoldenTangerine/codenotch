@@ -35,7 +35,7 @@ struct ProviderIcon: Codable, Equatable {
 
 struct QueryEntry: Codable, Equatable, Identifiable {
     var id = UUID().uuidString
-    var name = "New Provider"
+    var name = String(localized: "New Provider")
     var icon = ProviderIcon()
     var enabled = true
     var mode: QueryMode = .manual
@@ -90,7 +90,7 @@ enum QueryError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalid(let message): return NSLocalizedString(message, comment: "Query validation error")
-        case .keychain(let status): return "Keychain error (\(status))."
+        case .keychain(let status): return String(localized: "Keychain error (\(status)).")
         case .script: return String(localized: "Script failed. Check request and extractor.")
         case .timeout: return String(localized: "Query timed out.")
         }

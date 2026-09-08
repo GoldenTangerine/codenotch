@@ -1,3 +1,12 @@
+/**
+ @name: 会话与用量展示
+ @Descripttion: 读取本地活动并提供本地化展示文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 23:00:00
+ @LastEditTime: 2026-09-08 23:00:00
+ @FilePath: Sources/Providers/AntigravityActivity.swift
+ */
 import Foundation
 
 /// How much Antigravity has actually been used, counted from its own
@@ -77,7 +86,9 @@ struct AntigravityActivity: Equatable {
     /// What the cell says. Deliberately a count with the limit's absence stated,
     /// rather than a number that looks like a percentage.
     var summary: String {
-        guard requestsToday > 0 else { return "no requests today" }
-        return "~\(requestsToday) request\(requestsToday == 1 ? "" : "s") today"
+        guard requestsToday > 0 else { return String(localized: "no requests today") }
+        return requestsToday == 1
+            ? String(localized: "~\(requestsToday) request today")
+            : String(localized: "~\(requestsToday) requests today")
     }
 }

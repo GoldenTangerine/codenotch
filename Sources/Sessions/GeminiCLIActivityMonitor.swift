@@ -1,3 +1,12 @@
+/**
+ @name: 会话与用量展示
+ @Descripttion: 读取本地活动并提供本地化展示文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 23:00:00
+ @LastEditTime: 2026-09-08 23:00:00
+ @FilePath: Sources/Sessions/GeminiCLIActivityMonitor.swift
+ */
 import Combine
 import Foundation
 
@@ -82,7 +91,7 @@ final class GeminiCLIActivityMonitor: AgentActivityMonitor {
         return [AgentSession(
             id: "gemini-api.\(newest.session.deletingPathExtension().lastPathComponent)",
             name: "Gemini CLI",
-            detail: "Working in \(projectName(of: newest.project))",
+            detail: String(localized: "Working in \(projectName(of: newest.project))"),
             state: .busy,
             waitingFor: nil,
             since: newest.modified

@@ -1,3 +1,11 @@
+// @name: 用量阈值通知
+// @Descripttion: 监测用量阈值并发送本地化通知。
+// @version: 1.0.0
+// @Author: sm
+// @Date: 2026-09-08 23:00:00
+// @LastEditTime: 2026-09-08 23:00:00
+// @FilePath: Sources/Model/ThresholdNotifier.swift
+
 import Foundation
 import UserNotifications
 
@@ -74,13 +82,16 @@ enum ThresholdAlerts {
 
             let content = UNMutableNotificationContent()
             content.title = alert.threshold >= 100
-                ? "\(alert.providerName) limit reached"
-                : "\(alert.providerName) is at \(alert.usedPercent)%"
+                ? String(localized: "\(alert.providerName) limit reached")
+                : String(localized: "\(alert.providerName) is at \(alert.usedPercent)%")
             if alert.threshold >= 100 {
-                content.body = "Its \(alert.windowLabel.lowercased()) limit is spent"
-                    + (alert.resetsAt.map { " — resets \($0.formatted(date: .omitted, time: .shortened))" } ?? ".")
+                if let reset = alert.resetsAt {
+                    content.body = String(localized: "Its \(alert.windowLabel.lowercased()) limit is spent — resets \(reset.formatted(date: .omitted, time: .shortened))")
+                } else {
+                    content.body = String(localized: "Its \(alert.windowLabel.lowercased()) limit is spent.")
+                }
             } else {
-                content.body = "\(alert.usedPercent)% of its \(alert.windowLabel.lowercased()) limit used."
+                content.body = String(localized: "\(alert.usedPercent)% of its \(alert.windowLabel.lowercased()) limit used.")
             }
             // One thread per provider, so two limits ending together read as
             // two notes, not one merged pile.

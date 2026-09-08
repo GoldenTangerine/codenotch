@@ -1,3 +1,12 @@
+/**
+ @name: NotchScreenScope 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Settings/NotchScreenScope.swift
+ */
 import Foundation
 
 /// Which displays get a notch when more than one is connected.
@@ -16,17 +25,17 @@ enum NotchScreenScope: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .mainDisplay: return "Main display"
-        case .allDisplays: return "All displays"
+        case .mainDisplay: return String(localized: "Main display")
+        case .allDisplays: return String(localized: "All displays")
         }
     }
 
     var explanation: String {
         switch self {
         case .mainDisplay:
-            return "The notch appears only on the display with the menu bar."
+            return String(localized: "The notch appears only on the display with the menu bar.")
         case .allDisplays:
-            return "Each display gets its own notch, and hovering one opens only that one."
+            return String(localized: "Each display gets its own notch, and hovering one opens only that one.")
         }
     }
 }

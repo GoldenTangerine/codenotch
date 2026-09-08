@@ -26,9 +26,9 @@ enum QueryTemplate: String, Codable, CaseIterable, Identifiable {
         case .siliconflow: return "SiliconFlow"
         case .openrouter: return "OpenRouter"
         case .novita: return "Novita AI"
-        case .glm: return "GLM Token Plan"
-        case .kimi: return "Kimi Token Plan"
-        case .minimax: return "MiniMax Token Plan"
+        case .glm: return String(localized: "GLM Token Plan")
+        case .kimi: return String(localized: "Kimi Token Plan")
+        case .minimax: return String(localized: "MiniMax Token Plan")
         }
     }
 

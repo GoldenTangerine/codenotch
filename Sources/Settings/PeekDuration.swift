@@ -1,3 +1,12 @@
+/**
+ @name: PeekDuration 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Settings/PeekDuration.swift
+ */
 import Foundation
 
 /// How long the notch stays open when it opens by itself.
@@ -24,20 +33,20 @@ enum PeekDuration: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .brief:    return "3 seconds"
-        case .standard: return "5 seconds"
-        case .long:     return "10 seconds"
+        case .brief:    return String(localized: "3 seconds")
+        case .standard: return String(localized: "5 seconds")
+        case .long:     return String(localized: "10 seconds")
         }
     }
 
     var explanation: String {
         switch self {
         case .brief:
-            return "Long enough to notice, short enough to ignore."
+            return String(localized: "Long enough to notice, short enough to ignore.")
         case .standard:
-            return "Long enough to read the session's name and reach for it."
+            return String(localized: "Long enough to read the session's name and reach for it.")
         case .long:
-            return "Stays until you have had a chance to look up."
+            return String(localized: "Stays until you have had a chance to look up.")
         }
     }
 }

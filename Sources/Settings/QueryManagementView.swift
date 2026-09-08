@@ -47,7 +47,7 @@ struct QueryManagementView: View {
                     } label: {
                         Image(systemName: preferences.isMutedAlerts(for: entry.id) ? "bell.slash" : "bell")
                     }
-                    .help(preferences.isMutedAlerts(for: entry.id) ? "Unmute alerts" : "Mute alerts")
+                    .help(preferences.isMutedAlerts(for: entry.id) ? String(localized: "Unmute alerts") : String(localized: "Mute alerts"))
                     Toggle("Enabled", isOn: Binding(get: { entry.enabled }, set: { catalog.setEnabled($0, id: entry.id) }))
                         .labelsHidden().toggleStyle(.switch).controlSize(.mini)
                     Button { store.refresh(providerID: entry.id) } label: {
