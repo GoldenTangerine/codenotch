@@ -1,3 +1,10 @@
+# @name: GitHub 发布流程
+# @Descripttion: 构建、验证并发布 macOS 安装包。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-08 13:45:00
+# @LastEditTime: 2026-09-08 13:45:00
+# @FilePath: .github/workflows/release.yml
 # Release pipeline: push a version tag (v1.5.1, bumping the patch digit each
 # time) and this builds and publishes the release.
 #
@@ -62,6 +69,18 @@ jobs:
           # decide what is newer, so it must only ever go up.
           echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare release notes
+        run: |
+          set -euo pipefail
+          awk -v version="${GITHUB_REF_NAME#v}" '
+            /^## / { active = ($2 == "[" version "]"); next }
+            active { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "Missing changelog entry for $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
       - name: Install xcodegen
         run: brew install xcodegen
 
@@ -110,12 +129,15 @@ jobs:
           touch build/.metadata_never_index
           # Ad-hoc: no Developer ID identity exists on this runner. The same
           # fallback `make build` uses on any machine without the certificate.
+          # Ad-hoc has no Team ID. Hardened Runtime's library validation would
+          # reject the embedded Sparkle binary signed by its upstream team.
           xcodebuild -project Codenotch.xcodeproj -scheme Codenotch \
             -destination 'platform=macOS,arch=arm64' \
             -configuration Release -archivePath build/release/Codenotch.xcarchive \
             MARKETING_VERSION="$MARKETING_VERSION" \
             CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
             CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="" \
+            ENABLE_HARDENED_RUNTIME=NO \
             archive
           # No -exportArchive: that re-signs for a distribution identity,
           # which is exactly what this track does not have. The .app sits in
@@ -123,6 +145,20 @@ jobs:
           mkdir -p build/release/stage
           cp -R build/release/Codenotch.xcarchive/Products/Applications/Codenotch.app \
             build/release/stage/
+          APP=build/release/stage/Codenotch.app
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # Signature validity alone does not detect the launch-time Team ID
+          # mismatch. Check the actual executable before publishing the dmg.
+          SIGNATURE=$(codesign --display --verbose=4 "$APP" 2>&1)
+          printf '%s\n' "$SIGNATURE"
+          if ! printf '%s\n' "$SIGNATURE" | grep -q '^Signature=adhoc$'; then
+            echo "Expected an ad-hoc signature for the unsigned release" >&2
+            exit 1
+          fi
+          if printf '%s\n' "$SIGNATURE" | grep -Eq 'flags=.*(runtime|library-validation)'; then
+            echo "Unsigned release must not enforce Team ID library validation" >&2
+            exit 1
+          fi
           ln -s /Applications build/release/stage/Applications
           hdiutil create -volname Codenotch -srcfolder build/release/stage \
             -ov -format UDZO "$DMG"
@@ -165,7 +201,8 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
           gh release create "$GITHUB_REF_NAME" "$DMG"
-          --title "Codenotch $GITHUB_REF_NAME" --generate-notes
+          --title "Codenotch $GITHUB_REF_NAME"
+          --notes-file "$RUNNER_TEMP/release-notes.md"
 
       - name: Create the GitHub Release (unsigned)
         if: env.SIGNED != 'true'
@@ -174,7 +211,7 @@ jobs:
         run: >
           gh release create "$GITHUB_REF_NAME" "$DMG"
           --title "Codenotch $GITHUB_REF_NAME"
-          --notes "Unsigned build — first launch: right-click → Open, or System Settings → Privacy & Security → Open Anyway. / 未公证构建：首次打开请右键 → 打开，或在 系统设置 → 隐私与安全性 中放行。"
+          --notes-file "$RUNNER_TEMP/release-notes.md"
 
       - name: Publish the appcast and download to Pages
         if: env.SIGNED == 'true'

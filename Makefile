@@ -1,3 +1,10 @@
+# @name: 构建与发布命令
+# @Descripttion: 提供本地构建、测试和 macOS 发布命令。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-08 13:45:00
+# @LastEditTime: 2026-09-08 13:45:00
+# @FilePath: Makefile
 # Only if the caller hasn't already chosen a toolchain (`$DEVELOPER_DIR`, or
 # `sudo xcode-select -s`) and the standard path actually exists — exporting a
 # path that isn't there breaks every target with `xcrun: missing DEVELOPER_DIR`
@@ -23,7 +30,8 @@ DEST    := platform=macOS,arch=arm64
 # The count is 0 when the certificate is absent — grep -c prints a number
 # either way, so comparing against empty never fires.
 ifeq (0,$(shell security find-identity -v -p codesigning 2>/dev/null | grep -c "Developer ID Application"))
-DEV_SIGN := CODE_SIGN_IDENTITY="-" DEVELOPMENT_TEAM="" CODE_SIGN_STYLE=Automatic
+# Ad-hoc builds have no Team ID to match Sparkle's upstream signature.
+DEV_SIGN := CODE_SIGN_IDENTITY="-" DEVELOPMENT_TEAM="" CODE_SIGN_STYLE=Automatic ENABLE_HARDENED_RUNTIME=NO
 endif
 
 # Extra build-setting overrides for the release tooling: the tag-triggered
