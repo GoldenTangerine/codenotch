@@ -24,6 +24,7 @@ final class UsageStore: ObservableObject {
 
     private var providers: [UsageProvider]
     private var providerTasks: [String: Task<Void, Never>] = [:]
+    private var providerRequestIDs: [String: UUID] = [:]
     private var attempts: [String: Date] = [:]
     private var backoffs: [String: Date] = [:]
     private var isReconfiguring = false
@@ -165,6 +166,7 @@ final class UsageStore: ObservableObject {
         refreshTask?.cancel()
         providerTasks.values.forEach { $0.cancel() }
         providerTasks.removeAll()
+        providerRequestIDs.removeAll()
         refreshing = []
         isRefreshing = false
         // Block-based observers are not removed by `removeObserver(self)`.
@@ -245,12 +247,17 @@ final class UsageStore: ObservableObject {
         refreshing.insert(providerID)
         attempts[providerID] = Date()
         let version = connectionVersions[providerID]
+        let requestID = UUID()
+        providerRequestIDs[providerID] = requestID
         providerTasks[providerID] = Task { [weak self] in
             guard let self else { return }
             defer {
-                if self.connectionVersions[providerID] == version {
+                // A discarded response still finishes its request, but must not
+                // clear the spinner belonging to a replacement request.
+                if self.providerRequestIDs[providerID] == requestID {
                     self.refreshing.remove(providerID)
                     self.providerTasks[providerID] = nil
+                    self.providerRequestIDs[providerID] = nil
                 }
             }
             guard let fresh = await self.snapshot(from: provider, version: version) else { return }
@@ -510,6 +517,7 @@ final class UsageStore: ObservableObject {
             if queryChanged || before?.enabled != after?.enabled || invalidated.contains(provider.id) {
                 connectionVersions[provider.id] = UUID()
                 providerTasks.removeValue(forKey: provider.id)?.cancel()
+                providerRequestIDs.removeValue(forKey: provider.id)
                 refreshing.remove(provider.id)
                 attempts[provider.id] = nil
             }
@@ -517,6 +525,7 @@ final class UsageStore: ObservableObject {
         for id in removed.union(invalidated).union(nextDisconnected) {
             connectionVersions[id] = UUID()
             providerTasks.removeValue(forKey: id)?.cancel()
+            providerRequestIDs.removeValue(forKey: id)
             refreshing.remove(id)
             refusedAccess.remove(id)
             lastGood[id] = nil

@@ -40,6 +40,42 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.5.7",
+            headline: "Custom provider queries with reliable refresh status.",
+            changes: [
+                ReleaseNote.Change(
+                    title: "Manage providers and manual queries",
+                    detail: "Add accounts with independent credentials, icons, query scripts and refresh settings."
+                ),
+                ReleaseNote.Change(
+                    title: "Refresh indicators recover correctly",
+                    detail: "Signing out no longer leaves a spinner running. An older request cannot clear the indicator for a newer refresh."
+                ),
+                ReleaseNote.Change(
+                    title: "Updated release history",
+                    detail: "The in-app update history now includes the provider query features and these fixes."
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.5.6",
+            headline: "Manage providers and query quotas with your own credentials.",
+            changes: [
+                ReleaseNote.Change(
+                    title: "Your providers and accounts",
+                    detail: "Add, reorder and customize providers, with separate credentials and icons for each account."
+                ),
+                ReleaseNote.Change(
+                    title: "Manual credentials and query scripts",
+                    detail: "Use API keys, access tokens or cookies with built-in queries, presets or custom JavaScript."
+                ),
+                ReleaseNote.Change(
+                    title: "Independent refresh settings",
+                    detail: "Choose a primary metric, refresh intervals and timeout for each query. Failed refreshes keep the last successful reading."
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.5.5",
             headline: "Put the notch where you need it, on any display.",
             changes: [

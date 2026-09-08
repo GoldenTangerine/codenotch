@@ -233,6 +233,20 @@ final class QueryConfigurationTests: XCTestCase {
         store.stop()
     }
 
+    func testStoppedRequestCannotClearReplacementSpinner() async throws {
+        let probe = QueryProbe(id: "claude", delay: .milliseconds(500))
+        let store = UsageStore(providers: [probe], archive: UsageArchive(defaults: defaults()))
+        defer { store.stop() }
+        store.refresh(providerID: probe.id)
+        try await Task.sleep(for: .milliseconds(30))
+        store.stop()
+        store.refresh(providerID: probe.id)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(store.refreshing.contains(probe.id))
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertTrue(store.refreshing.isEmpty)
+    }
+
     func testPresentationEditKeepsInFlightRequestAndUsesLatestMetadata() async throws {
         let probe = QueryProbe(id: "claude", delay: .milliseconds(150))
         var entry = QueryEntry()
