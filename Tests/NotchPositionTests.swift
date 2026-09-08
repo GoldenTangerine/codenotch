@@ -179,6 +179,36 @@ final class NotchPositionEditingTests: XCTestCase {
         XCTAssertEqual(controller.savedPosition?.displayID, "detached-display")
     }
 
+    func testFleetKeepsSavedPositionAndActivityMappingAcrossScopes() throws {
+        let fleet = NotchFleet(scope: .mainDisplay, edge: .right)
+        let position = NotchPosition(edge: .bottom, fraction: 0.25, displayID: "detached-display")
+        fleet.restore(position: position)
+        fleet.setActivitySourceIDs(["work": "claude"])
+        fleet.show()
+        defer { fleet.stop() }
+        for scope in [NotchScreenScope.mainDisplay, .allDisplays, .mainDisplay] {
+            fleet.apply(scope: scope)
+            for controller in fleet.controllersForTesting {
+                XCTAssertEqual(controller.savedPosition, position)
+                XCTAssertEqual(controller.model.activitySourceIDs, ["work": "claude"])
+                XCTAssertEqual(controller.model.edge, .bottom)
+            }
+        }
+    }
+
+    func testChangingFleetDisplayPreservesAlongEdgePosition() throws {
+        let fleet = NotchFleet(scope: .mainDisplay, edge: .right)
+        fleet.restore(position: NotchPosition(edge: .bottom, fraction: 0.25, displayID: "old-display"))
+        var committed: NotchPosition?
+        fleet.onPositionCommitted = { committed = $0 }
+        fleet.apply(displayPreference: .display("new-display"))
+        XCTAssertEqual(committed?.fraction, 0.25)
+        XCTAssertEqual(committed?.displayID, "new-display")
+        fleet.apply(displayPreference: .followActiveWindow)
+        XCTAssertEqual(committed?.fraction, 0.25)
+        XCTAssertNil(committed?.displayID)
+    }
+
     func testTooltipMovesInsideBoundsAndTailTracksItsCell() {
         let model = NotchViewModel()
         model.positionedLeading = 0

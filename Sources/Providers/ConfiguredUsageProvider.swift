@@ -34,10 +34,10 @@ final class ConfiguredUsageProvider: UsageProvider {
     func forgetCachedCredential() { if entry.usesLocalAccount { automatic?.forgetCachedCredential() } }
 
     func decorate(_ snapshot: ProviderSnapshot) -> ProviderSnapshot {
-        let nativeHeadline = ["claude": "session", "cursor": "included", "glm": "session",
+        let nativeHeadline = ["claude": "session", "cursor": CursorUsage.headlineID(in: snapshot.windows), "glm": "session",
                               "grok": "credits", "opencode": "rolling"][ManualNativeQuery.kind(entry.nativeID)]
-        let defaultHeadline = entry.usesLocalAccount || entry.template == .native
-            ? nativeHeadline ?? snapshot.windows.first?.id : snapshot.windows.first?.id
+        let defaultHeadline = entry.usesLocalAccount ? snapshot.headlineID ?? nativeHeadline ?? snapshot.windows.first?.id
+            : entry.template == .native ? nativeHeadline ?? snapshot.windows.first?.id : snapshot.windows.first?.id
         return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph, fidelity: snapshot.fidelity,
             status: snapshot.status, windows: snapshot.windows,
             headlineID: entry.headlineID ?? defaultHeadline,

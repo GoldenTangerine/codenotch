@@ -34,7 +34,10 @@ enum NotchVisibility: String, CaseIterable, Identifiable {
             // Said here because a hidden notch is also a hidden way back in.
             // One long literal: wrapping with + would take the non-localising
             // overload and never reach the catalog.
-            return String(localized: "Nothing on screen. Open Codenotch again from Applications to bring these settings back.")
+            // Names the menu bar route: with the notch off screen the readings
+            // live in the menu bar menu instead, so Hide plus App icon "Menu
+            // bar" is a working setup rather than a one-way door.
+            return String(localized: "Nothing on screen. The readings stay in the menu bar menu when App icon is Menu bar. Otherwise, open Codenotch again from Applications to bring these settings back.")
         }
     }
 }

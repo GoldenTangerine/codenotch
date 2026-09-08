@@ -59,6 +59,20 @@ final class QueryConfigurationTests: XCTestCase {
         XCTAssertEqual(try secrets.load(second.credentialReference), b)
     }
 
+    func testDragReorderPersistsWithoutReplacingOtherEntries() {
+        let defaults = defaults()
+        let providers = [QueryProbe(id: "a"), QueryProbe(id: "b"), QueryProbe(id: "c")]
+        let catalog = QueryCatalog(providers: providers, disconnected: ["b"],
+            defaults: defaults, secrets: MemoryQuerySecrets())
+        XCTAssertTrue(catalog.move("a", onto: "c"))
+        XCTAssertEqual(catalog.entries.map(\.id), ["b", "c", "a"])
+        XCTAssertFalse(catalog.entries[0].enabled)
+        XCTAssertFalse(catalog.move("external", onto: "a"))
+        let reloaded = QueryCatalog(providers: providers, disconnected: [],
+            defaults: defaults, secrets: MemoryQuerySecrets())
+        XCTAssertEqual(reloaded.entries, catalog.entries)
+    }
+
     func testMissingManualCredentialsNeverReadAutomaticProvider() async {
         let native = QueryProbe(id: "claude")
         let provider = ConfiguredUsageProvider(entry: QueryEntry(), automatic: native, secrets: MemoryQuerySecrets())
@@ -174,6 +188,37 @@ final class QueryConfigurationTests: XCTestCase {
             fidelity: .official, status: .ok, windows: [LimitWindow(id: "daily", label: "Daily", usedFraction: 0.5)]))
         XCTAssertNil(snapshot.headline)
         XCTAssertEqual(snapshot.headlineText, "—")
+    }
+
+    func testAutomaticQueriesKeepTheUpstreamHeadlineAndExplicitOverrides() {
+        var entry = QueryEntry()
+        entry.mode = .automatic
+        entry.nativeID = "cursor"
+        let reading = ProviderSnapshot(id: "cursor", displayName: "Cursor", glyph: .third,
+            fidelity: .official, status: .ok, windows: [
+                LimitWindow(id: "api", label: "API", usedFraction: 0.9),
+                LimitWindow(id: "auto", label: "Auto", usedFraction: 0.2)
+            ], headlineID: "auto")
+        let automatic = ConfiguredUsageProvider(entry: entry, automatic: nil, secrets: MemoryQuerySecrets())
+        XCTAssertEqual(automatic.decorate(reading).headlineText, "20%")
+        entry.headlineID = "api"
+        let overridden = ConfiguredUsageProvider(entry: entry, automatic: nil, secrets: MemoryQuerySecrets())
+        XCTAssertEqual(overridden.decorate(reading).headlineText, "90%")
+    }
+
+    func testManualCursorQueriesUseAutoOrEnterpriseWindow() throws {
+        var entry = QueryEntry()
+        entry.nativeID = "cursor"
+        let provider = ConfiguredUsageProvider(entry: entry, automatic: nil, secrets: MemoryQuerySecrets())
+        for (json, expected) in [
+            (#"{"individualUsage":{"plan":{"autoPercentUsed":12,"apiPercentUsed":80}}}"#, "auto"),
+            (#"{"individualUsage":{"overall":{"enabled":true,"used":20,"limit":100}}}"#, "included")
+        ] {
+            let windows = try CursorUsage.windows(fromJSON: json)
+            let reading = ProviderSnapshot(id: "cursor", displayName: "Cursor", glyph: .third,
+                fidelity: .official, status: .ok, windows: windows)
+            XCTAssertEqual(provider.decorate(reading).headline?.id, expected)
+        }
     }
 
     func testArchiveReadsOldWindowsAndNewDecimalQuantities() throws {

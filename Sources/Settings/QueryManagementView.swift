@@ -14,9 +14,11 @@ import UniformTypeIdentifiers
 struct QueryManagementView: View {
     @ObservedObject var catalog: QueryCatalog
     @ObservedObject var store: UsageStore
+    @ObservedObject var preferences: Preferences
     @State private var editing: QueryEntry?
     @State private var deleting: QueryEntry?
     @State private var problem: String?
+    @State private var drag = DragState()
 
     var body: some View {
         Section {
@@ -25,12 +27,27 @@ struct QueryManagementView: View {
             }
             ForEach(catalog.entries) { entry in
                 HStack(spacing: 10) {
+                    Image(systemName: "line.3.horizontal")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16, height: 28)
+                        .contentShape(Rectangle())
+                        .onDrag {
+                            drag.id = entry.id
+                            return NSItemProvider(object: entry.id as NSString)
+                        }
+                        .help("Drag to reorder")
                     QueryIconView(icon: entry.icon, fallback: .third, size: 24)
                     VStack(alignment: .leading, spacing: 3) {
                         Text(entry.name).lineLimit(1).help(entry.name)
                         Text(detail(entry)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
                     Spacer(minLength: 0)
+                    Button {
+                        preferences.setAlertsMuted(!preferences.isMutedAlerts(for: entry.id), for: entry.id)
+                    } label: {
+                        Image(systemName: preferences.isMutedAlerts(for: entry.id) ? "bell.slash" : "bell")
+                    }
+                    .help(preferences.isMutedAlerts(for: entry.id) ? "Unmute alerts" : "Mute alerts")
                     Toggle("Enabled", isOn: Binding(get: { entry.enabled }, set: { catalog.setEnabled($0, id: entry.id) }))
                         .labelsHidden().toggleStyle(.switch).controlSize(.mini)
                     Button { store.refresh(providerID: entry.id) } label: {
@@ -54,8 +71,21 @@ struct QueryManagementView: View {
                 }
                 .buttonStyle(.borderless)
                 .padding(.vertical, 3)
+                .contentShape(Rectangle())
+                .dropDestination(for: String.self) { ids, _ in
+                    defer { drag.id = nil }
+                    guard let id = ids.first else { return false }
+                    return catalog.move(id, onto: entry.id)
+                } isTargeted: { entered in
+                    guard entered, let id = drag.id, id != entry.id else { return }
+                    withAnimation(.snappy(duration: 0.22)) { _ = catalog.move(id, onto: entry.id) }
+                }
             }
             Button("Add provider", systemImage: "plus") { editing = QueryEntry() }
+            if catalog.entries.contains(where: { $0.usesLocalAccount && $0.nativeID == "gemini-api" }) {
+                TextField("Gemini monthly token budget", value: $preferences.geminiAPIMonthlyTokenBudget,
+                          format: .number)
+            }
         } header: { Text("Providers") }
         .sheet(item: $editing) { entry in
             QueryEntryEditor(catalog: catalog, initial: entry)

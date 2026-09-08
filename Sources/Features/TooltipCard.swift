@@ -10,33 +10,56 @@
 import SwiftUI
 
 /// The speech-bubble tail, its point aimed at the hovered cell.
+///
+/// Its shoulders leave the card tangent to the card's edge. That continuous
+/// tangent is what makes the two pieces read as one moulded silhouette rather
+/// than a triangle pasted onto a rounded rectangle.
 private struct TooltipTail: Shape {
     /// Which way the card sits relative to the notch — the tip points back the
     /// other way, at the cell.
     let direction: NotchEdge.TooltipDirection
 
     func path(in rect: CGRect) -> Path {
-        // The tip, and the two corners of the base opposite it.
-        let (tip, a, b): (CGPoint, CGPoint, CGPoint)
+        // The tip and the two ends of the base opposite it. Each curve starts
+        // or finishes parallel to the card edge, rounding both joins while the
+        // point stays crisp and continues to land on the hovered ring.
+        let (tip, a, b, aShoulder, aTip, bTip, bShoulder):
+            (CGPoint, CGPoint, CGPoint, CGPoint, CGPoint, CGPoint, CGPoint)
         switch direction {
         case .leading:   // card on the left, tip to the right
             tip = CGPoint(x: rect.maxX, y: rect.midY)
             (a, b) = (CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.minX, y: rect.maxY))
+            aShoulder = CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.25)
+            aTip = CGPoint(x: rect.maxX - rect.width * 0.42, y: rect.midY - rect.height * 0.12)
+            bTip = CGPoint(x: rect.maxX - rect.width * 0.42, y: rect.midY + rect.height * 0.12)
+            bShoulder = CGPoint(x: rect.minX, y: rect.maxY - rect.height * 0.25)
         case .trailing:  // card on the right, tip to the left
             tip = CGPoint(x: rect.minX, y: rect.midY)
             (a, b) = (CGPoint(x: rect.maxX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.maxY))
+            aShoulder = CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.25)
+            aTip = CGPoint(x: rect.minX + rect.width * 0.42, y: rect.midY - rect.height * 0.12)
+            bTip = CGPoint(x: rect.minX + rect.width * 0.42, y: rect.midY + rect.height * 0.12)
+            bShoulder = CGPoint(x: rect.maxX, y: rect.maxY - rect.height * 0.25)
         case .down:      // card below, tip upward
             tip = CGPoint(x: rect.midX, y: rect.minY)
             (a, b) = (CGPoint(x: rect.minX, y: rect.maxY), CGPoint(x: rect.maxX, y: rect.maxY))
+            aShoulder = CGPoint(x: rect.minX + rect.width * 0.25, y: rect.maxY)
+            aTip = CGPoint(x: rect.midX - rect.width * 0.12, y: rect.minY + rect.height * 0.42)
+            bTip = CGPoint(x: rect.midX + rect.width * 0.12, y: rect.minY + rect.height * 0.42)
+            bShoulder = CGPoint(x: rect.maxX - rect.width * 0.25, y: rect.maxY)
         case .up:        // card above, tip downward
             tip = CGPoint(x: rect.midX, y: rect.maxY)
             (a, b) = (CGPoint(x: rect.minX, y: rect.minY), CGPoint(x: rect.maxX, y: rect.minY))
+            aShoulder = CGPoint(x: rect.minX + rect.width * 0.25, y: rect.minY)
+            aTip = CGPoint(x: rect.midX - rect.width * 0.12, y: rect.maxY - rect.height * 0.42)
+            bTip = CGPoint(x: rect.midX + rect.width * 0.12, y: rect.maxY - rect.height * 0.42)
+            bShoulder = CGPoint(x: rect.maxX - rect.width * 0.25, y: rect.minY)
         }
 
         var path = Path()
         path.move(to: a)
-        path.addLine(to: tip)
-        path.addLine(to: b)
+        path.addCurve(to: tip, control1: aShoulder, control2: aTip)
+        path.addCurve(to: b, control1: bTip, control2: bShoulder)
         path.closeSubpath()
         return path
     }
@@ -245,6 +268,8 @@ private struct LimitWindowRow: View {
     let window: LimitWindow
     let fidelity: Fidelity
     let now: Date
+    let resetTimeFormat: ResetTimeFormat
+    @Environment(\.codenotchAccentColor) private var accentColor
 
     private var band: UsageBand { UsageBand.band(for: window.usedFraction ?? 0) }
     private var trackWidth: CGFloat { NotchLayout.cardWidth - 2 * NotchLayout.cardPadding }
@@ -255,7 +280,7 @@ private struct LimitWindowRow: View {
 
     /// Blank rather than invented: some providers never say when the window rolls.
     private var resetText: String {
-        window.resetsAt.map { ResetCopy.text(for: $0, now: now) } ?? ""
+        window.resetsAt.map { ResetCopy.text(for: $0, now: now, format: resetTimeFormat) } ?? ""
     }
 
     var body: some View {
@@ -267,7 +292,7 @@ private struct LimitWindowRow: View {
             if window.usedFraction != nil {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Palette.barTrack)
-                    Capsule().fill(band.color).frame(width: fillWidth)
+                    Capsule().fill(band.color(accent: accentColor)).frame(width: fillWidth)
                 }
                 .frame(width: trackWidth, height: NotchLayout.barHeight)
                 .padding(.top, NotchLayout.labelToBar)
@@ -289,6 +314,7 @@ private struct CodeSwitchTooltip: View {
     let snapshot: ProviderSnapshot
     let details: CodeSwitchDetails
     let now: Date
+    var resetTimeFormat: ResetTimeFormat = .automatic
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -314,7 +340,7 @@ private struct CodeSwitchTooltip: View {
                                 .foregroundStyle(Palette.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         } else if let window = quota.window {
-                            LimitWindowRow(window: window, fidelity: .derived, now: now)
+                            LimitWindowRow(window: window, fidelity: .derived, now: now, resetTimeFormat: resetTimeFormat)
                         } else {
                             Text("\(quota.title): \(String(localized: "Quota unavailable"))")
                                 .foregroundStyle(Palette.critical)
@@ -353,6 +379,7 @@ private struct CodeSwitchTooltip: View {
 private struct ProviderTooltip: View {
     let snapshot: ProviderSnapshot
     let now: Date
+    let resetTimeFormat: ResetTimeFormat
 
     /// Only worth saying when the numbers are not current. A remembered reading
     /// has to be dated, or it quietly passes itself off as live.
@@ -395,7 +422,7 @@ private struct ProviderTooltip: View {
 
     private var windowRows: some View {
         ForEach(Array(snapshot.windows.enumerated()), id: \.element.id) { index, window in
-            LimitWindowRow(window: window, fidelity: snapshot.fidelity, now: now)
+            LimitWindowRow(window: window, fidelity: snapshot.fidelity, now: now, resetTimeFormat: resetTimeFormat)
                 .padding(.top, index == 0 ? NotchLayout.headerToBlock : NotchLayout.blockSpacing)
         }
     }
@@ -427,10 +454,11 @@ private struct BlockedRow: View {
 private struct SessionRow: View {
     let session: AgentSession
     let now: Date
+    @Environment(\.codenotchAccentColor) private var accentColor
 
     private var stateColor: Color {
         switch session.state {
-        case .busy:    return Palette.ample
+        case .busy:    return accentColor
         case .waiting: return Palette.watch
         case .idle:    return Palette.textSecondary
         }
@@ -526,6 +554,7 @@ struct TooltipCard: View {
     /// rather than fixed, so a big screen hides nothing.
     var sessionCap: Int = NotchLayout.defaultSessionCap
     var tailOffset: CGFloat = 0
+    var resetTimeFormat: ResetTimeFormat = .automatic
 
     /// The same figure the hover region uses, so what is drawn and what is
     /// reachable can never drift apart.
@@ -549,9 +578,9 @@ struct TooltipCard: View {
             ZStack(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 0) {
                     if let details = snapshot.linked {
-                        CodeSwitchTooltip(snapshot: snapshot, details: details, now: now)
+                        CodeSwitchTooltip(snapshot: snapshot, details: details, now: now, resetTimeFormat: resetTimeFormat)
                     } else {
-                        ProviderTooltip(snapshot: snapshot, now: now)
+                        ProviderTooltip(snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat)
                         if let activity {
                             SessionList(summary: activity, now: now, cap: sessionCap)
                         }

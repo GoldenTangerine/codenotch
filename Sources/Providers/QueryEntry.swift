@@ -221,6 +221,16 @@ final class QueryCatalog: ObservableObject {
         persist([])
     }
 
+    @discardableResult
+    func move(_ id: String, onto targetID: String) -> Bool {
+        guard let from = entries.firstIndex(where: { $0.id == id }),
+              let to = entries.firstIndex(where: { $0.id == targetID }) else { return false }
+        guard from != to else { return true }
+        entries.insert(entries.remove(at: from), at: to)
+        persist([])
+        return true
+    }
+
     func delete(_ id: String) throws {
         guard let entry = entries.first(where: { $0.id == id }) else { return }
         try secrets.remove(entry.credentialReference)
