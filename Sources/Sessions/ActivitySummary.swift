@@ -1,3 +1,12 @@
+/**
+ @name: 活动摘要
+ @Descripttion: 归并本地会话或联动供应商的调用状态。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 17:00:00
+ @LastEditTime: 2026-09-08 17:00:00
+ @FilePath: Sources/Sessions/ActivitySummary.swift
+ */
 import SwiftUI
 
 /// What the activity cell shows: the state of every live session, reduced to
@@ -11,6 +20,11 @@ struct ActivitySummary: Equatable {
 
     let state: State
     let sessions: [AgentSession]
+
+    init(state: State) {
+        self.state = state
+        self.sessions = []
+    }
 
     /// Nil when nothing is running — the cell disappears rather than sitting
     /// there saying nothing.

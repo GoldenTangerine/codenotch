@@ -13,6 +13,13 @@ import Combine
 @MainActor
 final class NotchViewModel: ObservableObject {
     @Published var snapshots: [ProviderSnapshot] = []
+
+    func replaceSnapshots(_ next: [ProviderSnapshot]) {
+        let hoveredID = hoveredSnapshot?.id
+        snapshots = next
+        hoveredIndex = hoveredID.flatMap { id in next.firstIndex { $0.id == id } }
+        scrollStart = visibleStart
+    }
     /// Live agent sessions, keyed by the provider they belong to. They surface
     /// inside that provider's own ring rather than as a cell of their own — one
     /// ring per provider, so nothing in the notch looks like a ring without
@@ -286,6 +293,10 @@ final class NotchViewModel: ObservableObject {
     /// A provider with no activity source gets none, rather than borrowing
     /// somebody else's.
     func activity(for providerID: String) -> ActivitySummary? {
+        if let linked = snapshots.first(where: { $0.id == providerID })?.linked {
+            return linked.provider.status == "active" && linked.provider.activeRequests > 0
+                ? ActivitySummary(state: .working) : nil
+        }
         if let activitySourceIDs {
             guard let source = activitySourceIDs[providerID] else { return nil }
             return ActivitySummary(sessions: sessions[source] ?? [])
@@ -322,7 +333,8 @@ final class NotchViewModel: ObservableObject {
             sessionCount: activity(for: snapshot.id)?.sessions.count ?? 0,
             sessionCap: sessionCap,
             statusMessage: snapshot.statusMessage,
-            blockMessage: snapshot.block?.summary(now: now)
+            blockMessage: snapshot.block?.summary(now: now),
+            linked: snapshot.linked != nil
         ) : NotchLayout.cardWidth
     }
 

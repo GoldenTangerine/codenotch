@@ -14,6 +14,7 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notchController: NotchWindowController?
     private var store: UsageStore?
+    private var codeSwitch: CodeSwitchBridge?
     private var monitors: [String: any AgentActivityMonitor] = [:]
     private var preferences: Preferences?
     private var settings: SettingsWindowController?
@@ -172,18 +173,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak controller] in controller?.apply(edge: $0) }
                 .store(in: &cancellables)
 
-            store.$snapshots
+            let codeSwitch = CodeSwitchBridge()
+            self.codeSwitch = codeSwitch
+            preferences.$codeSwitchEnabled
+                .sink { [weak codeSwitch] in codeSwitch?.setEnabled($0) }
+                .store(in: &cancellables)
+            store.$snapshots.combineLatest(codeSwitch.$snapshots)
                 .receive(on: RunLoop.main)
-                .sink { [weak controller] snapshots in
+                .sink { [weak controller] local, linked in
                     withAnimation(NotchMotion.unfold) {
-                        controller?.model.snapshots = snapshots
+                        controller?.model.replaceSnapshots(local + linked)
                     }
                     controller?.model.now = Date()
                 }
                 .store(in: &cancellables)
             store.start()
-            controller.onRefresh = { [weak store] in store?.refreshNow() }
-            controller.onRefreshProvider = { [weak store] id in store?.refresh(providerID: id) }
+            controller.onRefresh = { [weak store, weak codeSwitch] in
+                store?.refreshNow()
+                codeSwitch?.refresh()
+            }
+            controller.onRefreshProvider = { [weak store, weak codeSwitch] id in
+                if id.hasPrefix("code-switch:") { codeSwitch?.refresh() }
+                else { store?.refresh(providerID: id) }
+            }
             store.$refreshing
                 .receive(on: RunLoop.main)
                 .sink { [weak controller] ids in controller?.model.refreshing = ids }
@@ -257,6 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        codeSwitch?.stop()
         store?.stop()
         monitors.values.forEach { $0.stop() }
         notchController?.stop()

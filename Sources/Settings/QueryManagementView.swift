@@ -370,7 +370,9 @@ struct QueryIconView: View {
 
     var body: some View {
         Group {
-            if let icon, icon.kind == .symbol {
+            if let icon, icon.kind == .brand, let image = CodeSwitchIcon.image(icon.value) {
+                Image(nsImage: image).resizable().scaledToFit()
+            } else if let icon, icon.kind == .symbol {
                 Image(systemName: Self.symbols.contains(icon.value) ? icon.value : "server.rack")
                     .resizable().scaledToFit()
             } else if let icon, icon.kind == .image,

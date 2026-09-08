@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.5.8",
+            headline: "Follow your active Code Switch R providers.",
+            changes: [
+                ReleaseNote.Change(
+                    title: "Live tray providers",
+                    detail: "Active providers appear after your local entries, with the default provider shown when idle. Requires Code Switch R v2.11.16 or later on the same Mac."
+                ),
+                ReleaseNote.Change(
+                    title: "Quotas, balances and daily usage",
+                    detail: "Hover to inspect quota periods, request activity and statistics, with offline brand icons and explicit inactive periods."
+                ),
+                ReleaseNote.Change(
+                    title: "Automatic connection recovery",
+                    detail: "Linked entries hide when Code Switch R stops and return when it reconnects. Disable integration in Settings at any time."
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.5.7",
             headline: "Custom provider queries with reliable refresh status.",
             changes: [

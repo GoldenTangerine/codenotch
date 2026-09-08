@@ -22,6 +22,29 @@ two never disagree.
 
 ## What it reads
 
+### Code Switch R integration
+
+Linked quotas show inactive periods explicitly. Brand icons are bundled offline
+from `@lobehub/icons-static-svg` 1.73.0 (MIT; license in
+`Sources/CodeSwitchIcons.bundle/LICENSE.txt`), using the same color aliases as
+Code Switch R. The PNG resources total about 1.7 MB and require no network access.
+
+With a compatible Code Switch R running on the same Mac, Codenotch automatically
+appends its current tray suppliers after your existing providers. Active requests
+select the active suppliers; idle platforms show their default supplier. Hover a
+ring for quota, balance, reset time, calling status and daily statistics. Disable
+this in Settings with **Code Switch R integration**.
+
+The integration reads only `~/Library/Caches/code-switch/tray-snapshot-v1.json`.
+It does not read Code Switch R credentials or query suppliers itself. Supplier
+changes normally appear within one second; quota and statistics refresh every
+60 seconds in Code Switch R, including while its tray is closed. Normal exit
+removes the linked providers; a heartbeat older than three seconds also hides
+them. They return automatically when Code Switch R reconnects. Both applications
+must include this integration; older installed versions do not publish snapshots.
+
+### Local providers
+
 | Provider | Source | How |
 |---|---|---|
 | **Claude Code** | official | The OAuth token in the login keychain, against the same endpoint Claude Code's own `/usage` uses. |

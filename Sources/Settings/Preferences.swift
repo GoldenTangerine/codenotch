@@ -15,6 +15,9 @@ import os
 /// What the user has chosen, kept in `UserDefaults`.
 @MainActor
 final class Preferences: ObservableObject {
+    @Published var codeSwitchEnabled: Bool {
+        didSet { defaults.set(codeSwitchEnabled, forKey: "codeSwitchEnabled") }
+    }
     /// Providers the user has switched off. Stored as the *disconnected* set
     /// rather than the connected one, so a provider added in a later version is
     /// on by default instead of silently staying dark.
@@ -143,6 +146,7 @@ final class Preferences: ObservableObject {
 
     init(defaults: UserDefaults = .standard, domainName: String? = nil) {
         self.defaults = defaults
+        self.codeSwitchEnabled = defaults.object(forKey: "codeSwitchEnabled") as? Bool ?? true
         self.domainName = domainName ?? (defaults === UserDefaults.standard ? Bundle.main.bundleIdentifier : nil)
         self.isFirstLaunch = !defaults.bool(forKey: Keys.hasLaunched)
         defaults.set(true, forKey: Keys.hasLaunched)

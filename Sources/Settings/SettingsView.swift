@@ -126,6 +126,7 @@ struct SettingsView: View {
                 }
 
                 Toggle("Open Codenotch at login", isOn: $preferences.launchAtLogin)
+                Toggle("Code Switch R integration", isOn: $preferences.codeSwitchEnabled)
                 if let problem = preferences.launchAtLoginProblem {
                     Text(problem)
                         .font(.caption)

@@ -285,6 +285,71 @@ private struct LimitWindowRow: View {
     }
 }
 
+private struct CodeSwitchTooltip: View {
+    let snapshot: ProviderSnapshot
+    let details: CodeSwitchDetails
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TooltipHeader(title: snapshot.displayName) {
+                QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph)
+                    .foregroundStyle(Palette.textPrimary)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: NotchLayout.blockSpacing) {
+                    Text("Code Switch R · \(details.platform)")
+                        .foregroundStyle(Palette.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(details.activityText)
+                        .foregroundStyle(Palette.textPrimary)
+                    if details.provider.loading {
+                        Text("Loading…").foregroundStyle(Palette.textSecondary)
+                    } else if details.provider.quotas.isEmpty {
+                        Text("No reading").foregroundStyle(Palette.textSecondary)
+                    }
+                    ForEach(Array(details.provider.quotas.enumerated()), id: \.offset) { _, quota in
+                        if !quota.active && quota.displayKind != "error" && quota.invalidMessage?.isEmpty != false {
+                            Text("\(quota.title): \(String(localized: "Period has not started"))")
+                                .foregroundStyle(Palette.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else if let window = quota.window {
+                            LimitWindowRow(window: window, fidelity: .derived, now: now)
+                        } else {
+                            Text("\(quota.title): \(String(localized: "Quota unavailable"))")
+                                .foregroundStyle(Palette.critical)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if let stats = details.provider.stats {
+                        Divider()
+                        metric(String(localized: "Success rate"), stats.successfulRequests + stats.failedRequests > 0
+                            ? "\(QuotaQuantity.format(min(1, max(0, stats.successRate)) * 100))%" : "—")
+                        metric(String(localized: "Requests"), QuotaQuantity.format(stats.totalRequests))
+                        metric("Tokens", QuotaQuantity.format(stats.inputTokens + stats.outputTokens + stats.cacheReadTokens, compact: true))
+                        metric(String(localized: "Cost"), "$" + QuotaQuantity.format(stats.costTotal))
+                        metric(String(localized: "First token"), stats.avgFirstTokenSec > 0 ? "\(QuotaQuantity.format(stats.avgFirstTokenSec))s" : "—")
+                        metric(String(localized: "Speed"), stats.avgTokensPerSec > 0 ? "\(QuotaQuantity.format(stats.avgTokensPerSec)) t/s" : "—")
+                    }
+                }
+                .font(Typography.cardBody)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, NotchLayout.headerToBlock)
+            }
+        }
+        .frame(height: NotchLayout.cardHeight(windowCount: 0, linked: true) - 2 * NotchLayout.cardPadding)
+    }
+
+    private func metric(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label).foregroundStyle(Palette.textSecondary)
+            Spacer(minLength: 6)
+            Text(value).foregroundStyle(Palette.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.7).help(value)
+        }
+    }
+}
+
 private struct ProviderTooltip: View {
     let snapshot: ProviderSnapshot
     let now: Date
@@ -470,7 +535,8 @@ struct TooltipCard: View {
             sessionCount: activity?.sessions.count ?? 0,
             sessionCap: sessionCap,
             statusMessage: snapshot.statusMessage,
-            blockMessage: snapshot.block?.summary(now: now)
+            blockMessage: snapshot.block?.summary(now: now),
+            linked: snapshot.linked != nil
         )
     }
 
@@ -482,9 +548,13 @@ struct TooltipCard: View {
             // drifts while the card resizes around them.
             ZStack(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 0) {
-                    ProviderTooltip(snapshot: snapshot, now: now)
-                    if let activity {
-                        SessionList(summary: activity, now: now, cap: sessionCap)
+                    if let details = snapshot.linked {
+                        CodeSwitchTooltip(snapshot: snapshot, details: details, now: now)
+                    } else {
+                        ProviderTooltip(snapshot: snapshot, now: now)
+                        if let activity {
+                            SessionList(summary: activity, now: now, cap: sessionCap)
+                        }
                     }
                 }
                 // An identity, so one provider's rows are never interpolated

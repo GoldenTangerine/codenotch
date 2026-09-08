@@ -164,6 +164,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
     var icon: ProviderIcon?
     var manualQuery: Bool = false
     var queryFailure: String?
+    var linked: CodeSwitchDetails?
 
     /// The number on the cell: the provider's declared primary window — for
     /// Claude, the current session.

@@ -283,7 +283,9 @@ enum NotchLayout {
     static func cardHeight(windowCount: Int, sessionCount: Int = 0,
                            sessionCap: Int = defaultSessionCap,
                            statusMessage: String? = nil,
-                           blockMessage: String? = nil) -> CGFloat {
+                           blockMessage: String? = nil,
+                           linked: Bool = false) -> CGFloat {
+        if linked { return cardHeight(windowCount: maxWindowCount) }
         let windowCount = min(windowCount, maxWindowCount)
         let header = max(glyphSize, cardTitleLineHeight)
         var height = 2 * cardPadding + header
