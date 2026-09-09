@@ -1,3 +1,12 @@
+/**
+ @name: 活动会话模型
+ @Descripttion: 统一展示本地会话和供应商关联活动。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 15:00:00
+ @LastEditTime: 2026-09-09 15:00:00
+ @FilePath: Sources/Sessions/AgentSession.swift
+ */
 import Darwin
 import Foundation
 
@@ -32,6 +41,11 @@ struct AgentSession: Identifiable, Equatable {
     /// rather than from a process, and a nil here costs nothing but the ability
     /// to jump to that session.
     let processID: pid_t?
+    let processStartedAt: Date?
+    let hookSessionKey: String?
+    let hookTurnStartedAt: Date?
+    let noticeID: String?
+    let notice: SessionCompletionWatcher.Reason?
 
     /// Written out rather than synthesised so `processID` can default to nil:
     /// four of the five monitors have no pid to give, and a memberwise
@@ -43,7 +57,12 @@ struct AgentSession: Identifiable, Equatable {
         state: State,
         waitingFor: String?,
         since: Date,
-        processID: pid_t? = nil
+        processID: pid_t? = nil,
+        processStartedAt: Date? = nil,
+        hookSessionKey: String? = nil,
+        hookTurnStartedAt: Date? = nil,
+        noticeID: String? = nil,
+        notice: SessionCompletionWatcher.Reason? = nil
     ) {
         self.id = id
         self.name = name
@@ -52,5 +71,10 @@ struct AgentSession: Identifiable, Equatable {
         self.waitingFor = waitingFor
         self.since = since
         self.processID = processID
+        self.processStartedAt = processStartedAt
+        self.hookSessionKey = hookSessionKey
+        self.hookTurnStartedAt = hookTurnStartedAt
+        self.noticeID = noticeID
+        self.notice = notice
     }
 }

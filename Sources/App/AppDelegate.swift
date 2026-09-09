@@ -11,6 +11,7 @@ import AppKit
 import Combine
 import SwiftUI
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notchFleet: NotchFleet?
     private var store: UsageStore?
@@ -27,6 +28,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Turns the monitors' running commentary into the one event worth
     /// interrupting for: an agent that has just stopped working.
     private var completions = SessionCompletionWatcher()
+    private let hookMonitor = HookSessionMonitor()
+    private var hookSettings: HookSettings?
+    private var nativeSessions: [String: [AgentSession]] = [:]
+    private var localSnapshots: [ProviderSnapshot] = []
+    private var activitySources: [String: String] = [:]
+    private var activityRouting: ActivityRouting?
+    private var pendingAnnouncements: [SessionCompletionWatcher.Event] = []
+    private var announcementWork: DispatchWorkItem?
 
     /// The unit bundle is hosted by this app, so `xcodebuild test` launches it
     /// for real. Without this guard every test run put a live request on the
@@ -69,7 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `CODENOTCH_DEMO=1` puts the design frame's three providers on screen
         // with its numbers, for screenshots and for eyeballing the layout.
         if ProcessInfo.processInfo.environment["CODENOTCH_DEMO"] == "1" {
-            fleet.setSnapshots(Fixtures.snapshots())
+            localSnapshots = Fixtures.snapshots()
+            activitySources = Dictionary(uniqueKeysWithValues: localSnapshots.map { ($0.id, $0.id) })
+            fleet.setSnapshots(localSnapshots)
         } else {
             // Nothing needs a browser session at the moment. `WebSessionProvider`
             // and `Sites.perplexity` are kept: they are the working pattern for a
@@ -105,17 +116,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 providers: catalog.providers(),
                 disconnected: Set(catalog.entries.filter { !$0.enabled }.map(\.id)), configured: true
             )
-            let applyCatalog: (Set<String>) -> Void = { [weak catalog, weak store, weak fleet, weak preferences] invalidated in
+            let applyCatalog: (Set<String>) -> Void = { [weak self, weak catalog, weak store, weak fleet, weak preferences] invalidated in
                 guard let catalog, let store else { return }
                 let disconnected = Set(catalog.entries.filter { !$0.enabled }.map(\.id))
                 store.reconfigure(providers: catalog.providers(), disconnected: disconnected, invalidated: invalidated)
                 preferences?.disconnectedProviders = disconnected
                 fleet?.setActivitySourceIDs(Dictionary(uniqueKeysWithValues:
                     catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) }))
+                self?.activitySources = Dictionary(uniqueKeysWithValues:
+                    catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) })
+                self?.updateActivity()
             }
             catalog.onChange = applyCatalog
             fleet.setActivitySourceIDs(Dictionary(uniqueKeysWithValues:
                 catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) }))
+            activitySources = Dictionary(uniqueKeysWithValues:
+                catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) })
             preferences.disconnectedProviders = Set(catalog.entries.filter { !$0.enabled }.map(\.id))
 
             // The stored edge goes in before the panel is ever put up. The
@@ -132,6 +148,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let updater = Updater()
             self.updater = updater
 
+            let hookSettings = HookSettings(monitor: hookMonitor)
+            self.hookSettings = hookSettings
             let settings = SettingsWindowController(
                 preferences: preferences,
                 // A closure so the sheet re-reads accounts each time it comes
@@ -145,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     store?.openAccountSource(providerID: $0) ?? false
                 },
                 retry: { [weak store] in store?.reauthorize(providerID: $0) },
-                catalog: catalog, usageStore: store
+                catalog: catalog, usageStore: store, hooks: hookSettings
             )
             fleet.onOpenSettings = { [weak settings] in settings?.show() }
             self.settings = settings
@@ -265,12 +283,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             store.$snapshots.combineLatest(codeSwitch.$snapshots)
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet, weak statusItem] local, linked in
+                .sink { [weak self] local, linked in
                     let snapshots = local + linked
-                    fleet?.setSnapshots(snapshots)
-                    statusItem?.snapshots = snapshots
+                    self?.localSnapshots = local
+                    self?.updateActivity()
                     notifier.observe(snapshots)
                 }
+                .store(in: &cancellables)
+            codeSwitch.$bindings.dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
             store.start()
             fleet.onRefresh = { [weak store, weak codeSwitch] in
@@ -318,20 +339,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for (id, monitor) in monitors {
             monitor.sessionsPublisher
                 .receive(on: RunLoop.main)
-                .sink { [weak self, weak fleet] live in
-                    guard let fleet else { return }
-                    fleet.setSessions(providerID: id, sessions: live)
+                .sink { [weak self] live in
+                    guard let self else { return }
+                    self.nativeSessions[id] = live
                     // The publisher delivers on the main run loop, but the
                     // closure itself is nonisolated — the same assertion the
                     // notch controller's timers make.
-                    MainActor.assumeIsolated { self?.announceCompletions(sessions: fleet.sessions) }
+                    MainActor.assumeIsolated { self.updateActivity() }
                 }
                 .store(in: &cancellables)
             monitor.start()
         }
         // Poll usage hard only while something is actually running.
-        store?.isBusy = { monitors.values.contains { m in m.sessions.contains { $0.state == .busy } } }
+        store?.isBusy = { [weak self] in
+            self?.hookMonitor.state.merging(self?.nativeSessions ?? [:]).values.contains { $0.contains { $0.state == .busy } } ?? false
+        }
         self.monitors = monitors
+        hookMonitor.$state.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateActivity() }
+            .store(in: &cancellables)
+        hookMonitor.start()
 
         // Applied last, right before the panel goes up: every one of these
         // calls a `NotchFleet.apply(...)` that can trigger `reconcile()` on
@@ -367,7 +394,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func announceCompletions(sessions: [String: [AgentSession]]) {
         let events = completions.absorb(sessions)
-        guard let event = events.first, let preferences, let fleet = notchFleet else { return }
+        guard !events.isEmpty else { return }
+        pendingAnnouncements.append(contentsOf: events)
+        guard announcementWork == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.deliverAnnouncement() }
+        }
+        announcementWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    private func updateActivity() {
+        hookMonitor.reconcile(nativeSessions)
+        let merged = hookMonitor.state.merging(nativeSessions)
+        let routing = ActivityRouting(local: localSnapshots, linked: codeSwitch?.snapshots ?? [],
+                                      sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:])
+        if activityRouting?.sessions != routing.sessions {
+            notchFleet?.setSessions(routing.sessions)
+        }
+        if activityRouting?.snapshots != routing.snapshots {
+            notchFleet?.setSnapshots(routing.snapshots)
+            statusItem?.snapshots = routing.snapshots
+        }
+        activityRouting = routing
+        announceCompletions(sessions: merged)
+    }
+
+    private func deliverAnnouncement() {
+        announcementWork = nil
+        let events = pendingAnnouncements.sorted {
+            if $0.reason != $1.reason { return $0.reason == .blocked }
+            return $0.session.since > $1.session.since
+        }
+        pendingAnnouncements.removeAll()
+        guard let event = events.first(where: { event in
+            activityRouting?.sessions.values.contains { $0.contains { $0.id == event.session.id && $0.state == event.session.state } } == true
+        }), let preferences, let fleet = notchFleet else { return }
         Log.usage.info("session \(event.session.name, privacy: .public) \(String(describing: event.reason), privacy: .public)")
 
         if preferences.sessionEndSound {
@@ -377,7 +439,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         guard preferences.announceSessionEnd else { return }
         fleet.peek(for: preferences.peekDuration.seconds,
-                   focusing: event.session.processID)
+                   focusing: event.session.processID, providerID: activityRouting?.providerID(for: event.session),
+                   startedAt: event.session.processStartedAt)
     }
 
     /// Closing the settings window must not take the app with it.
@@ -402,6 +465,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        announcementWork?.cancel()
+        hookMonitor.stop()
         codeSwitch?.stop()
         store?.stop()
         monitors.values.forEach { $0.stop() }

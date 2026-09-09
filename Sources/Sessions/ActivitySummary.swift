@@ -58,7 +58,7 @@ struct ActivitySummary: Equatable {
     var color: Color {
         switch state {
         case .working: return Palette.textPrimary
-        case .waiting: return Palette.watch
+        case .waiting: return Palette.activityWaiting
         case .idle:    return Palette.ringTrack
         }
     }

@@ -54,7 +54,8 @@ struct ClaudeSessionRecord {
             state: state,
             waitingFor: (json["waitingFor"] as? String) ?? (json["needs"] as? String),
             since: millis.map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date(),
-            processID: pid
+            processID: pid,
+            processStartedAt: ProcessLiveness.startTime(pid: pid)
         )
     }
 

@@ -1,3 +1,12 @@
+/**
+ @name: 界面配色
+ @Descripttion: 定义额度展示和会话活动的语义颜色。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 12:20:00
+ @LastEditTime: 2026-09-09 12:20:00
+ @FilePath: Sources/DesignSystem/Palette.swift
+ */
 import SwiftUI
 
 /// Sampled from `docs/design/frame-124-hover-tooltip.png`, not invented.
@@ -13,6 +22,7 @@ enum Palette {
     static let ample         = Color(hex: 0x00FF88)           // green
     static let watch         = Color(hex: 0xF2FF00)           // yellow
     static let critical      = Color(hex: 0xFF3F00)           // orange
+    static let activityWaiting = Color(hex: 0xFFB547)
 
     static let textPrimary   = Color.white
     static let textSecondary = Color(hex: 0x808080)

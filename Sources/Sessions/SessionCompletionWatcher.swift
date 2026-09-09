@@ -1,3 +1,12 @@
+/**
+ @name: 会话通知转换
+ @Descripttion: 从状态变化和明确的 hooks 事件生成去重通知。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 12:03:00
+ @LastEditTime: 2026-09-09 12:03:00
+ @FilePath: Sources/Sessions/SessionCompletionWatcher.swift
+ */
 import Foundation
 
 /// Notices the moment an agent stops working.
@@ -35,14 +44,29 @@ struct SessionCompletionWatcher {
     /// on every start — including a restart in the middle of the night after a
     /// Sparkle update. The first pass only records.
     private var hasSeeded = false
+    private var announced: [String: String] = [:]
 
     /// Feed the monitors' current view; get back what just changed.
     mutating func absorb(_ sessions: [String: [AgentSession]]) -> [Event] {
         var current: [String: AgentSession.State] = [:]
         var events: [Event] = []
+        var liveHooks: Set<String> = []
 
         for (providerID, live) in sessions {
             for session in live {
+                if session.hookSessionKey != nil {
+                    liveHooks.insert(session.id)
+                    // Retain Claude's native identity while hooks own the
+                    // display, so recovery can still detect a missed stop.
+                    if session.id.hasPrefix("hook:claude:"), let pid = session.processID {
+                        current["\(providerID)\u{1}claude.\(pid)"] = session.state
+                    }
+                    if let token = session.noticeID, let reason = session.notice, announced[session.id] != token {
+                        announced[session.id] = token
+                        events.append(Event(session: session, reason: reason, providerID: providerID))
+                    }
+                    continue
+                }
                 let key = "\(providerID)\u{1}\(session.id)"
                 current[key] = session.state
                 guard hasSeeded, let was = previous[key] else { continue }
@@ -56,6 +80,7 @@ struct SessionCompletionWatcher {
         // because quitting Claude Code mid-turn is an ordinary thing to do —
         // and a chime for a window that is already gone points at nothing.
         previous = current
+        announced = announced.filter { liveHooks.contains($0.key) }
         hasSeeded = true
         // Newest first, so the one that just landed is the one a single click
         // reaches.

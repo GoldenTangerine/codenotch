@@ -145,6 +145,7 @@ struct SettingsView: View {
     @ObservedObject var updater: Updater
     var catalog: QueryCatalog? = nil
     var usageStore: UsageStore? = nil
+    var hooks: HookSettings? = nil
 
     var body: some View {
         // A plain HStack rather than `NavigationSplitView`: the sidebar here
@@ -512,6 +513,7 @@ struct SettingsView: View {
 
     private var notificationsPane: some View {
         Form {
+            if let hooks { HookSettingsView(hooks: hooks) }
             // Its own section rather than a line in General: this is the only
             // part of the app that speaks first, and a switch that stops the
             // Mac making a noise has to be findable by someone who is looking

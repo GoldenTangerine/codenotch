@@ -315,6 +315,7 @@ private struct CodeSwitchTooltip: View {
     let snapshot: ProviderSnapshot
     let details: CodeSwitchDetails
     let now: Date
+    var activity: ActivitySummary? = nil
     var resetTimeFormat: ResetTimeFormat = .automatic
 
     var body: some View {
@@ -325,6 +326,9 @@ private struct CodeSwitchTooltip: View {
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: NotchLayout.blockSpacing) {
+                    if let activity, !activity.sessions.isEmpty {
+                        SessionList(summary: activity, now: now, cap: activity.sessions.count)
+                    }
                     Text("Code Switch R · \(details.platform)")
                         .foregroundStyle(Palette.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -475,7 +479,7 @@ private struct SessionRow: View {
     private var stateColor: Color {
         switch session.state {
         case .busy:    return accentColor
-        case .waiting: return Palette.watch
+        case .waiting: return Palette.activityWaiting
         case .idle:    return Palette.textSecondary
         }
     }
@@ -544,12 +548,22 @@ private struct SessionList: View {
             // are counted rather than drawn: the card is clipped, not scrolled,
             // so anything past the budget silently pushes the title off the top.
             ForEach(Array(shown.enumerated()), id: \.element.id) { index, session in
-                SessionRow(session: session, now: now)
+                Button { SessionFocus.activate(session: session) } label: {
+                    SessionRow(session: session, now: now)
+                        .contentShape(Rectangle())
+                }
+                    .buttonStyle(.plain)
+                    .disabled(session.processID == nil)
                     .padding(.top, NotchLayout.blockSpacing)
             }
 
             if hidden > 0 {
-                Text("and \(hidden) more")
+                Menu {
+                    ForEach(Array(ordered.dropFirst(shown.count))) { session in
+                        Button(session.name) { SessionFocus.activate(session: session) }
+                            .disabled(session.processID == nil)
+                    }
+                } label: { Text("and \(hidden) more") }
                     .font(Typography.cardBody)
                     .foregroundStyle(Palette.textSecondary)
                     .padding(.top, NotchLayout.blockSpacing)
@@ -594,7 +608,7 @@ struct TooltipCard: View {
             ZStack(alignment: .topLeading) {
                 VStack(alignment: .leading, spacing: 0) {
                     if let details = snapshot.linked {
-                        CodeSwitchTooltip(snapshot: snapshot, details: details, now: now, resetTimeFormat: resetTimeFormat)
+                        CodeSwitchTooltip(snapshot: snapshot, details: details, now: now, activity: activity, resetTimeFormat: resetTimeFormat)
                     } else {
                         ProviderTooltip(snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat)
                         if let activity {

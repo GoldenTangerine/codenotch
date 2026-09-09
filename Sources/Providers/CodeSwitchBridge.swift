@@ -27,6 +27,28 @@ struct CodeSwitchPlatform: Codable, Equatable {
     let icon: String
     let error: Bool
     let providers: [CodeSwitchProvider]
+    var sessionBindings: [CodeSwitchSessionBinding]? = nil
+}
+
+struct CodeSwitchSessionBinding: Codable, Equatable {
+    let sessionKey: String
+    let providerId: String
+    let providerName: String
+    let icon: String
+    let sequence: UInt64
+    let updatedAt: Double
+
+    func snapshot(platform: CodeSwitchPlatform, retaining previous: ProviderSnapshot? = nil) -> ProviderSnapshot {
+        CodeSwitchProvider(providerId: providerId, providerName: providerName, icon: icon,
+                           activeRequests: 0, status: "session", loading: false, updatedAt: updatedAt,
+                           quotas: previous?.linked?.provider.quotas ?? [], stats: previous?.linked?.provider.stats).snapshot(platform: platform)
+    }
+}
+
+struct CodeSwitchSessionLink: Equatable {
+    let platform: String
+    let binding: CodeSwitchSessionBinding
+    let snapshot: ProviderSnapshot
 }
 
 struct CodeSwitchProvider: Codable, Equatable {
@@ -134,7 +156,8 @@ struct CodeSwitchDetails: Equatable {
     let provider: CodeSwitchProvider
 
     var activityText: String {
-        provider.status == "active"
+        if provider.status == "session" { return String(localized: "Session provider") }
+        return provider.status == "active"
             ? String(localized: "Calling · \(provider.activeRequests)")
             : String(localized: "Default provider")
     }
@@ -142,6 +165,7 @@ struct CodeSwitchDetails: Equatable {
 
 struct CodeSwitchSnapshotState {
     private(set) var snapshots: [ProviderSnapshot] = []
+    private(set) var bindings: [String: CodeSwitchSessionLink] = [:]
     private var session: String?
     private var sequence: UInt64 = 0
     private var heartbeat: Date?
@@ -161,6 +185,22 @@ struct CodeSwitchSnapshotState {
         }
         sequence = snapshot.sequence
         heartbeat = snapshot.heartbeat
+        let previousBindings = bindings
+        let previousSnapshots = snapshots
+        bindings.removeAll()
+        for platform in snapshot.platforms where !platform.error && ["claude", "codex"].contains(platform.platform) {
+            for binding in platform.sessionBindings ?? [] {
+                guard binding.sessionKey.count == 64, binding.sessionKey.allSatisfy({ $0.isHexDigit }),
+                      !binding.providerId.isEmpty, binding.updatedAt.isFinite,
+                      binding.sequence > (bindings[binding.sessionKey]?.binding.sequence ?? 0) else { continue }
+                let id = binding.snapshot(platform: platform).id
+                let previous = platform.providers.first(where: { $0.providerId == binding.providerId })?.snapshot(platform: platform)
+                    ?? previousSnapshots.first(where: { $0.id == id })
+                    ?? previousBindings[binding.sessionKey].flatMap { $0.snapshot.id == id ? $0.snapshot : nil }
+                bindings[binding.sessionKey] = CodeSwitchSessionLink(platform: platform.platform, binding: binding,
+                                                                     snapshot: binding.snapshot(platform: platform, retaining: previous))
+            }
+        }
         var seen = Set<String>()
         snapshots = snapshot.platforms.filter { !$0.error }.flatMap { platform in
             platform.providers.compactMap { provider in
@@ -175,6 +215,7 @@ struct CodeSwitchSnapshotState {
     mutating func expire(now: Date, missing: Bool = false) {
         if missing || heartbeat == nil || !(-1...3).contains(now.timeIntervalSince(heartbeat!)) {
             snapshots = []
+            bindings = [:]
         }
     }
 }
@@ -182,6 +223,7 @@ struct CodeSwitchSnapshotState {
 @MainActor
 final class CodeSwitchBridge: ObservableObject {
     @Published private(set) var snapshots: [ProviderSnapshot] = []
+    @Published private(set) var bindings: [String: CodeSwitchSessionLink] = [:]
     private let file: URL
     private var timer: Timer?
     private var watcher: DispatchSourceFileSystemObject?
@@ -213,6 +255,7 @@ final class CodeSwitchBridge: ObservableObject {
         watcher = nil
         state = CodeSwitchSnapshotState()
         if !snapshots.isEmpty { snapshots = [] }
+        if !bindings.isEmpty { bindings = [:] }
     }
 
     func refresh() {
@@ -259,6 +302,7 @@ final class CodeSwitchBridge: ObservableObject {
     }
 
     private func publish() {
+        if bindings != state.bindings { bindings = state.bindings }
         if snapshots != state.snapshots { snapshots = state.snapshots }
     }
 

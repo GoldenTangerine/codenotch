@@ -312,6 +312,13 @@ final class NotchViewModel: ObservableObject {
     /// A provider with no activity source gets none, rather than borrowing
     /// somebody else's.
     func activity(for providerID: String) -> ActivitySummary? {
+        if let live = sessions[providerID], !live.isEmpty {
+            let summary = ActivitySummary(sessions: live)
+            if summary?.state != .idle { return summary }
+            if let linked = snapshots.first(where: { $0.id == providerID })?.linked,
+               linked.provider.activeRequests > 0 { return ActivitySummary(state: .working) }
+            return summary
+        }
         if let linked = snapshots.first(where: { $0.id == providerID })?.linked {
             return linked.provider.status == "active" && linked.provider.activeRequests > 0
                 ? ActivitySummary(state: .working) : nil

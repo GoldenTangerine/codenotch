@@ -55,6 +55,26 @@ removes the linked providers; a heartbeat older than three seconds also hides
 them. They return automatically when Code Switch R reconnects. Both applications
 must include this integration; older installed versions do not publish snapshots.
 
+With the activity integration on both sides, Claude Code and Codex CLI hooks
+can also attach a live session to the supplier that actually handled its latest
+request. The optional `sessionBindings` field in each platform snapshot uses
+SHA-256 of `<tool>\n<trimmed session id>` (lowercase hex), plus supplier identity,
+icon, a monotonically increasing route sequence and a millisecond timestamp.
+Code Switch R records this independently of session affinity, including fallback
+attempts, and retains at most 4,096 recent associations for 24 hours. It exports
+no prompts, tool arguments or credentials. Claude native subagent routes are
+excluded when their agent-id header identifies them, so they cannot move their
+parent's indicator.
+
+Waiting sessions keep their supplier visible after requests settle, with the
+last available quota reading. When an association cannot be established, or the
+bridge disconnects, the session appears under its CLI tool instead. The same
+fallback applies until an association is newer than the current submitted turn;
+an old route is never inherited by a new turn, and an unknown turn start is not
+used to guess a supplier. The same
+event is announced once even if its supplier changes. Older snapshots keep the
+existing request spinner without guessing which supplier a question belongs to.
+
 ### Local providers
 
 | Provider | Source | How |
@@ -154,6 +174,47 @@ ordering follows your saved provider list.
 
 ## When a session ends
 
+For **Claude Code and Codex CLI**, open **Settings → Notifications → Hooks**
+and install the integration separately for each configuration directory. Existing
+third-party hooks and other JSON settings are preserved. Repair updates only
+Codenotch entries; uninstall removes only those entries. Additional profile
+directories can be selected there. No CLI configuration is changed at launch.
+Uninstall also clears that directory's activity immediately and ignores hooks
+still emitted by an already running CLI until the integration is installed again.
+
+After installation, start a new CLI session. **Codex additionally requires you
+to open `/hooks` and review/trust the Codenotch definitions**; changed definitions
+need review again. See the [official Codex hooks documentation](https://developers.openai.com/codex/hooks).
+The installed indicator and last received event are separate: installation alone
+does not prove that a CLI has loaded or trusted the hooks. Use a current CLI
+version that supports the configured lifecycle events; older versions without
+hooks retain only their existing monitoring capabilities.
+
+Hooks report a submitted turn, question-tool calls, approval requests and an
+explicit turn stop. Questions are recognized as tool events, not inferred from
+punctuation in an ordinary reply. The helper sends bounded metadata over a
+private local Unix datagram socket and exits without approving, denying or
+answering anything. Codenotch does not need to be running for the CLI to proceed.
+The helper briefly retries a full socket queue. Codex approvals without call IDs
+are reconciled against in-flight calls of the same tool; ambiguous parallel calls
+retain the waiting mark until all candidate calls finish.
+Return to the original application to answer or approve; the panel does not
+offer remote approval controls.
+
+While running, the existing spinner is unchanged. A waiting session adds an
+amber breathing ring and question-mark badge while retaining the supplier logo,
+on the top notch and either screen edge. Reduced Motion keeps the waiting mark
+static. Waiting takes priority if another session on the same supplier is still
+working. Hover for sessions and click a row to activate its application; overflow
+rows remain available from the “and N more” menu. A temporary activity-only entry
+is removed shortly after completion, while a waiting entry stays visible.
+
+Claude's local session records remain a fallback, merged with hook events by
+process. A newer explicit Claude status can replace a missed hook transition.
+Codex's older log-write heuristic remains a running-only fallback:
+silence in the log is never treated as a completed turn. Desktop applications,
+IDE extensions and other CLI tools retain their previous monitoring paths.
+
 The notch opens itself for five seconds when an agent stops working, or stops
 to ask you something, and sounds the system alert. Clicking it while it is open
 brings that session's application to the front.
@@ -183,6 +244,12 @@ Claude Code looks like — is not announced at all, since there is no window lef
 to jump to. Nothing is announced from the first reading either: every session
 already running at launch arrives with no history, and treating that as a
 transition would ring once per open window on every start.
+
+That transition rule applies to the fallback monitors. A fresh, explicit hook
+request for input is announced even if it is the first event seen for that
+session. Hook cancellations and process exits are silent; replayed notifications
+are deduplicated. Several events arriving together produce one sound and peek,
+with a waiting session taking priority over a finished one.
 
 ## Alerts
 

@@ -1,3 +1,12 @@
+/**
+ @name: 会话应用跳转
+ @Descripttion: 验证进程身份并激活会话所属应用。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 12:25:00
+ @LastEditTime: 2026-09-09 12:25:00
+ @FilePath: Sources/Sessions/SessionFocus.swift
+ */
 import AppKit
 import Darwin
 import Foundation
@@ -17,6 +26,15 @@ import Foundation
 /// silently do nothing in a third, the app is raised for everybody and the
 /// tooltip names the session so the last hop is one keystroke.
 enum SessionFocus {
+    @MainActor
+    static func activate(session: AgentSession) {
+        guard let pid = session.processID else { return }
+        if let started = session.processStartedAt {
+            guard let actual = HookSocket.process(pid)?.started,
+                  abs(actual - started.timeIntervalSince1970) < 0.01 else { return }
+        }
+        _ = activateApp(owning: pid)
+    }
     /// Raise whichever application owns this process.
     ///
     /// Returns false when the chain runs out before an application appears,

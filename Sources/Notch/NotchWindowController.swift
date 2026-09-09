@@ -105,7 +105,7 @@ final class NotchWindowController {
     /// what keeps the two apart — without it, the *next* click on the notch,
     /// minutes later and about something else, would still be raising a
     /// terminal window.
-    private var pendingFocus: (pid: pid_t, until: Date)?
+    private var pendingFocus: (pid: pid_t, until: Date, started: Double)?
     /// When the current peek's five seconds are up.
     ///
     /// The hover fold has to be told to leave it alone until then. Without
@@ -769,7 +769,7 @@ final class NotchWindowController {
     ///
     /// `pid` is the agent's process, used only if the peek is clicked; nil
     /// leaves the click doing what it ordinarily does.
-    func peek(for duration: TimeInterval, focusing pid: pid_t?) {
+    func peek(for duration: TimeInterval, focusing pid: pid_t?, providerID: String? = nil, startedAt: Date? = nil) {
         guard !model.isEditingPosition else { return }
         // Hidden is a standing choice that the notch is not to be on screen.
         // Something finishing is not grounds to overrule it — the chime still
@@ -780,8 +780,14 @@ final class NotchWindowController {
         }
         Log.usage.debug("peek for \(duration, privacy: .public)s, pid \(pid ?? -1, privacy: .public)")
 
-        if let pid {
-            pendingFocus = (pid: pid, until: Date().addingTimeInterval(duration + Self.focusGrace))
+        pendingFocus = nil
+        if let pid, let actual = HookSocket.process(pid)?.started,
+           startedAt == nil || abs(actual - startedAt!.timeIntervalSince1970) < 0.01 {
+            pendingFocus = (pid: pid, until: Date().addingTimeInterval(duration + Self.focusGrace), started: actual)
+        }
+        if let providerID, let index = model.snapshots.firstIndex(where: { $0.id == providerID }) {
+            if !model.visibleIndices.contains(index) { model.scrollStart = index }
+            model.hoveredIndex = index
         }
         peekUntil = Date().addingTimeInterval(duration)
 
@@ -825,6 +831,7 @@ final class NotchWindowController {
             return false
         }
         pendingFocus = nil
+        guard let actual = HookSocket.process(pending.pid)?.started, abs(actual - pending.started) < 0.01 else { return false }
         return SessionFocus.activateApp(owning: pending.pid)
     }
 

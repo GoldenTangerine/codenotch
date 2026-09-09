@@ -210,9 +210,9 @@ final class NotchFleet {
     /// Opens every panel for a moment, because something happened — the same
     /// announcement on every display rather than only the one you happen to
     /// be looking at.
-    func peek(for duration: TimeInterval, focusing pid: pid_t?) {
+    func peek(for duration: TimeInterval, focusing pid: pid_t?, providerID: String? = nil, startedAt: Date? = nil) {
         for controller in controllers.values {
-            controller.peek(for: duration, focusing: pid)
+            controller.peek(for: duration, focusing: pid, providerID: providerID, startedAt: startedAt)
         }
     }
 
@@ -231,6 +231,14 @@ final class NotchFleet {
                 controller.model.sessions[id] = live
             }
             controller.model.now = now
+        }
+    }
+
+    func setSessions(_ sessions: [String: [AgentSession]]) {
+        self.sessions = sessions
+        for controller in controllers.values {
+            controller.model.sessions = sessions
+            controller.model.now = Date()
         }
     }
 

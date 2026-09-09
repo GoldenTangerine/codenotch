@@ -78,6 +78,14 @@ struct ProviderRing: View {
             if let activity, activity.state != .idle {
                 ActivityArc(summary: activity)
             }
+            if activity?.state == .waiting {
+                Image(systemName: "questionmark.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Palette.activityWaiting)
+                    .background(Circle().fill(Palette.notch))
+                    .offset(x: NotchLayout.ringDiameter / 2 - 4, y: -NotchLayout.ringDiameter / 2 + 4)
+                    .accessibilityLabel(Text("Needs your answer"))
+            }
         }
         .frame(width: NotchLayout.ringDiameter, height: NotchLayout.ringDiameter)
         // Pressed in while it works, and released when the answer lands. The

@@ -30,6 +30,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let updater: Updater
     private let catalog: QueryCatalog?
     private let usageStore: UsageStore?
+    private let hooks: HookSettings?
 
     init(preferences: Preferences,
          providers: @escaping () -> [ProviderSummary],
@@ -38,7 +39,8 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
          signIn: @escaping (String) -> Bool,
          switchAccount: @escaping (String) -> Bool,
          retry: @escaping (String) -> Void,
-         catalog: QueryCatalog? = nil, usageStore: UsageStore? = nil) {
+         catalog: QueryCatalog? = nil, usageStore: UsageStore? = nil, hooks: HookSettings? = nil) {
+        self.hooks = hooks
         self.catalog = catalog
         self.usageStore = usageStore
         self.switchAccount = switchAccount
@@ -157,7 +159,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                                    signIn: signIn,
                                    switchAccount: switchAccount,
                                    retry: retry,
-                                   updater: updater, catalog: catalog, usageStore: usageStore)
+                                   updater: updater, catalog: catalog, usageStore: usageStore, hooks: hooks)
         )
         window.center()
         window.isReleasedWhenClosed = false
