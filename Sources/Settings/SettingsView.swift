@@ -427,6 +427,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                NotchTriggerHeightRow(value: $preferences.notchTriggerHeight)
+                Text("Only when attached to the hardware notch. Positive values extend downward; negative values shrink upward.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Picker("Edge", selection: $preferences.notchEdge) {
                     ForEach(NotchEdge.allCases) { Text($0.title).tag($0) }
                 }
@@ -843,6 +849,49 @@ struct SettingsView: View {
     }
 
 
+}
+
+private struct NotchTriggerHeightRow: View {
+    @Binding var value: Int
+    @State private var text: String
+    @FocusState private var isFocused: Bool
+
+    init(value: Binding<Int>) {
+        _value = value
+        _text = State(initialValue: String(value.wrappedValue))
+    }
+
+    var body: some View {
+        HStack {
+            Text("Trigger height")
+            Spacer()
+            TextField("Trigger height", text: $text)
+                .frame(width: 60)
+                .multilineTextAlignment(.trailing)
+                .focused($isFocused)
+                .onSubmit { commit() }
+                .onChange(of: text) { _, next in
+                    if let parsed = NotchTriggerHeight.parse(next), parsed != value { value = parsed }
+                }
+                .onChange(of: isFocused) { _, focused in
+                    if !focused { commit() }
+                }
+            Text("pt")
+            Stepper("Trigger height", value: Binding(
+                get: { value },
+                set: { value = $0; text = String($0) }
+            ), in: NotchTriggerHeight.range)
+                .labelsHidden()
+        }
+        .onChange(of: value) { _, next in
+            if !isFocused { text = String(next) }
+        }
+    }
+
+    private func commit() {
+        value = NotchTriggerHeight.committedValue(text, current: value)
+        text = String(value)
+    }
 }
 
 /// A grab cursor AppKit can be forced to re-evaluate on the spot.

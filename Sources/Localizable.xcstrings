@@ -1,6 +1,48 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Fewer accidental openings below your Mac's notch." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "减少 Mac 刘海下方的误触展开。" } }
+      }
+    },
+    "A closer hover target" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "靠近刘海才展开" } }
+      }
+    },
+    "When attached to the hardware notch, the default trigger boundary is now just 2pt below its bottom edge to reduce accidental openings over browser tabs." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "吸附真实刘海时，默认触发边界收窄至底边下方 2pt，减少鼠标经过浏览器标签栏时的意外展开。" } }
+      }
+    },
+    "Adjust the trigger height" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "自定义触发高度" } }
+      }
+    },
+    "In Appearance, set Trigger height from -20 to +20pt. Positive values extend downward; negative values require moving further into the notch. Changes apply immediately and are saved." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "在外观设置中将触发高度设为 -20～+20pt。正值向下扩展，负值需进一步进入刘海内部。修改即时生效并自动保存。" } }
+      }
+    },
+    "Trigger height" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "触发高度" } }
+      }
+    },
+    "Only when attached to the hardware notch. Positive values extend downward; negative values shrink upward." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "仅用于吸附真实刘海。正值向下扩展，负值向上收缩。" } }
+      }
+    },
   "Complete Chinese copy and clearer live request counts.": {
     "extractionState": "manual",
     "localizations": {

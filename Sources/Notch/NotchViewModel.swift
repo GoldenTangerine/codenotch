@@ -104,6 +104,7 @@ final class NotchViewModel: ObservableObject {
     /// Set by the window controller from the screen the panel is on, because
     /// that is the only thing that knows which screen that is.
     @Published var hardwareNotch: HardwareNotch?
+    @Published var notchTriggerHeight = NotchTriggerHeight.defaultValue
 
     /// How much screen there is to spend on the panel.
     ///

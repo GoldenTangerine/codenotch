@@ -40,6 +40,20 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.2",
+            headline: String(localized: "Fewer accidental openings below your Mac's notch."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "A closer hover target"),
+                    detail: String(localized: "When attached to the hardware notch, the default trigger boundary is now just 2pt below its bottom edge to reduce accidental openings over browser tabs.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Adjust the trigger height"),
+                    detail: String(localized: "In Appearance, set Trigger height from -20 to +20pt. Positive values extend downward; negative values require moving further into the notch. Changes apply immediately and are saved.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.1",
             headline: String(localized: "Complete Chinese copy and clearer live request counts."),
             changes: [

@@ -1,5 +1,53 @@
+/**
+ @name: 偏好设置测试
+ @Descripttion: 验证设置迁移与刘海触发高度持久化。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 09:41:19
+ @LastEditTime: 2026-09-09 09:41:19
+ @FilePath: Tests/PreferencesTests.swift
+ */
+import AppKit
 import XCTest
 @testable import Codenotch
+
+@MainActor
+final class NotchTriggerPreferencesTests: XCTestCase {
+    func testFleetAppliesHeightToExistingAndNewControllers() throws {
+        guard !NSScreen.screens.isEmpty else { throw XCTSkip("Requires a display") }
+        let fleet = NotchFleet(scope: .mainDisplay, edge: .top)
+        defer { fleet.stop() }
+        fleet.apply(notchTriggerHeight: -2)
+        fleet.show()
+        XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.notchTriggerHeight == -2 })
+        fleet.apply(notchTriggerHeight: 0)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.notchTriggerHeight == 0 })
+        fleet.stop()
+        fleet.show()
+        XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.notchTriggerHeight == 0 })
+    }
+
+    func testDefaultAndSignedValuesSurviveReload() {
+        let name = "NotchTriggerTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.notchTriggerHeight, 2)
+        for value in [-20, -2, 0, 2, 20] {
+            preferences.notchTriggerHeight = value
+            XCTAssertEqual(Preferences(defaults: defaults).notchTriggerHeight, value)
+        }
+        for (value, expected) in [(-100, -20), (100, 20)] {
+            preferences.notchTriggerHeight = value
+            XCTAssertEqual(preferences.notchTriggerHeight, expected)
+            XCTAssertEqual(Preferences(defaults: defaults).notchTriggerHeight, expected)
+            defaults.set(value, forKey: "notchTriggerHeight")
+            XCTAssertEqual(Preferences(defaults: defaults).notchTriggerHeight, expected)
+        }
+    }
+}
 
 /// The rename from UsageNotch to Codenotch moved every setting into a new,
 /// empty defaults domain — the migration is the difference between a rename

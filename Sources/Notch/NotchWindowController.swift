@@ -71,6 +71,12 @@ final class NotchWindowController {
 
     private var panel: NotchPanel?
     private var hostingView: NotchHostingView<NotchRootView>?
+    private let mouseLocation: () -> CGPoint
+
+    init(panel: NotchPanel? = nil, mouseLocation: @escaping () -> CGPoint = { NSEvent.mouseLocation }) {
+        self.panel = panel
+        self.mouseLocation = mouseLocation
+    }
 
     /// The display this notch belongs to. Nil follows the menu-bar screen,
     /// which is what a single-controller setup did before the fleet existed —
@@ -321,13 +327,21 @@ final class NotchWindowController {
         // Whatever the resting shape is — the pill, or the display's own notch
         // when it is joining one — the region that wakes it is that plus a
         // generous band, because both are small targets on a screen edge.
-        let length = max(model.restingLength, NotchLayout.pillHotZone)
-        return placement.rect(
-            along: model.slack + (model.shapeLength - length) / 2,
-            across: 0,
-            length: length,
-            depth: model.restingDepth + NotchLayout.pillHotZone
+        // 吸附真实刘海时使用用户指定的底边距离，普通胶囊保留宽松热区。
+        return NotchGeometry.activationRect(
+            placement: placement,
+            slack: model.slack,
+            shapeLength: model.shapeLength,
+            restingLength: model.restingLength,
+            restingDepth: model.restingDepth,
+            hardwareNotch: model.hardwareNotch,
+            triggerHeight: model.notchTriggerHeight
         )
+    }
+
+    func apply(notchTriggerHeight: Int) {
+        model.notchTriggerHeight = NotchTriggerHeight.clamp(notchTriggerHeight)
+        cursorMoved()
     }
 
     /// The handle's bounding box, for deciding whether the panel takes events
@@ -450,7 +464,7 @@ final class NotchWindowController {
     }
 
     private func localCursor(in frame: CGRect) -> CGPoint {
-        let mouse = NSEvent.mouseLocation
+        let mouse = mouseLocation()
         return CGPoint(x: mouse.x - frame.minX, y: frame.maxY - mouse.y)
     }
 

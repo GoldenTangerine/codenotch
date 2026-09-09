@@ -1,5 +1,57 @@
+/**
+ @name: 刘海几何测试
+ @Descripttion: 验证屏幕布局与触发区域边界。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 09:41:19
+ @LastEditTime: 2026-09-09 09:41:19
+ @FilePath: Tests/NotchGeometryTests.swift
+ */
 import XCTest
 @testable import Codenotch
+
+final class NotchActivationTests: XCTestCase {
+    private func rect(edge: NotchEdge = .top, notch: HardwareNotch? = HardwareNotch(width: 200, height: 32), height: Int) -> CGRect {
+        NotchGeometry.activationRect(
+            placement: NotchPlacement(edge: edge, panelSize: CGSize(width: 600, height: 600)),
+            slack: 100, shapeLength: 400, restingLength: 200, restingDepth: 32,
+            hardwareNotch: notch, triggerHeight: height
+        )
+    }
+
+    func testSignedHeightMovesTheLowerBoundary() {
+        for height in [-20, -2, 0, 2, 20] {
+            let region = rect(height: height)
+            XCTAssertEqual(region, CGRect(x: 200, y: 0, width: 200, height: CGFloat(32 + height)))
+            XCTAssertTrue(region.contains(CGPoint(x: 300, y: 31.5 + Double(height))))
+            XCTAssertFalse(region.contains(CGPoint(x: 300, y: 32.5 + Double(height))))
+            XCTAssertFalse(region.contains(CGPoint(x: 199, y: 1)))
+            XCTAssertFalse(region.contains(CGPoint(x: 401, y: 1)))
+            XCTAssertFalse(region.contains(CGPoint(x: 300, y: -1)))
+        }
+    }
+
+    func testBrowserTabBelowDefaultZoneDoesNotActivate() {
+        XCTAssertFalse(rect(height: 2).contains(CGPoint(x: 300, y: 40)))
+    }
+
+    func testHardwareDimensionsAndMinimumTarget() {
+        XCTAssertEqual(rect(notch: HardwareNotch(width: 180, height: 24), height: -2),
+                       CGRect(x: 210, y: 0, width: 180, height: 22))
+        XCTAssertEqual(rect(notch: HardwareNotch(width: 180, height: 10), height: -20).height, 1)
+    }
+
+    func testOtherPlacementsKeepTheirOriginalHotZone() {
+        for edge in [NotchEdge.top, .left, .right, .bottom] {
+            let placement = NotchPlacement(edge: edge, panelSize: CGSize(width: 600, height: 600))
+            let expected = placement.rect(along: 200, across: 0, length: 200,
+                                          depth: 32 + NotchLayout.pillHotZone)
+            for height in [-20, 0, 20] {
+                XCTAssertEqual(rect(edge: edge, notch: nil, height: height), expected)
+            }
+        }
+    }
+}
 
 private struct FakeScreen: ScreenDescribing {
     var frameValue: CGRect

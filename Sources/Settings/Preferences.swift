@@ -55,6 +55,14 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(notchVisibility.rawValue, forKey: Keys.visibility) }
     }
 
+    @Published var notchTriggerHeight: Int {
+        didSet {
+            let clamped = NotchTriggerHeight.clamp(notchTriggerHeight)
+            if notchTriggerHeight != clamped { notchTriggerHeight = clamped }
+            defaults.set(notchTriggerHeight, forKey: Keys.triggerHeight)
+        }
+    }
+
     /// Which screen edge the notch is welded to.
     @Published var notchEdge: NotchEdge {
         didSet { defaults.set(notchEdge.rawValue, forKey: Keys.edge) }
@@ -230,6 +238,7 @@ final class Preferences: ObservableObject {
         static let mutedAlerts = "mutedAlertProviders"
         static let hasLaunched = "hasLaunchedBefore"
         static let visibility = "notchVisibility"
+        static let triggerHeight = "notchTriggerHeight"
         static let presence = "appPresence"
         static let edge = "notchEdge"
         static let display = "notchDisplay"
@@ -306,6 +315,8 @@ final class Preferences: ObservableObject {
         // like it failed to start.
         self.notchVisibility = defaults.string(forKey: Keys.visibility)
             .flatMap(NotchVisibility.init(rawValue:)) ?? .onHover
+        self.notchTriggerHeight = NotchTriggerHeight.clamp(
+            (defaults.object(forKey: Keys.triggerHeight) as? NSNumber)?.intValue ?? NotchTriggerHeight.defaultValue)
         // Absent means never chosen. The Dock is the default because it is the
         // findable one — a new user who cannot see the app anywhere has no way
         // to learn it is running.

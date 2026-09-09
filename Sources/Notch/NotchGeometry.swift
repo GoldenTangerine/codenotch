@@ -1,3 +1,12 @@
+/**
+ @name: 刘海几何布局
+ @Descripttion: 计算屏幕位置与收起触发区域。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 09:41:19
+ @LastEditTime: 2026-09-09 09:41:19
+ @FilePath: Sources/Notch/NotchGeometry.swift
+ */
 import AppKit
 
 /// The display's *own* notch — the camera housing on a MacBook, not ours.
@@ -53,6 +62,32 @@ extension NSScreen: ScreenDescribing {
 }
 
 enum NotchGeometry {
+    static func activationRect(
+        placement: NotchPlacement,
+        slack: CGFloat,
+        shapeLength: CGFloat,
+        restingLength: CGFloat,
+        restingDepth: CGFloat,
+        hardwareNotch: HardwareNotch?,
+        triggerHeight: Int
+    ) -> CGRect {
+        if placement.edge == .top, let hardwareNotch {
+            return placement.rect(
+                along: slack + (shapeLength - hardwareNotch.width) / 2,
+                across: 0,
+                length: hardwareNotch.width,
+                depth: max(1, hardwareNotch.height + CGFloat(NotchTriggerHeight.clamp(triggerHeight)))
+            )
+        }
+        let length = max(restingLength, NotchLayout.pillHotZone)
+        return placement.rect(
+            along: slack + (shapeLength - length) / 2,
+            across: 0,
+            length: length,
+            depth: restingDepth + NotchLayout.pillHotZone
+        )
+    }
+
     /// The panel hugs the chosen edge and is centred along it.
     ///
     /// **Which edge it hugs is `visibleFrame`'s, not `frame`'s.** That is what
