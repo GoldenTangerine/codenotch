@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.7",
+            headline: String(localized: "More room for provider details."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Choose your tooltip height"),
+                    detail: String(localized: "In Appearance, choose Show all to fit every session, quota and available statistic. Default keeps the existing layout.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Fits your screen"),
+                    detail: String(localized: "Bubbles grow with their content and scroll only when the screen cannot fit it all. Edge positioning and pointer interaction follow the new size.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Start each provider at the top"),
+                    detail: String(localized: "Switching providers resets the bubble's scroll position. Refreshing the same provider keeps your place.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.6",
             headline: String(localized: "Notification sounds, at your volume."),
             changes: [

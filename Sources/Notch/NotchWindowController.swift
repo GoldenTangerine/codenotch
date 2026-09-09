@@ -129,6 +129,7 @@ final class NotchWindowController {
     private var lastVisibleFrame: CGRect?
 
     func show() {
+        model.onTooltipHeightChange = { [weak self] in self?.updateInteractiveRects() }
         relocate()
         startWatchingCursor()
         startClock()
@@ -155,6 +156,7 @@ final class NotchWindowController {
             .store(in: &cancellables)
 
         model.$hoveredIndex
+            .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 MainActor.assumeIsolated { self?.updateInteractiveRects() }
             }
@@ -221,11 +223,28 @@ final class NotchWindowController {
             let lower = model.edge.isVertical ? max(0, frame.maxY - usable.maxY) : max(0, usable.minX - frame.minX)
             let upper = model.edge.isVertical ? min(frame.height, frame.maxY - usable.minY) : min(frame.width, usable.maxX - frame.minX)
             model.tooltipAlongBounds = lower...max(lower, upper)
+        } else if model.tooltipHeightMode == .full, model.edge.isVertical {
+            let count = cellCount ?? model.snapshots.count
+            let standardSize = model.standardPanelSize(cellCount: count)
+            let standardSlack = (standardSize.height - model.shapeLength(cellCount: count)) / 2
+            let standardFrame = NotchGeometry.panelFrame(for: screen, panelSize: standardSize,
+                edge: model.edge, alongOffset: model.alongOffset, slack: standardSlack)
+            let layout = TooltipSizing.sidePanelLayout(usable: screen.visibleFrame,
+                standardFrame: standardFrame, standardSlack: standardSlack, size: size,
+                shapeLength: model.shapeLength(cellCount: count))
+            frame = layout.frame
+            model.positionedLeading = layout.leading
         } else {
             frame = NotchGeometry.panelFrame(for: screen, panelSize: size, edge: model.edge,
-                alongOffset: model.alongOffset, slack: model.slack)
+                alongOffset: model.alongOffset, slack: model.slack(cellCount: cellCount ?? model.snapshots.count))
             model.positionedLeading = nil
             model.tooltipAlongBounds = nil
+        }
+        if model.tooltipHeightMode == .full {
+            let usable = screen.visibleFrame.insetBy(dx: TooltipSizing.screenMargin, dy: TooltipSizing.screenMargin)
+            let lower = model.edge.isVertical ? max(0, frame.maxY - usable.maxY) : max(0, usable.minX - frame.minX)
+            let upper = model.edge.isVertical ? min(frame.height, frame.maxY - usable.minY) : min(frame.width, usable.maxX - frame.minX)
+            model.tooltipAlongBounds = lower...max(lower, upper)
         }
         lastVisibleFrame = screen.visibleFrame
 
@@ -375,17 +394,10 @@ final class NotchWindowController {
 
     /// The card, its tail, and the gap between the tail and the notch — so
     /// sliding the pointer off the notch and onto the card never leaves it.
-    private func tooltipRect(index: Int) -> CGRect? {
+    func tooltipRect(index: Int) -> CGRect? {
         guard model.snapshots.indices.contains(index) else { return nil }
         let snapshot = model.snapshots[index]
-        let cardHeight = NotchLayout.cardHeight(
-            windowCount: snapshot.windows.count,
-            sessionCount: model.activity(for: snapshot.id)?.sessions.count ?? 0,
-            sessionCap: model.sessionCap,
-            statusMessage: snapshot.statusMessage,
-            blockMessage: snapshot.block?.summary(now: model.now),
-            linked: snapshot.linked != nil
-        )
+        let cardHeight = model.tooltipHeight(for: snapshot)
         // Across the stack the region is the card, its tail, and the gap the
         // pointer has to cross. Along it, the card's own extent.
         let cardAcross = model.edge.isVertical ? NotchLayout.cardWidth : cardHeight
@@ -631,6 +643,12 @@ final class NotchWindowController {
             return
         }
         togglePinned()
+    }
+
+    func apply(tooltipHeightMode: TooltipHeightMode) {
+        guard model.tooltipHeightMode != tooltipHeightMode else { return }
+        model.tooltipHeightMode = tooltipHeightMode
+        relocate()
     }
 
     /// Move the notch to another screen edge.

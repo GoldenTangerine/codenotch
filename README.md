@@ -28,6 +28,11 @@ Hover a ring for its limit windows and when they reset. By default, Claude's rin
 same **current session** window Claude Code's own `/usage` leads with, so the
 two never disagree.
 
+In **Settings → Appearance → Tooltip height**, choose **Show all** to expand
+provider details to their content, including every session and available statistic.
+The bubble scrolls only when its content exceeds the current screen's usable
+height. **Default** preserves the existing compact layout.
+
 ## Windows
 
 A Windows port — Rust/Tauri 2, same design and providers — lives in [`windows/`](windows/README.md).

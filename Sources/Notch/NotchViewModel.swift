@@ -13,10 +13,39 @@ import Combine
 @MainActor
 final class NotchViewModel: ObservableObject {
     @Published var snapshots: [ProviderSnapshot] = []
+    @Published var tooltipHeightMode: TooltipHeightMode = .standard
+    @Published var fullTooltipHeightLimit: CGFloat = NotchLayout.defaultMaxCardHeight
+    @Published private(set) var tooltipHeights: [String: CGFloat] = [:]
+    var onTooltipHeightChange: (() -> Void)?
+
+    func recordTooltipHeight(_ height: CGFloat, for snapshot: ProviderSnapshot, activity: ActivitySummary?) {
+        guard tooltipHeightMode == .full, hoveredSnapshot == snapshot,
+              self.activity(for: snapshot.id) == activity, height.isFinite, height > 0 else { return }
+        let rounded = height.rounded(.up)
+        guard tooltipHeights[snapshot.id] != rounded else { return }
+        tooltipHeights[snapshot.id] = rounded
+        onTooltipHeightChange?()
+    }
+
+    func tooltipHeight(for snapshot: ProviderSnapshot) -> CGFloat {
+        if tooltipHeightMode == .full, let measured = tooltipHeights[snapshot.id] {
+            return TooltipSizing.height(natural: measured, limit: fullTooltipHeightLimit)
+        }
+        let standard = NotchLayout.cardHeight(
+            windowCount: snapshot.windows.count,
+            sessionCount: activity(for: snapshot.id)?.sessions.count ?? 0,
+            sessionCap: sessionCap, statusMessage: snapshot.statusMessage,
+            blockMessage: snapshot.block?.summary(now: now), linked: snapshot.linked != nil)
+        guard tooltipHeightMode == .full else { return standard }
+        return TooltipSizing.height(natural: standard, limit: fullTooltipHeightLimit)
+    }
 
     func replaceSnapshots(_ next: [ProviderSnapshot]) {
         let hoveredID = hoveredSnapshot?.id
         snapshots = next
+        let ids = Set(next.map(\.id))
+        let retained = tooltipHeights.filter { ids.contains($0.key) }
+        if retained.count != tooltipHeights.count { tooltipHeights = retained }
         hoveredIndex = hoveredID.flatMap { id in next.firstIndex { $0.id == id } }
         scrollStart = visibleStart
     }
@@ -130,6 +159,8 @@ final class NotchViewModel: ObservableObject {
         if screenSize != size { screenSize = size }
         let usable = screen.visibleFrameValue.size
         if screenUsableSize != usable { screenUsableSize = usable }
+        let limit = TooltipSizing.heightLimit(on: screen, edge: edge, contentInset: contentInset)
+        if fullTooltipHeightLimit != limit { fullTooltipHeightLimit = limit }
     }
 
     /// How far in from the bezel the notch's contents start.
@@ -354,14 +385,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     func tooltipAlongLength(for snapshot: ProviderSnapshot) -> CGFloat {
-        edge.isVertical ? NotchLayout.cardHeight(
-            windowCount: snapshot.windows.count,
-            sessionCount: activity(for: snapshot.id)?.sessions.count ?? 0,
-            sessionCap: sessionCap,
-            statusMessage: snapshot.statusMessage,
-            blockMessage: snapshot.block?.summary(now: now),
-            linked: snapshot.linked != nil
-        ) : NotchLayout.cardWidth
+        edge.isVertical ? tooltipHeight(for: snapshot) : NotchLayout.cardWidth
     }
 
     func tooltipTailOffset(index: Int, snapshot: ProviderSnapshot) -> CGFloat {
@@ -386,7 +410,8 @@ final class NotchViewModel: ObservableObject {
     }
 
     func maxCardHeight(cellCount: Int) -> CGFloat {
-        NotchLayout.maxCardHeight(sessionCap: sessionCap(cellCount: cellCount))
+        tooltipHeightMode == .full ? fullTooltipHeightLimit
+            : NotchLayout.maxCardHeight(sessionCap: sessionCap(cellCount: cellCount))
     }
 
     /// How tall the tallest card may be before the panel runs off the screen.
@@ -457,6 +482,10 @@ final class NotchViewModel: ObservableObject {
     }
 
     func panelSize(cellCount: Int) -> CGSize {
+        if tooltipHeightMode == .full, edge.isVertical, screenUsableSize.height > 0 {
+            return CGSize(width: contentInset + NotchLayout.bodyDepth(for: edge)
+                          + NotchLayout.tooltipDepth(for: edge), height: screenUsableSize.height)
+        }
         let card = maxCardHeight(cellCount: cellCount)
         return NotchPlacement.panelSize(
             edge: edge,
@@ -466,5 +495,13 @@ final class NotchViewModel: ObservableObject {
                 + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card)
                 + NotchLayout.bodyDepth(for: edge)
         )
+    }
+
+    func standardPanelSize(cellCount: Int) -> CGSize {
+        let card = NotchLayout.maxCardHeight(sessionCap: sessionCap(cellCount: cellCount))
+        return NotchPlacement.panelSize(edge: edge,
+            length: shapeLength(cellCount: cellCount) + 2 * NotchLayout.slack(for: edge, maxCardHeight: card),
+            depth: contentInset + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card)
+                + NotchLayout.bodyDepth(for: edge))
     }
 }

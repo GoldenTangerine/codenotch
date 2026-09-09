@@ -310,6 +310,16 @@ private struct LimitWindowRow: View {
     }
 }
 
+private struct TooltipScrollContent<Content: View>: View {
+    let scrolls: Bool
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        if scrolls { ScrollView { content } }
+        else { content }
+    }
+}
+
 private struct CodeSwitchTooltip: View {
     @Environment(\.codenotchAccentColor) private var accentColor
     let snapshot: ProviderSnapshot
@@ -317,6 +327,7 @@ private struct CodeSwitchTooltip: View {
     let now: Date
     var activity: ActivitySummary? = nil
     var resetTimeFormat: ResetTimeFormat = .automatic
+    var fullContent = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -324,7 +335,7 @@ private struct CodeSwitchTooltip: View {
                 QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph)
                     .foregroundStyle(Palette.textPrimary)
             }
-            ScrollView {
+            TooltipScrollContent(scrolls: !fullContent) {
                 VStack(alignment: .leading, spacing: NotchLayout.blockSpacing) {
                     if let activity, !activity.sessions.isEmpty {
                         SessionList(summary: activity, now: now, cap: activity.sessions.count)
@@ -383,7 +394,7 @@ private struct CodeSwitchTooltip: View {
                 .padding(.top, NotchLayout.headerToBlock)
             }
         }
-        .frame(height: NotchLayout.cardHeight(windowCount: 0, linked: true) - 2 * NotchLayout.cardPadding)
+        .frame(height: fullContent ? nil : NotchLayout.cardHeight(windowCount: 0, linked: true) - 2 * NotchLayout.cardPadding)
     }
 
     private func metric(_ label: String, _ value: String) -> some View {
@@ -400,6 +411,7 @@ private struct ProviderTooltip: View {
     let snapshot: ProviderSnapshot
     let now: Date
     let resetTimeFormat: ResetTimeFormat
+    var fullContent = false
 
     /// Only worth saying when the numbers are not current. A remembered reading
     /// has to be dated, or it quietly passes itself off as live.
@@ -430,7 +442,7 @@ private struct ProviderTooltip: View {
                     .foregroundStyle(Palette.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, NotchLayout.headerToBlock)
-            } else if snapshot.windows.count > NotchLayout.maxWindowCount {
+            } else if snapshot.windows.count > NotchLayout.maxWindowCount && !fullContent {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) { windowRows }
                 }
@@ -585,11 +597,15 @@ struct TooltipCard: View {
     var sessionCap: Int = NotchLayout.defaultSessionCap
     var tailOffset: CGFloat = 0
     var resetTimeFormat: ResetTimeFormat = .automatic
+    var heightMode: TooltipHeightMode = .standard
+    var resolvedHeight: CGFloat?
+    var onHeightChange: ((CGFloat) -> Void)?
+    @State private var naturalHeight: CGFloat = 0
 
     /// The same figure the hover region uses, so what is drawn and what is
     /// reachable can never drift apart.
     private var height: CGFloat {
-        NotchLayout.cardHeight(
+        resolvedHeight ?? NotchLayout.cardHeight(
             windowCount: snapshot.windows.count,
             sessionCount: activity?.sessions.count ?? 0,
             sessionCap: sessionCap,
@@ -601,30 +617,54 @@ struct TooltipCard: View {
 
     var body: some View {
         TooltipShell(height: height, direction: direction, content: {
-            // Stacked, not replaced in place: during a swap both sets of rows
-            // exist for a moment, and in a ZStack they overlap and dissolve
-            // instead of shoving each other around. Top-aligned so neither
-            // drifts while the card resizes around them.
-            ZStack(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: 0) {
-                    if let details = snapshot.linked {
-                        CodeSwitchTooltip(snapshot: snapshot, details: details, now: now, activity: activity, resetTimeFormat: resetTimeFormat)
-                    } else {
-                        ProviderTooltip(snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat)
-                        if let activity {
-                            SessionList(summary: activity, now: now, cap: sessionCap)
+            if heightMode == .full {
+                ScrollView {
+                    rows
+                        .frame(width: NotchLayout.cardWidth - 2 * NotchLayout.cardPadding, alignment: .topLeading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured in
+                            let total = measured + 2 * NotchLayout.cardPadding
+                            naturalHeight = total
+                            onHeightChange?(total)
                         }
-                    }
                 }
-                // An identity, so one provider's rows are never interpolated
-                // into another's — that is what slid text through positions
-                // belonging to neither layout. A crossfade rather than an
-                // instant swap, so the change is part of the movement instead
-                // of a cut in the middle of it.
+                .scrollDisabled(naturalHeight <= height)
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(height: max(1, height - 2 * NotchLayout.cardPadding))
                 .id(snapshot.id)
-                .transition(.opacity.animation(NotchMotion.crossfade))
+            } else {
+                // Stacked, not replaced in place: during a swap both sets of rows
+                // exist for a moment, and in a ZStack they overlap and dissolve
+                // instead of shoving each other around. Top-aligned so neither
+                // drifts while the card resizes around them.
+                ZStack(alignment: .topLeading) {
+                    rows
+                    // An identity, so one provider's rows are never interpolated
+                    // into another's — that is what slid text through positions
+                    // belonging to neither layout. A crossfade rather than an
+                    // instant swap, so the change is part of the movement instead
+                    // of a cut in the middle of it.
+                    .id(snapshot.id)
+                    .transition(.opacity.animation(NotchMotion.crossfade))
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
         }, tailOffset: tailOffset)
+    }
+
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let details = snapshot.linked {
+                CodeSwitchTooltip(snapshot: snapshot, details: details, now: now, activity: activity,
+                                  resetTimeFormat: resetTimeFormat, fullContent: heightMode == .full)
+            } else {
+                ProviderTooltip(snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat,
+                                fullContent: heightMode == .full)
+                if let activity {
+                    SessionList(summary: activity, now: now,
+                                cap: heightMode == .full ? activity.sessions.count : sessionCap)
+                }
+            }
+        }
     }
 }

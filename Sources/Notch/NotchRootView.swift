@@ -57,14 +57,20 @@ struct NotchRootView: View {
 
                 if let snapshot = model.hoveredSnapshot, let index = model.hoveredIndex,
                    model.isExpanded {
+                    let activity = model.activity(for: snapshot.id)
                     TooltipCard(
                         snapshot: snapshot,
-                        activity: model.activity(for: snapshot.id),
+                        activity: activity,
                         now: model.now,
                         direction: model.edge.tooltipDirection,
                         sessionCap: model.sessionCap,
                         tailOffset: model.tooltipTailOffset(index: index, snapshot: snapshot),
-                        resetTimeFormat: model.resetTimeFormat
+                        resetTimeFormat: model.resetTimeFormat,
+                        heightMode: model.tooltipHeightMode,
+                        resolvedHeight: model.tooltipHeight(for: snapshot),
+                        onHeightChange: { height in
+                            model.recordTooltipHeight(height, for: snapshot, activity: activity)
+                        }
                     )
                         // Deliberately *no* `.id` here: the card is one object
                         // that travels and resizes between cells, which reads
@@ -219,14 +225,7 @@ struct NotchRootView: View {
     ) -> CGPoint {
         let card = model.edge.isVertical
             ? NotchLayout.cardWidth
-            : NotchLayout.cardHeight(
-                windowCount: snapshot.windows.count,
-                sessionCount: model.activity(for: snapshot.id)?.sessions.count ?? 0,
-                sessionCap: model.sessionCap,
-                statusMessage: snapshot.statusMessage,
-                blockMessage: snapshot.block?.summary(now: model.now),
-                linked: snapshot.linked != nil
-            )
+            : model.tooltipHeight(for: snapshot)
         return place.point(
             along: model.tooltipAlong(index: index, length: model.tooltipAlongLength(for: snapshot)),
             across: model.tooltipInset + (NotchLayout.tailLength + card) / 2

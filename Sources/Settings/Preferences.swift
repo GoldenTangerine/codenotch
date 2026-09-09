@@ -15,6 +15,9 @@ import os
 /// What the user has chosen, kept in `UserDefaults`.
 @MainActor
 final class Preferences: ObservableObject {
+    @Published var tooltipHeightMode: TooltipHeightMode {
+        didSet { defaults.set(tooltipHeightMode.rawValue, forKey: "tooltipHeightMode") }
+    }
     @Published var codeSwitchEnabled: Bool {
         didSet { defaults.set(codeSwitchEnabled, forKey: "codeSwitchEnabled") }
     }
@@ -315,6 +318,8 @@ final class Preferences: ObservableObject {
     }
 
     init(defaults: UserDefaults = .standard, domainName: String? = nil) {
+        self.tooltipHeightMode = defaults.string(forKey: "tooltipHeightMode")
+            .flatMap(TooltipHeightMode.init(rawValue:)) ?? .standard
         self.defaults = defaults
         self.codeSwitchEnabled = defaults.object(forKey: "codeSwitchEnabled") as? Bool ?? true
         self.domainName = domainName ?? (defaults === UserDefaults.standard ? Bundle.main.bundleIdentifier : nil)

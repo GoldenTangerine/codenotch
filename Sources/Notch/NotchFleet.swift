@@ -43,6 +43,7 @@ final class NotchFleet {
     /// `NotchWindowController.currentScreen()`.
     private var displayPreference: DisplayPreference = .followActiveWindow
     private var resetTimeFormat: ResetTimeFormat = .automatic
+    private var tooltipHeightMode: TooltipHeightMode = .standard
     private var accentColor: AccentColorChoice = .system
     private var notchTriggerHeight = NotchTriggerHeight.defaultValue
     /// The ⌥-drag nudge along the current edge. One value for the whole
@@ -151,6 +152,13 @@ final class NotchFleet {
         self.resetTimeFormat = resetTimeFormat
         for controller in controllers.values {
             controller.model.resetTimeFormat = resetTimeFormat
+        }
+    }
+
+    func apply(tooltipHeightMode: TooltipHeightMode) {
+        self.tooltipHeightMode = tooltipHeightMode
+        for controller in controllers.values {
+            controller.apply(tooltipHeightMode: tooltipHeightMode)
         }
     }
 
@@ -339,6 +347,7 @@ final class NotchFleet {
         }
         controller.model.alongOffset = alongOffset
         controller.model.resetTimeFormat = resetTimeFormat
+        controller.model.tooltipHeightMode = tooltipHeightMode
         controller.model.accentColor = accentColor
         controller.model.notchTriggerHeight = notchTriggerHeight
         controller.onRefresh = onRefresh

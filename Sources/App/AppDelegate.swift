@@ -244,6 +244,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(resetTimeFormat: $0) }
                 .store(in: &cancellables)
 
+            preferences.$tooltipHeightMode
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(tooltipHeightMode: $0) }
+                .store(in: &cancellables)
+
             preferences.$accentColor
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(accentColor: $0) }
@@ -376,6 +381,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(displayPreference: preferences.displayPreference)
         fleet.apply(alongOffset: preferences.offset(for: preferences.notchEdge))
         fleet.apply(resetTimeFormat: preferences.resetTimeFormat)
+        fleet.apply(tooltipHeightMode: preferences.tooltipHeightMode)
         fleet.apply(accentColor: preferences.accentColor)
         fleet.show()
     }

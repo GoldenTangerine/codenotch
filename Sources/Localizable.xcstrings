@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "More room for provider details." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "供应商详情，展示更完整。"}}}},
+    "Choose your tooltip height" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "选择气泡高度"}}}},
+    "In Appearance, choose Show all to fit every session, quota and available statistic. Default keeps the existing layout." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "在外观设置中选择“完整显示”，展开全部会话、额度及已有统计信息；“默认”保持现有布局。"}}}},
+    "Fits your screen" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "适应屏幕空间"}}}},
+    "Bubbles grow with their content and scroll only when the screen cannot fit it all. Edge positioning and pointer interaction follow the new size." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "气泡随内容自动加高，仅在屏幕容纳不下时滚动，边缘定位和鼠标交互范围同步调整。"}}}},
+    "Start each provider at the top" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "切换供应商从顶部查看"}}}},
+    "Switching providers resets the bubble's scroll position. Refreshing the same provider keeps your place." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "切换供应商后重置气泡滚动位置，同一供应商刷新时保留当前查看位置。"}}}},
+    "Show all fits the bubble to its content. Scroll only when it exceeds the screen height." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "完整显示时按内容自动加高，仅超出屏幕可用高度时滚动。"}}}},
+    "Default" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "默认"}}}},
+    "Show all" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "完整显示"}}}},
+    "Tooltip height" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "气泡高度"}}}},
     "Notification sounds, at your volume." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "通知声音，音量由你掌控。"}}}},
     "Adjust notification volume" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "调节通知音量"}}}},
     "Set a shared volume from 0 to 100% for notifications and previews. Your choice is saved without changing system volume." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "通知和试听共用 0–100% 音量，设置自动保存，不改变系统音量。"}}}},
