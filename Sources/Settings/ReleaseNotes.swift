@@ -40,6 +40,16 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.3",
+            headline: String(localized: "A cleaner trigger height setting."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Clearer trigger height layout"),
+                    detail: String(localized: "Removed the duplicate label and prevented wrapping. The number, pt unit and stepper stay vertically centered, with the number right-aligned.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.2",
             headline: String(localized: "Fewer accidental openings below your Mac's notch."),
             changes: [

@@ -864,8 +864,10 @@ private struct NotchTriggerHeightRow: View {
     var body: some View {
         HStack {
             Text("Trigger height")
+                .lineLimit(1)
             Spacer()
             TextField("Trigger height", text: $text)
+                .labelsHidden()
                 .frame(width: 60)
                 .multilineTextAlignment(.trailing)
                 .focused($isFocused)
@@ -877,11 +879,13 @@ private struct NotchTriggerHeightRow: View {
                     if !focused { commit() }
                 }
             Text("pt")
+                .fixedSize()
             Stepper("Trigger height", value: Binding(
                 get: { value },
                 set: { value = $0; text = String($0) }
             ), in: NotchTriggerHeight.range)
                 .labelsHidden()
+                .fixedSize()
         }
         .onChange(of: value) { _, next in
             if !isFocused { text = String(next) }

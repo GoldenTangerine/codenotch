@@ -1,6 +1,24 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "A cleaner trigger height setting." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "触发高度设置更清晰。" } }
+      }
+    },
+    "Clearer trigger height layout" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "优化触发高度排版" } }
+      }
+    },
+    "Removed the duplicate label and prevented wrapping. The number, pt unit and stepper stay vertically centered, with the number right-aligned." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "移除重复标签并避免文字换行。数字、pt 单位和步进按钮保持垂直居中，数字保留右对齐。" } }
+      }
+    },
     "Fewer accidental openings below your Mac's notch." : {
       "extractionState" : "manual",
       "localizations" : {
