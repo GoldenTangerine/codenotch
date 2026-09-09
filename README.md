@@ -11,7 +11,7 @@
 
 # Codenotch
 
-[![CI](https://github.com/vinzdg/codenotch/actions/workflows/ci.yml/badge.svg)](https://github.com/vinzdg/codenotch/actions/workflows/ci.yml)
+[![Release](https://github.com/GoldenTangerine/codenotch/actions/workflows/release.yml/badge.svg)](https://github.com/GoldenTangerine/codenotch/actions/workflows/release.yml)
 ![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-black)
 ![Swift](https://img.shields.io/badge/swift-5-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -247,8 +247,9 @@ No signing identity is required for either. `make release` — which archives,
 notarizes, and produces a signed auto-update feed — needs a Developer ID
 certificate and an App Store Connect notary profile, and is only ever run by
 the maintainer to cut an official release. See
-[CONTRIBUTING.md](CONTRIBUTING.md). CI runs the same unit tests unsigned via
-`make test-ci`.
+[CONTRIBUTING.md](CONTRIBUTING.md). GitHub Actions runs tests, packages the DMG,
+and publishes a release only when a version tag such as `v1.6.2` is pushed.
+Branch pushes and pull requests do not trigger a separate CI workflow.
 
 Run with `CODENOTCH_DEMO=1` to see fixed sample data instead of live readings.
 
