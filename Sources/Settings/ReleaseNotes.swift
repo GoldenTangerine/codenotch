@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.6",
+            headline: String(localized: "Notification sounds, at your volume."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Adjust notification volume"),
+                    detail: String(localized: "Set a shared volume from 0 to 100% for notifications and previews. Your choice is saved without changing system volume.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Choose which events make a sound"),
+                    detail: String(localized: "Choose Off for Finished or Waiting on you to silence that event while keeping its visual alert.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Hear your changes right away"),
+                    detail: String(localized: "Changing a sound or finishing a volume adjustment plays a preview. Manual replay remains available, even when notification sounds are off.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.5",
             headline: String(localized: "CLI activity alerts, ready to install."),
             changes: [

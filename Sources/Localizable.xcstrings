@@ -1,6 +1,16 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Notification sounds, at your volume." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "通知声音，音量由你掌控。"}}}},
+    "Adjust notification volume" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "调节通知音量"}}}},
+    "Set a shared volume from 0 to 100% for notifications and previews. Your choice is saved without changing system volume." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "通知和试听共用 0–100% 音量，设置自动保存，不改变系统音量。"}}}},
+    "Choose which events make a sound" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "分别设置通知声音"}}}},
+    "Choose Off for Finished or Waiting on you to silence that event while keeping its visual alert." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "为“完成”或“等待你处理”选择“关闭”，仅关闭该类提示音，保留刘海提示。"}}}},
+    "Hear your changes right away" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "调整后立即试听"}}}},
+    "Changing a sound or finishing a volume adjustment plays a preview. Manual replay remains available, even when notification sounds are off." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "切换声音或调节音量结束后自动试听，并保留手动重播。关闭通知声音后仍可试听。"}}}},
+    "Sound choices and previews remain available when notification sounds are off." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "关闭通知声音后，仍可选择声音和试听。"}}}},
+    "Off" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "关闭"}}}},
+    "Volume" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "音量"}}}},
     "CLI activity alerts, ready to install." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "CLI 活动提醒，现已可安装。" } } } },
     "A question badge and amber breathing ring mark waiting sessions. Running keeps its spinner, and Code Switch R 2.11.17 can show the current supplier." : {"localizations" : {"zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "等待时显示问号角标和琥珀色呼吸效果，运行时保留转圈。配合 Code Switch R 2.11.17 可显示当前供应商。"}}}},
     "Add configuration directory" : {"extractionState" : "manual", "localizations" : {"zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "添加配置目录"}}}},

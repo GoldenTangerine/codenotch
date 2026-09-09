@@ -112,6 +112,10 @@ struct SettingsView: View {
     /// another app, so the user is always coming *back* here to see it — which
     /// makes returning focus the exact moment the old value is wrong.
     @State private var accounts: [ProviderSummary] = []
+    @State private var recentSound: String?
+    @State private var editingSoundVolume = false
+    @State private var volumePreviewScheduler = SoundPreviewScheduler()
+    @State private var availableSounds: [String] = []
     @State private var displays: [DisplayOption] = []
     @State private var selection: SettingsSection = .accounts
     /// The provider being dragged right now.
@@ -511,6 +515,23 @@ struct SettingsView: View {
         .formStyle(.grouped)
     }
 
+    private func previewSound(_ name: String) {
+        volumePreviewScheduler.cancel()
+        if name == SessionChime.off { SessionChime.stop(); return }
+        if SessionChime.play(name, volume: preferences.sessionSoundVolume) { recentSound = name }
+    }
+
+    private func previewVolume() {
+        guard let name = SessionChime.previewName(recent: recentSound,
+            finished: preferences.sessionEndSoundName, blocked: preferences.sessionBlockedSoundName)
+        else { return }
+        previewSound(name)
+    }
+
+    private func scheduleVolumePreview() {
+        volumePreviewScheduler.schedule { previewVolume() }
+    }
+
     private var notificationsPane: some View {
         Form {
             if let hooks { HookSettingsView(hooks: hooks) }
@@ -534,14 +555,46 @@ struct SettingsView: View {
 
                 Toggle("Play a sound", isOn: $preferences.sessionEndSound)
 
+                LabeledContent("Volume") {
+                    HStack {
+                        Slider(value: $preferences.sessionSoundVolume, in: 0...1, step: 0.01) { editing in
+                            editingSoundVolume = editing
+                            volumePreviewScheduler.cancel()
+                            if !editing { scheduleVolumePreview() }
+                        }
+                        .accessibilityLabel(Text("Volume"))
+                        .accessibilityValue(Text(verbatim: "\(Int((preferences.sessionSoundVolume * 100).rounded()))%"))
+                        Text(verbatim: "\(Int((preferences.sessionSoundVolume * 100).rounded()))%")
+                            .monospacedDigit()
+                            .frame(width: 44, alignment: .trailing)
+                    }
+                }
+                .onChange(of: preferences.sessionSoundVolume) { _, volume in
+                    SessionChime.updateVolume(volume)
+                    volumePreviewScheduler.cancel()
+                    if !editingSoundVolume {
+                        scheduleVolumePreview()
+                    }
+                }
+                .onAppear { availableSounds = SessionChime.available }
+                .onDisappear {
+                    volumePreviewScheduler.cancel()
+                    editingSoundVolume = false
+                    recentSound = nil
+                }
+
                 // Two sounds, because the two events say different things: one
                 // is "that's done", the other is "you are the hold-up". Each
                 // has a preview beside it — picking an alert sound you cannot
                 // hear until the next time it fires is guesswork.
                 SoundRow(label: String(localized: "Finished"), name: $preferences.sessionEndSoundName,
-                         pickerEnabled: preferences.sessionEndSound)
+                         available: availableSounds, volume: preferences.sessionSoundVolume, preview: previewSound)
                 SoundRow(label: String(localized: "Waiting on you"), name: $preferences.sessionBlockedSoundName,
-                         pickerEnabled: preferences.sessionEndSound)
+                         available: availableSounds, volume: preferences.sessionSoundVolume, preview: previewSound)
+
+                Text("Sound choices and previews remain available when notification sounds are off.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
                 Text("Codenotch already knows the moment an agent stops working or stops to ask you something. Clicking the notch while it is open brings that session's app to the front — the app, not the tab: only some terminals let anything outside them choose a tab, so the tooltip names the session instead.")
                     .font(.caption)
@@ -984,29 +1037,33 @@ private struct AccentColorSwatch: View {
 private struct SoundRow: View {
     let label: String
     @Binding var name: String
+    let available: [String]
+    let volume: Double
     /// The preview stays live even with the sound switched off — it is how you
     /// find out what you are switching on, and a dead button teaches nothing.
-    let pickerEnabled: Bool
+    let preview: (String) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
             Picker(label, selection: $name) {
+                Text("Off").tag(SessionChime.off)
                 // A sound that has been removed since it was chosen still has
                 // to appear, or the picker would silently show a different one
                 // and the setting would look like it had changed itself.
-                if !SessionChime.available.contains(name) {
+                if name != SessionChime.off && !available.contains(name) {
                     Text("\(name) (missing)").tag(name)
                 }
-                ForEach(SessionChime.available, id: \.self) { Text($0).tag($0) }
+                ForEach(available, id: \.self) { Text($0).tag($0) }
             }
-            .disabled(!pickerEnabled)
+            .onChange(of: name) { _, value in preview(value) }
             Button {
                 Log.usage.info("preview \(name, privacy: .public)")
-                SessionChime.play(name)
+                preview(name)
             } label: {
                 Image(systemName: "play.circle")
             }
             .buttonStyle(.borderless)
+            .disabled(volume == 0 || name == SessionChime.off || !available.contains(name))
             .help("Play \(name)")
         }
     }

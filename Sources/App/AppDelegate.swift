@@ -435,7 +435,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if preferences.sessionEndSound {
             SessionChime.play(event.reason == .blocked
                               ? preferences.sessionBlockedSoundName
-                              : preferences.sessionEndSoundName)
+                              : preferences.sessionEndSoundName,
+                              volume: preferences.sessionSoundVolume)
         }
         guard preferences.announceSessionEnd else { return }
         fleet.peek(for: preferences.peekDuration.seconds,

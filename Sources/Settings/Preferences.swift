@@ -181,6 +181,17 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(sessionEndSound, forKey: Keys.sessionEndSound) }
     }
 
+    @Published var sessionSoundVolume: Double {
+        didSet {
+            let normalized = SessionChime.normalizedVolume(sessionSoundVolume)
+            if normalized != sessionSoundVolume {
+                sessionSoundVolume = normalized
+                return
+            }
+            defaults.set(sessionSoundVolume, forKey: Keys.sessionSoundVolume)
+        }
+    }
+
     /// Which sound a finished turn makes.
     @Published var sessionEndSoundName: String {
         didSet { defaults.set(sessionEndSoundName, forKey: Keys.sessionEndSoundName) }
@@ -249,6 +260,7 @@ final class Preferences: ObservableObject {
         static let order = "providerOrder"
         static let announceSessionEnd = "announceSessionEnd"
         static let sessionEndSound = "sessionEndSound"
+        static let sessionSoundVolume = "sessionSoundVolume"
         static let peekDuration = "peekDuration"
         static let sessionEndSoundName = "sessionEndSoundName"
         static let sessionBlockedSoundName = "sessionBlockedSoundName"
@@ -353,6 +365,8 @@ final class Preferences: ObservableObject {
         // key that was never written — cannot stand in for the default.
         self.announceSessionEnd = defaults.object(forKey: Keys.announceSessionEnd) as? Bool ?? true
         self.sessionEndSound = defaults.object(forKey: Keys.sessionEndSound) as? Bool ?? true
+        self.sessionSoundVolume = SessionChime.normalizedVolume(
+            defaults.object(forKey: Keys.sessionSoundVolume) as? Double ?? 1)
         self.peekDuration = defaults.string(forKey: Keys.peekDuration)
             .flatMap(PeekDuration.init(rawValue:)) ?? .standard
         self.sessionEndSoundName = defaults.string(forKey: Keys.sessionEndSoundName)
