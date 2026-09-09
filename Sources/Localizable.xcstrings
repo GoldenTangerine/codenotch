@@ -1,6 +1,7 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "CLI activity alerts, ready to install." : { "localizations" : { "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "CLI 活动提醒，现已可安装。" } } } },
     "A question badge and amber breathing ring mark waiting sessions. Running keeps its spinner, and Code Switch R 2.11.17 can show the current supplier." : {"localizations" : {"zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "等待时显示问号角标和琥珀色呼吸效果，运行时保留转圈。配合 Code Switch R 2.11.17 可显示当前供应商。"}}}},
     "Add configuration directory" : {"extractionState" : "manual", "localizations" : {"zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "添加配置目录"}}}},
     "After installing or repairing, open /hooks in Codex CLI and review the Codenotch hooks." : {"extractionState" : "manual", "localizations" : {"zh-Hans" : {"stringUnit" : {"state" : "translated", "value" : "安装或修复后，请在 Codex CLI 中打开 /hooks 并审查 Codenotch 条目。"}}}},

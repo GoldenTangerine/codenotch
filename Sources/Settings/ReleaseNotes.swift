@@ -40,6 +40,20 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.5",
+            headline: String(localized: "CLI activity alerts, ready to install."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Claude Code and Codex CLI hooks"),
+                    detail: String(localized: "Install hooks in Notifications to receive completion and waiting alerts. Click a session to return to its application. Codex also requires review in /hooks.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Waiting marks on every edge"),
+                    detail: String(localized: "A question badge and amber breathing ring mark waiting sessions. Running keeps its spinner, and Code Switch R 2.11.17 can show the current supplier.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.4",
             headline: String(localized: "Know when your CLI needs you."),
             changes: [
