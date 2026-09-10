@@ -28,7 +28,7 @@ import Testing
         var state = HookSessionState()
         var watcher = SessionCompletionWatcher()
         absorb(event("UserPromptSubmit"), into: &state)
-        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .started)
         absorb(event("PreToolUse", at: 1, toolName: "request_user_input", call: "q"), into: &state)
         #expect((watcher.absorb(state.merging([:])).first?.reason) == (.blocked))
         #expect(watcher.absorb(state.merging([:])).isEmpty)
@@ -307,11 +307,224 @@ import Testing
         hook.configDirectory = ClaudeProfile.default().configDirectory.path
         hook.pid = 4242
         absorb(hook, into: &state)
-        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .started)
         let native = AgentSession(id: "claude.4242", name: "native", detail: "", state: .idle,
                                   waitingFor: nil, since: now.addingTimeInterval(5), processID: 4242)
         state.reconcile(["claude": [native]])
         #expect(watcher.absorb(state.merging(["claude": [native]])).first?.reason == .finished)
         #expect(watcher.absorb(state.merging(["claude": [native]])).isEmpty)
+    }
+
+    @Test(arguments: ["claude", "codex"])
+    func startsOnlyOnSubmissionAndSurvivesToolEvents(tool: String) {
+        var state = HookSessionState()
+        var watcher = SessionCompletionWatcher()
+        func hook(_ name: String, at: Double, turn: String = "turn-1") -> HookEvent {
+            var value = event(name, at: at, toolName: "Bash", call: at >= 4 ? "approval" : "shell",
+                              turn: tool == "claude" ? nil : turn)
+            value.tool = tool
+            return value
+        }
+        absorb(hook("SessionStart", at: 0), into: &state)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        let submission = hook("UserPromptSubmit", at: 1)
+        absorb(submission, into: &state)
+        absorb(hook("PreToolUse", at: 2), into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .started)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        absorb(submission, into: &state)
+        absorb(hook("PostToolUse", at: 3), into: &state)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        absorb(hook("PermissionRequest", at: 4), into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .blocked)
+        absorb(hook("PostToolUse", at: 5), into: &state)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        absorb(hook("Stop", at: 6), into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .finished)
+        absorb(hook("UserPromptSubmit", at: 7, turn: "turn-2"), into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .started)
+    }
+
+    @Test func sameTurnSubmissionCannotResetAWaitOrRestartCompletedWork() {
+        var state = HookSessionState()
+        var watcher = SessionCompletionWatcher()
+        absorb(event("UserPromptSubmit"), into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .started)
+        absorb(event("PermissionRequest", at: 1), into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .blocked)
+        absorb(event("UserPromptSubmit", at: 2), into: &state)
+        #expect(state.records.values.first?.state == .waiting)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        absorb(event("Stop", at: 3), into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .finished)
+        absorb(event("UserPromptSubmit", at: 4), into: &state)
+        #expect(state.records.values.first?.state == .idle)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        absorb(event("UserPromptSubmit", at: 5, turn: "turn-2"), into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .started)
+        absorb(event("UserPromptSubmit", at: 6), into: &state)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+    }
+
+    @Test func expiredAndReplayedSubmissionsWithoutTurnIDsAreSilent() {
+        var state = HookSessionState()
+        var watcher = SessionCompletionWatcher()
+        let expired = event("UserPromptSubmit", at: -31, turn: nil)
+        state.absorb(expired, now: now)
+        #expect(state.records.isEmpty)
+        let submission = event("UserPromptSubmit", turn: nil)
+        absorb(submission, into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .started)
+        absorb(event("PreToolUse", toolName: "Bash", turn: nil), into: &state)
+        absorb(submission, into: &state)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        absorb(event("UserPromptSubmit", at: 1, turn: nil), into: &state)
+        #expect(watcher.absorb(state.merging([:])).first?.reason == .started)
+    }
+
+    @Test func nativeActivityDoesNotInferStartsOnLaunchOrWhenBecomingBusy() {
+        var watcher = SessionCompletionWatcher()
+        let idle = AgentSession(id: "native", name: "native", detail: "", state: .idle,
+                                waitingFor: nil, since: now)
+        let busy = AgentSession(id: "native", name: "native", detail: "", state: .busy,
+                                waitingFor: nil, since: now.addingTimeInterval(1))
+        #expect(watcher.absorb(["codex": [busy]]).isEmpty)
+        _ = watcher.absorb(["codex": [idle]])
+        #expect(watcher.absorb(["codex": [busy]]).isEmpty)
+    }
+
+    @Test func queuedStartIsReplacedByCurrentTurnCompletionOrWait() {
+        for followup in ["Stop", "PermissionRequest", "Interrupt", "SessionEnd", "UserPromptSubmit"] {
+            var state = HookSessionState()
+            var watcher = SessionCompletionWatcher()
+            absorb(event("UserPromptSubmit"), into: &state)
+            var pending = watcher.absorb(state.merging([:]))
+            #expect(pending.first?.reason == .started)
+            absorb(event(followup, at: 0.05, turn: followup == "UserPromptSubmit" ? "turn-2" : "turn-1"), into: &state)
+            #expect(SessionCompletionWatcher.nextAnnouncement(pending, sessions: state.merging([:]), enabled: { _ in true }) == nil)
+            pending += watcher.absorb(state.merging([:]))
+            let selected = SessionCompletionWatcher.nextAnnouncement(pending, sessions: state.merging([:]), enabled: { _ in true })
+            switch followup {
+            case "Stop": #expect(selected?.reason == .finished)
+            case "PermissionRequest": #expect(selected?.reason == .blocked)
+            case "UserPromptSubmit":
+                #expect(selected?.reason == .started)
+                #expect(selected?.session.noticeID != pending.first?.session.noticeID)
+            default: #expect(selected == nil)
+            }
+        }
+    }
+
+    @Test(arguments: ["claude", "codex"])
+    func lateTurnIDPreservesPendingStartAndRejectsOldTurn(tool: String) throws {
+        var state = HookSessionState()
+        var watcher = SessionCompletionWatcher()
+        func send(_ name: String, at: Double, turn: String?) {
+            var hook = event(name, at: at, toolName: "Bash", call: "shell", turn: turn)
+            hook.tool = tool
+            absorb(hook, into: &state)
+        }
+        send("UserPromptSubmit", at: 0, turn: "turn-1")
+        _ = watcher.absorb(state.merging([:]))
+        send("Stop", at: 1, turn: "turn-1")
+        _ = watcher.absorb(state.merging([:]))
+        send("UserPromptSubmit", at: 2, turn: nil)
+        let pending = watcher.absorb(state.merging([:]))
+        #expect(pending.first?.reason == .started)
+        send("Stop", at: 2.01, turn: "turn-1")
+        #expect(state.records.values.first?.state == .busy)
+        send("PreToolUse", at: 2.05, turn: "turn-2")
+        let current = try #require(state.records.values.first)
+        #expect(current.turn == "turn-2")
+        #expect(current.turnStartedAt == now.timeIntervalSince1970 + 2)
+        #expect(current.noticeID == pending.first?.session.noticeID)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        #expect(SessionCompletionWatcher.nextAnnouncement(pending, sessions: state.merging([:]), enabled: { _ in true })?.reason == .started)
+        send("UserPromptSubmit", at: 2.1, turn: "turn-2")
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+        #expect(state.records.values.first?.activeTools["shell"] == "Bash")
+    }
+
+    @Test func bindingTurnDoesNotClearAnEarlierUntaggedWait() {
+        var state = HookSessionState()
+        var watcher = SessionCompletionWatcher()
+        absorb(event("UserPromptSubmit"), into: &state)
+        absorb(event("UserPromptSubmit", at: 1, turn: nil), into: &state)
+        _ = watcher.absorb(state.merging([:]))
+        absorb(event("PermissionRequest", at: 1.01, toolName: "Bash", call: "approval", turn: nil), into: &state)
+        let waiting = watcher.absorb(state.merging([:]))
+        absorb(event("PreToolUse", at: 1.02, toolName: "Read", call: "other", turn: "turn-2"), into: &state)
+        #expect(state.records.values.first?.state == .waiting)
+        #expect(state.records.values.first?.waiting["approval"] != nil)
+        #expect(state.records.values.first?.noticeID == waiting.first?.session.noticeID)
+        #expect(watcher.absorb(state.merging([:])).isEmpty)
+    }
+
+    @Test func taggedSubmissionAfterAnUnboundTurnStartsNewWork() {
+        var state = HookSessionState()
+        var watcher = SessionCompletionWatcher()
+        absorb(event("UserPromptSubmit", turn: nil), into: &state)
+        let first = watcher.absorb(state.merging([:]))
+        absorb(event("Stop", at: 1, turn: nil), into: &state)
+        _ = watcher.absorb(state.merging([:]))
+        absorb(event("UserPromptSubmit", at: 2, turn: "turn-2"), into: &state)
+        let second = watcher.absorb(state.merging([:]))
+        #expect(second.first?.reason == .started)
+        #expect(second.first?.session.noticeID != first.first?.session.noticeID)
+    }
+
+    @Test func displayedWaitProtectsAcrossBatchesWithoutReplayingSuppressedStarts() throws {
+        var state = HookSessionState()
+        var watcher = SessionCompletionWatcher()
+        absorb(event("PermissionRequest", session: "waiting"), into: &state)
+        let waiting = try #require(watcher.absorb(state.merging([:])).first)
+        let protection = try #require(SessionCompletionWatcher.WaitingProtection(event: waiting, presented: true, duration: 5, now: now))
+        absorb(event("UserPromptSubmit", at: 0.2, session: "other"), into: &state)
+        let starts = watcher.absorb(state.merging([:]))
+        let live = state.merging([:])
+        #expect(SessionCompletionWatcher.nextAnnouncement(starts, sessions: live, protecting: protection, now: now.addingTimeInterval(0.2), enabled: { _ in true }) == nil)
+        #expect(SessionCompletionWatcher.nextAnnouncement(starts, sessions: live, protecting: protection, now: now.addingTimeInterval(5), enabled: { _ in true })?.reason == .started)
+        #expect(watcher.absorb(live).isEmpty)
+        #expect(SessionCompletionWatcher.WaitingProtection(event: waiting, presented: false, duration: 5, now: now) == nil)
+        absorb(event("Stop", at: 1, session: "other"), into: &state)
+        let completion = watcher.absorb(state.merging([:]))
+        let selected = try #require(SessionCompletionWatcher.nextAnnouncement(completion, sessions: state.merging([:]), protecting: protection, now: now.addingTimeInterval(1), enabled: { _ in true }))
+        #expect(selected.reason == .finished)
+        #expect(SessionCompletionWatcher.WaitingProtection(event: selected, presented: true, duration: 5, now: now) == nil)
+        absorb(event("PermissionRequest", at: 1.1, session: "third"), into: &state)
+        let newWait = watcher.absorb(state.merging([:]))
+        #expect(SessionCompletionWatcher.nextAnnouncement(newWait, sessions: state.merging([:]), protecting: protection, now: now.addingTimeInterval(1.1), enabled: { _ in true })?.reason == .blocked)
+    }
+
+    @Test(arguments: ["PostToolUse", "Stop", "Interrupt", "SessionEnd"])
+    func resolvedOrClosedWaitReleasesProtectionImmediately(followup: String) throws {
+        var state = HookSessionState()
+        var watcher = SessionCompletionWatcher()
+        absorb(event("PermissionRequest", toolName: "Bash", call: "approval", session: "waiting"), into: &state)
+        let waiting = try #require(watcher.absorb(state.merging([:])).first)
+        let protection = try #require(SessionCompletionWatcher.WaitingProtection(event: waiting, presented: true, duration: 10, now: now))
+        absorb(event(followup, at: 0.1, toolName: "Bash", call: "approval", session: "waiting"), into: &state)
+        _ = watcher.absorb(state.merging([:]))
+        absorb(event("UserPromptSubmit", at: 0.2, session: "other"), into: &state)
+        let starts = watcher.absorb(state.merging([:]))
+        #expect(SessionCompletionWatcher.nextAnnouncement(starts, sessions: state.merging([:]), protecting: protection, now: now.addingTimeInterval(0.2), enabled: { _ in true })?.reason == .started)
+    }
+
+    @Test func announcementsPrioritizeWaitingThenFinishedThenStartedAndSkipDisabledEvents() {
+        var state = HookSessionState()
+        var watcher = SessionCompletionWatcher()
+        absorb(event("PermissionRequest", at: 0, session: "waiting"), into: &state)
+        absorb(event("UserPromptSubmit", at: 1, session: "finished"), into: &state)
+        absorb(event("Stop", at: 2, session: "finished"), into: &state)
+        absorb(event("UserPromptSubmit", at: 3, session: "started"), into: &state)
+        absorb(event("UserPromptSubmit", at: 4, session: "newest"), into: &state)
+        let live = state.merging([:])
+        let pending = watcher.absorb(live)
+        #expect(SessionCompletionWatcher.nextAnnouncement(pending, sessions: live, enabled: { _ in true })?.reason == .blocked)
+        #expect(SessionCompletionWatcher.nextAnnouncement(pending, sessions: live, enabled: { $0 != .blocked })?.reason == .finished)
+        let start = SessionCompletionWatcher.nextAnnouncement(pending, sessions: live, enabled: { $0 == .started })
+        #expect(start?.session.id.hasSuffix(":newest") == true)
+        #expect(SessionCompletionWatcher.nextAnnouncement(pending, sessions: live, enabled: { _ in false }) == nil)
+        #expect(SessionCompletionWatcher.nextAnnouncement(pending, sessions: [:], enabled: { _ in true }) == nil)
     }
 }

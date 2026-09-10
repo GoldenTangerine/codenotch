@@ -7,12 +7,90 @@
  @LastEditTime: 2026-09-09 14:27:26
  @FilePath: Tests/NotificationSoundTests.swift
  */
+import AVFoundation
 import Combine
 import XCTest
 @testable import Codenotch
 
 @MainActor
 final class NotificationSoundTests: XCTestCase {
+    func testStartDefaultsPersistIndependentlyOfExistingNotifications() {
+        let suite = "NotificationSoundTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(false, forKey: "announceSessionEnd")
+        defaults.set(false, forKey: "sessionEndSound")
+        defaults.set("brief", forKey: "peekDuration")
+        defaults.set("Funk", forKey: "sessionEndSoundName")
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertTrue(preferences.announceSessionStart)
+        XCTAssertEqual(preferences.sessionStartPeekDuration, .standard)
+        XCTAssertFalse(preferences.sessionStartSound)
+        XCTAssertEqual(preferences.sessionStartSoundName, "8bit_start")
+        XCTAssertTrue(preferences.announcementSettings(for: .started).expand)
+        XCTAssertNil(preferences.announcementSettings(for: .started).sound)
+        preferences.announceSessionStart = false
+        preferences.sessionStartPeekDuration = .long
+        preferences.sessionStartSound = true
+        preferences.sessionStartSoundName = "8bit_submit"
+        let restored = Preferences(defaults: defaults)
+        XCTAssertFalse(restored.announceSessionStart)
+        XCTAssertEqual(restored.sessionStartPeekDuration, .long)
+        XCTAssertTrue(restored.sessionStartSound)
+        XCTAssertEqual(restored.sessionStartSoundName, "8bit_submit")
+        XCTAssertFalse(restored.announceSessionEnd)
+        XCTAssertFalse(restored.sessionEndSound)
+        XCTAssertEqual(restored.peekDuration, .brief)
+        XCTAssertEqual(restored.sessionEndSoundName, "Funk")
+        XCTAssertEqual(restored.announcementSettings(for: .started).duration, 10)
+        XCTAssertEqual(restored.announcementSettings(for: .finished).duration, 3)
+        defaults.set("invalid", forKey: "sessionStartPeekDuration")
+        XCTAssertEqual(Preferences(defaults: defaults).sessionStartPeekDuration, .standard)
+    }
+
+    func testStartAndEndSoundSwitchesAndSharedVolumeRouteIndependently() {
+        let suite = "NotificationSoundTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let preferences = Preferences(defaults: defaults)
+        preferences.sessionStartSound = true
+        XCTAssertEqual(preferences.announcementSettings(for: .started).sound, "8bit_start")
+        preferences.sessionEndSound = false
+        XCTAssertNil(preferences.announcementSettings(for: .finished).sound)
+        XCTAssertNil(preferences.announcementSettings(for: .blocked).sound)
+        XCTAssertEqual(preferences.announcementSettings(for: .started).sound, "8bit_start")
+        preferences.sessionStartSound = false
+        preferences.sessionEndSound = true
+        XCTAssertNil(preferences.announcementSettings(for: .started).sound)
+        XCTAssertEqual(preferences.announcementSettings(for: .finished).sound, SessionChime.defaultFinished)
+        XCTAssertEqual(preferences.announcementSettings(for: .blocked).sound, SessionChime.defaultBlocked)
+        preferences.sessionStartSound = true
+        preferences.sessionSoundVolume = 0
+        for reason: SessionCompletionWatcher.Reason in [.started, .finished, .blocked] {
+            XCTAssertNil(preferences.announcementSettings(for: reason).sound)
+        }
+        preferences.sessionSoundVolume = 0.4
+        preferences.sessionStartSoundName = SessionChime.off
+        XCTAssertNil(preferences.announcementSettings(for: .started).sound)
+        preferences.sessionStartSoundName = "NotASound"
+        XCTAssertNil(preferences.announcementSettings(for: .started).sound)
+    }
+
+    func testAllSixBundledSoundsAreOfferedAndDecode() throws {
+        let names = ["8bit_approval", "8bit_boot", "8bit_complete", "8bit_error", "8bit_start", "8bit_submit"]
+        for name in names {
+            XCTAssertEqual(SessionChime.available.filter { $0 == name }.count, 1)
+            let bundled = try XCTUnwrap(Bundle.main.url(forResource: name, withExtension: "wav", subdirectory: "Sounds"))
+            XCTAssertNotNil(SessionChime.url(for: name))
+            let player = try AVAudioPlayer(contentsOf: bundled)
+            XCTAssertGreaterThan(player.duration, 0)
+            let audio = try AVAudioFile(forReading: bundled)
+            let buffer = try XCTUnwrap(AVAudioPCMBuffer(pcmFormat: audio.processingFormat, frameCapacity: AVAudioFrameCount(audio.length)))
+            try audio.read(into: buffer)
+            XCTAssertGreaterThan(buffer.frameLength, 0)
+        }
+    }
+
     func testVolumeAndIndependentOffChoicesSurviveReload() {
         let suite = "NotificationSoundTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -64,6 +142,9 @@ final class NotificationSoundTests: XCTestCase {
         XCTAssertEqual(SessionChime.previewName(recent: "NotASound", finished: "NotASound", blocked: blocked), blocked)
         XCTAssertNil(SessionChime.previewName(recent: finished, finished: "", blocked: ""))
         XCTAssertNil(SessionChime.previewName(recent: nil, finished: "NotASound", blocked: ""))
+        XCTAssertEqual(SessionChime.previewName(recent: "8bit_start", finished: finished, blocked: blocked, started: "8bit_start"), "8bit_start")
+        XCTAssertEqual(SessionChime.previewName(recent: nil, finished: "", blocked: "", started: "8bit_submit"), "8bit_submit")
+        XCTAssertEqual(SessionChime.previewName(recent: "8bit_start", finished: finished, blocked: blocked, started: ""), finished)
     }
 
     func testOffAndZeroNeverCreateAPlayer() {

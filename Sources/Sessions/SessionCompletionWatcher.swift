@@ -22,10 +22,19 @@ import Foundation
 struct SessionCompletionWatcher {
     /// Why a session is being announced.
     enum Reason: Equatable {
+        case started
         /// Ran to the end of its turn.
         case finished
         /// Stopped to ask something, and is waiting on an answer.
         case blocked
+
+        var priority: Int {
+            switch self {
+            case .blocked: return 2
+            case .finished: return 1
+            case .started: return 0
+            }
+        }
     }
 
     struct Event: Equatable {
@@ -33,6 +42,46 @@ struct SessionCompletionWatcher {
         let reason: Reason
         /// Which provider's ring it belongs to, so the notch can point at it.
         let providerID: String
+
+        func isCurrent(in sessions: [String: [AgentSession]]) -> Bool {
+            sessions.values.contains { live in
+                live.contains { current in
+                    guard current.id == session.id, current.state == session.state else { return false }
+                    // A later turn can also be busy by delivery time; only the
+                    // hook notice that is still current may open its ring.
+                    return session.hookSessionKey == nil || current.noticeID == session.noticeID
+                }
+            }
+        }
+    }
+
+    struct WaitingProtection {
+        let event: Event
+        let until: Date
+
+        init?(event: Event, presented: Bool, duration: TimeInterval, now: Date = Date()) {
+            guard event.reason == .blocked, presented else { return nil }
+            self.event = event
+            self.until = now.addingTimeInterval(duration)
+        }
+
+        func isActive(in sessions: [String: [AgentSession]], now: Date) -> Bool {
+            now < until && event.isCurrent(in: sessions)
+        }
+    }
+
+    static func nextAnnouncement(
+        _ events: [Event], sessions: [String: [AgentSession]],
+        protecting waiting: WaitingProtection? = nil, now: Date = Date(), enabled: (Reason) -> Bool
+    ) -> Event? {
+        let protectsWaiting = waiting?.isActive(in: sessions, now: now) == true
+        return events.sorted {
+            if $0.reason != $1.reason { return $0.reason.priority > $1.reason.priority }
+            return $0.session.since > $1.session.since
+        }.first { event in
+            !(protectsWaiting && event.reason == .started)
+                && enabled(event.reason) && event.isCurrent(in: sessions)
+        }
     }
 
     /// The last state seen for every session, keyed by provider and session id.

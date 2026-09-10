@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.9",
+            headline: String(localized: "Start alerts and more sounds."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Alerts when a turn starts"),
+                    detail: String(localized: "With CLI hooks installed, Claude Code and Codex can open the rings when you submit a message. Start alerts default to 5 seconds with sound off, with separate controls in Notifications.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Six new sounds and a smoother volume slider"),
+                    detail: String(localized: "Choose from six bundled 8-bit sounds for start, finish and waiting alerts. The shared volume slider is now continuous, with a percentage and previews.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Waiting alerts keep your attention"),
+                    detail: String(localized: "Start alerts from other sessions no longer interrupt a waiting alert during its set duration. Turn starts are also tracked more reliably when session details arrive later.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.8",
             headline: String(localized: "Separate colors for your interface and notch."),
             changes: [

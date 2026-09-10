@@ -787,14 +787,15 @@ final class NotchWindowController {
     ///
     /// `pid` is the agent's process, used only if the peek is clicked; nil
     /// leaves the click doing what it ordinarily does.
-    func peek(for duration: TimeInterval, focusing pid: pid_t?, providerID: String? = nil, startedAt: Date? = nil) {
-        guard !model.isEditingPosition else { return }
+    @discardableResult
+    func peek(for duration: TimeInterval, focusing pid: pid_t?, providerID: String? = nil, startedAt: Date? = nil) -> Bool {
+        guard !model.isEditingPosition else { return false }
         // Hidden is a standing choice that the notch is not to be on screen.
         // Something finishing is not grounds to overrule it — the chime still
         // sounds, which is the part that works with nothing visible.
         guard visibility != .hidden, let panel else {
             Log.usage.debug("peek skipped: notch hidden")
-            return
+            return false
         }
         Log.usage.debug("peek for \(duration, privacy: .public)s, pid \(pid ?? -1, privacy: .public)")
 
@@ -836,6 +837,7 @@ final class NotchWindowController {
         }
         peekWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+        return true
     }
 
     /// How long after a peek folds a click still counts as answering it. Covers

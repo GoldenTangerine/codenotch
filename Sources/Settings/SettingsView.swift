@@ -524,7 +524,8 @@ struct SettingsView: View {
 
     private func previewVolume() {
         guard let name = SessionChime.previewName(recent: recentSound,
-            finished: preferences.sessionEndSoundName, blocked: preferences.sessionBlockedSoundName)
+            finished: preferences.sessionEndSoundName, blocked: preferences.sessionBlockedSoundName,
+            started: preferences.sessionStartSoundName)
         else { return }
         previewSound(name)
     }
@@ -536,11 +537,34 @@ struct SettingsView: View {
     private var notificationsPane: some View {
         Form {
             if let hooks { HookSettingsView(hooks: hooks) }
+            Section("When a turn starts") {
+                Toggle("Open the notch for a moment", isOn: $preferences.announceSessionStart)
+
+                Picker("For", selection: $preferences.sessionStartPeekDuration) {
+                    ForEach(PeekDuration.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .disabled(!preferences.announceSessionStart)
+
+                Text(preferences.sessionStartPeekDuration.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("Play a sound", isOn: $preferences.sessionStartSound)
+                SoundRow(label: String(localized: "Started"), name: $preferences.sessionStartSoundName,
+                         available: availableSounds, volume: preferences.sessionSoundVolume, preview: previewSound)
+
+                Text("Notifies when you submit a message in Claude Code or Codex CLI. Requires installed hooks.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             // Its own section rather than a line in General: this is the only
             // part of the app that speaks first, and a switch that stops the
             // Mac making a noise has to be findable by someone who is looking
             // for exactly that and nothing else.
-            Section("When a session ends") {
+            Section("When a turn finishes or needs you") {
                 Toggle("Open the notch for a moment", isOn: $preferences.announceSessionEnd)
 
                 Picker("For", selection: $preferences.peekDuration) {
@@ -556,9 +580,25 @@ struct SettingsView: View {
 
                 Toggle("Play a sound", isOn: $preferences.sessionEndSound)
 
+                // Two sounds, because the two events say different things: one
+                // is "that's done", the other is "you are the hold-up". Each
+                // has a preview beside it — picking an alert sound you cannot
+                // hear until the next time it fires is guesswork.
+                SoundRow(label: String(localized: "Finished"), name: $preferences.sessionEndSoundName,
+                         available: availableSounds, volume: preferences.sessionSoundVolume, preview: previewSound)
+                SoundRow(label: String(localized: "Waiting on you"), name: $preferences.sessionBlockedSoundName,
+                         available: availableSounds, volume: preferences.sessionSoundVolume, preview: previewSound)
+
+                Text("Codenotch already knows the moment an agent stops working or stops to ask you something. Clicking the notch while it is open brings that session's app to the front — the app, not the tab: only some terminals let anything outside them choose a tab, so the tooltip names the session instead.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Shared sound settings") {
                 LabeledContent("Volume") {
                     HStack {
-                        Slider(value: $preferences.sessionSoundVolume, in: 0...1, step: 0.01) { editing in
+                        Slider(value: $preferences.sessionSoundVolume, in: 0...1) { editing in
                             editingSoundVolume = editing
                             volumePreviewScheduler.cancel()
                             if !editing { scheduleVolumePreview() }
@@ -577,27 +617,12 @@ struct SettingsView: View {
                         scheduleVolumePreview()
                     }
                 }
-                .onAppear { availableSounds = SessionChime.available }
-                .onDisappear {
-                    volumePreviewScheduler.cancel()
-                    editingSoundVolume = false
-                    recentSound = nil
-                }
-
-                // Two sounds, because the two events say different things: one
-                // is "that's done", the other is "you are the hold-up". Each
-                // has a preview beside it — picking an alert sound you cannot
-                // hear until the next time it fires is guesswork.
-                SoundRow(label: String(localized: "Finished"), name: $preferences.sessionEndSoundName,
-                         available: availableSounds, volume: preferences.sessionSoundVolume, preview: previewSound)
-                SoundRow(label: String(localized: "Waiting on you"), name: $preferences.sessionBlockedSoundName,
-                         available: availableSounds, volume: preferences.sessionSoundVolume, preview: previewSound)
 
                 Text("Sound choices and previews remain available when notification sounds are off.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Text("Codenotch already knows the moment an agent stops working or stops to ask you something. Clicking the notch while it is open brings that session's app to the front — the app, not the tab: only some terminals let anything outside them choose a tab, so the tooltip names the session instead.")
+                Text("Volume is shared by start, finish and waiting sounds, including previews.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -620,6 +645,12 @@ struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+        .onAppear { availableSounds = SessionChime.available }
+        .onDisappear {
+            volumePreviewScheduler.cancel()
+            editingSoundVolume = false
+            recentSound = nil
+        }
     }
 
     // Startup and updates together: both are about what Codenotch does

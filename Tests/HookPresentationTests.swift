@@ -12,6 +12,20 @@ import Testing
 @testable import Codenotch
 
 @Suite @MainActor struct HookPresentationTests {
+    @Test func peekReportsWhetherAnAlertWasActuallyDisplayed() {
+        let controller = NotchWindowController()
+        #expect(!controller.peek(for: 1, focusing: nil))
+        controller.show()
+        defer { controller.stop() }
+        #expect(controller.peek(for: 1, focusing: nil))
+        #expect(controller.model.isExpanded)
+        controller.apply(.hidden)
+        #expect(!controller.peek(for: 1, focusing: nil))
+        controller.apply(.onHover)
+        controller.model.isEditingPosition = true
+        #expect(!controller.peek(for: 1, focusing: nil))
+    }
+
     private func session(_ id: String, _ state: AgentSession.State) -> AgentSession {
         AgentSession(id: id, name: id, detail: "Codex CLI", state: state, waitingFor: nil, since: Date())
     }

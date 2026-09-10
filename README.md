@@ -177,7 +177,7 @@ Available `~/.claude-<slug>` directories are discovered at launch. The initial
 list places the default first and the other profiles alphabetically; subsequent
 ordering follows your saved provider list.
 
-## When a session ends
+## Session notifications
 
 For **Claude Code and Codex CLI**, open **Settings → Notifications → Hooks**
 and install the integration separately for each configuration directory. Existing
@@ -220,7 +220,14 @@ Codex's older log-write heuristic remains a running-only fallback:
 silence in the log is never treated as a completed turn. Desktop applications,
 IDE extensions and other CLI tools retain their previous monitoring paths.
 
-The notch opens itself for five seconds when an agent stops working, or stops
+With Claude Code or Codex CLI hooks installed, submitting a message opens the
+notch for five seconds. In **Settings → Notifications → When a turn starts**,
+switch this off or choose 3, 5 or 10 seconds independently of completion alerts.
+Start sounds default to off, with `8bit_start` selected when enabled. Opening a
+CLI session, running tools or resuming after approval does not trigger this alert;
+desktop apps and activity monitoring without hooks do not infer turn starts.
+
+The notch also opens itself for five seconds when an agent stops working, or stops
 to ask you something, and sounds the system alert. Clicking it while it is open
 brings that session's application to the front.
 
@@ -235,8 +242,11 @@ terminals and silently doing nothing in a third.
 
 Both halves switch off separately in Settings, because they fail differently:
 the peek is no use behind a full-screen window, and the sound is no use in a
-meeting. Each of the two events — finished, and waiting on you — picks its own
-sound there, with a preview button beside it.
+meeting. Started, finished and waiting events each have their own sound choice
+and preview button. All three share a volume control with a continuous slider
+and percentage display; previews remain available with notification sounds off.
+The six bundled CodeIsland `8bit_*.wav` sounds are available in every sound picker,
+alongside macOS and user-installed sounds, without requiring CodeIsland at runtime.
 
 The sound is played as a file on the ordinary output rather than handed to
 `NSSound` as a system alert. A system alert goes through the interface
@@ -251,10 +261,16 @@ already running at launch arrives with no history, and treating that as a
 transition would ring once per open window on every start.
 
 That transition rule applies to the fallback monitors. A fresh, explicit hook
-request for input is announced even if it is the first event seen for that
+turn submission or request for input is announced even if it is the first event seen for that
 session. Hook cancellations and process exits are silent; replayed notifications
 are deduplicated. Several events arriving together produce one sound and peek,
-with a waiting session taking priority over a finished one.
+with waiting taking priority over finished, then started. Disabled and outdated
+events are skipped before choosing an announcement.
+After a waiting alert is displayed or sounded, new start alerts are suppressed
+for its configured duration, or until that wait is resolved. Suppressed starts
+are not replayed later; completion and new waiting alerts remain available.
+When a submission omits its turn ID, later tool events can supply it without
+discarding the start alert or resetting the turn's activity.
 
 ## Alerts
 

@@ -36,6 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var activityRouting: ActivityRouting?
     private var pendingAnnouncements: [SessionCompletionWatcher.Event] = []
     private var announcementWork: DispatchWorkItem?
+    private var waitingProtection: SessionCompletionWatcher.WaitingProtection?
 
     /// The unit bundle is hosted by this app, so `xcodebuild test` launches it
     /// for real. Without this guard every test run put a live request on the
@@ -434,26 +435,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func deliverAnnouncement() {
         announcementWork = nil
-        let events = pendingAnnouncements.sorted {
-            if $0.reason != $1.reason { return $0.reason == .blocked }
-            return $0.session.since > $1.session.since
-        }
+        let events = pendingAnnouncements
         pendingAnnouncements.removeAll()
-        guard let event = events.first(where: { event in
-            activityRouting?.sessions.values.contains { $0.contains { $0.id == event.session.id && $0.state == event.session.state } } == true
-        }), let preferences, let fleet = notchFleet else { return }
+        guard let preferences, let fleet = notchFleet,
+              let event = SessionCompletionWatcher.nextAnnouncement(events, sessions: activityRouting?.sessions ?? [:],
+                  protecting: waitingProtection, enabled: {
+                  let settings = preferences.announcementSettings(for: $0)
+                  return settings.expand || settings.sound != nil
+              }) else { return }
         Log.usage.info("session \(event.session.name, privacy: .public) \(String(describing: event.reason), privacy: .public)")
 
-        if preferences.sessionEndSound {
-            SessionChime.play(event.reason == .blocked
-                              ? preferences.sessionBlockedSoundName
-                              : preferences.sessionEndSoundName,
-                              volume: preferences.sessionSoundVolume)
-        }
-        guard preferences.announceSessionEnd else { return }
-        fleet.peek(for: preferences.peekDuration.seconds,
+        let settings = preferences.announcementSettings(for: event.reason)
+        let played = settings.sound.map { SessionChime.play($0, volume: preferences.sessionSoundVolume) } ?? false
+        let displayed = settings.expand && fleet.peek(for: settings.duration,
                    focusing: event.session.processID, providerID: activityRouting?.providerID(for: event.session),
                    startedAt: event.session.processStartedAt)
+        waitingProtection = .init(event: event, presented: displayed || played, duration: settings.duration)
     }
 
     /// Closing the settings window must not take the app with it.

@@ -27,8 +27,8 @@ enum SessionChime {
         value.isFinite ? min(1, max(0, value)) : 1
     }
 
-    static func previewName(recent: String?, finished: String, blocked: String) -> String? {
-        let selected = [finished, blocked]
+    static func previewName(recent: String?, finished: String, blocked: String, started: String = off) -> String? {
+        let selected = [finished, blocked, started]
         let candidates = recent.map { selected.contains($0) ? [$0] + selected : selected } ?? selected
         return candidates.first { $0 != off && url(for: $0) != nil }
     }
@@ -44,6 +44,7 @@ enum SessionChime {
     /// A turn ended. Short and unremarkable — this fires whenever any window
     /// finishes, which on a busy afternoon is often.
     static let defaultFinished = "Glass"
+    static let defaultStarted = "8bit_start"
     /// A session is blocked on you. Two-toned, so it reads as different from
     /// the ordinary one without being an alarm.
     static let defaultBlocked = "Funk"
@@ -54,7 +55,7 @@ enum SessionChime {
         "\(NSHomeDirectory())/Library/Sounds",
         "/Library/Sounds",
         "/System/Library/Sounds"
-    ]
+    ] + [Bundle.main.resourceURL?.appendingPathComponent("Sounds").path].compactMap { $0 }
 
     private static let extensions = ["aiff", "aif", "m4a", "wav", "caf"]
 

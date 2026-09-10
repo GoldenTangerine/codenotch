@@ -218,10 +218,15 @@ final class NotchFleet {
     /// Opens every panel for a moment, because something happened — the same
     /// announcement on every display rather than only the one you happen to
     /// be looking at.
-    func peek(for duration: TimeInterval, focusing pid: pid_t?, providerID: String? = nil, startedAt: Date? = nil) {
+    @discardableResult
+    func peek(for duration: TimeInterval, focusing pid: pid_t?, providerID: String? = nil, startedAt: Date? = nil) -> Bool {
+        var displayed = false
         for controller in controllers.values {
-            controller.peek(for: duration, focusing: pid, providerID: providerID, startedAt: startedAt)
+            if controller.peek(for: duration, focusing: pid, providerID: providerID, startedAt: startedAt) {
+                displayed = true
+            }
         }
+        return displayed
     }
 
     func setRefreshing(_ ids: Set<String>) {

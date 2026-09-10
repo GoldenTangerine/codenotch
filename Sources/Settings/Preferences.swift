@@ -163,6 +163,22 @@ final class Preferences: ObservableObject {
     /// domain, and nil there means "no override tracking".
     private let domainName: String?
 
+    @Published var announceSessionStart: Bool {
+        didSet { defaults.set(announceSessionStart, forKey: Keys.announceSessionStart) }
+    }
+
+    @Published var sessionStartPeekDuration: PeekDuration {
+        didSet { defaults.set(sessionStartPeekDuration.rawValue, forKey: Keys.sessionStartPeekDuration) }
+    }
+
+    @Published var sessionStartSound: Bool {
+        didSet { defaults.set(sessionStartSound, forKey: Keys.sessionStartSound) }
+    }
+
+    @Published var sessionStartSoundName: String {
+        didSet { defaults.set(sessionStartSoundName, forKey: Keys.sessionStartSoundName) }
+    }
+
     /// Open the notch for a few seconds when an agent stops working.
     ///
     /// On by default: the app already knows the moment a session ends, and a
@@ -267,6 +283,10 @@ final class Preferences: ObservableObject {
         static let lastSeenVersion = "lastSeenVersion"
         static let order = "providerOrder"
         static let announceSessionEnd = "announceSessionEnd"
+        static let announceSessionStart = "announceSessionStart"
+        static let sessionStartPeekDuration = "sessionStartPeekDuration"
+        static let sessionStartSound = "sessionStartSound"
+        static let sessionStartSoundName = "sessionStartSoundName"
         static let sessionEndSound = "sessionEndSound"
         static let sessionSoundVolume = "sessionSoundVolume"
         static let peekDuration = "peekDuration"
@@ -383,6 +403,12 @@ final class Preferences: ObservableObject {
         // Absent means never chosen, so the rings keep the order the app ships
         // with until someone drags one.
         self.providerOrder = defaults.stringArray(forKey: Keys.order) ?? []
+        self.announceSessionStart = defaults.object(forKey: Keys.announceSessionStart) as? Bool ?? true
+        self.sessionStartPeekDuration = defaults.string(forKey: Keys.sessionStartPeekDuration)
+            .flatMap(PeekDuration.init(rawValue:)) ?? .standard
+        self.sessionStartSound = defaults.object(forKey: Keys.sessionStartSound) as? Bool ?? false
+        self.sessionStartSoundName = defaults.string(forKey: Keys.sessionStartSoundName)
+            ?? SessionChime.defaultStarted
         // Both default to on, so `bool(forKey:)` — which answers false for a
         // key that was never written — cannot stand in for the default.
         self.announceSessionEnd = defaults.object(forKey: Keys.announceSessionEnd) as? Bool ?? true
@@ -399,6 +425,22 @@ final class Preferences: ObservableObject {
         // Read from the system rather than from our own store: the user can turn
         // this off in System Settings, and a remembered `true` would then be a lie.
         self.launchAtLogin = Self.isRegisteredForLogin
+    }
+
+    func announcementSettings(for reason: SessionCompletionWatcher.Reason)
+        -> (expand: Bool, duration: TimeInterval, sound: String?) {
+        let isStart = reason == .started
+        let soundEnabled = isStart ? sessionStartSound : sessionEndSound
+        let soundName: String
+        switch reason {
+        case .started: soundName = sessionStartSoundName
+        case .finished: soundName = sessionEndSoundName
+        case .blocked: soundName = sessionBlockedSoundName
+        }
+        let sound = soundEnabled && sessionSoundVolume > 0 && SessionChime.url(for: soundName) != nil
+            ? soundName : nil
+        return (isStart ? announceSessionStart : announceSessionEnd,
+                (isStart ? sessionStartPeekDuration : peekDuration).seconds, sound)
     }
 
     // MARK: Threshold alerts

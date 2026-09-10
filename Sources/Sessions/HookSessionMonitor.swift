@@ -23,6 +23,7 @@ struct HookSessionState: Equatable {
         var approvalCandidates: [String: Set<String>] = [:]
         var turn: String?
         var turnStartedAt: Double?
+        var startEventID: String?
         var retiredTurns: Set<String> = []
         var ended = false
         var interrupted = false
@@ -68,6 +69,10 @@ struct HookSessionState: Equatable {
         guard event.at >= record.event.at,
               event.id != record.event.id || records[key] == nil else { return }
         if let turn = event.turnID, record.retiredTurns.contains(turn) { return }
+        if event.event == "UserPromptSubmit" {
+            guard event.id != record.startEventID,
+                  event.turnID == nil || event.turnID != record.turn || record.turnStartedAt == nil else { return }
+        }
         if let turn = event.turnID, let previous = record.turn, turn != previous {
             record.retiredTurns.insert(previous)
             record.waiting.removeAll()
@@ -93,16 +98,23 @@ struct HookSessionState: Equatable {
             record.ended = false
             record.interrupted = false
         case "UserPromptSubmit":
+            // A submission without an ID begins a pending turn. The first
+            // tagged tool event binds it instead of discarding its notice.
+            if event.turnID == nil {
+                if let turn = record.turn { record.retiredTurns.insert(turn) }
+                record.turn = nil
+            }
             record.waiting.removeAll()
             record.resolvedCalls.removeAll()
             record.activeTools.removeAll()
             record.approvalCandidates.removeAll()
             record.turnStartedAt = event.at
+            record.startEventID = event.id
             record.state = .busy
             record.ended = false
             record.interrupted = false
-            record.notice = nil
-            record.noticeID = nil
+            record.notice = .started
+            record.noticeID = event.id
         case "PreToolUse", "PermissionRequest":
             guard !record.ended, !record.interrupted else { return }
             if event.event == "PreToolUse", let id = event.callID, let tool = event.toolName,
@@ -157,7 +169,7 @@ struct HookSessionState: Equatable {
         default: return
         }
         record.event = event
-        if record.state != previous || wasEnded { record.since = event.at }
+        if record.state != previous || wasEnded || event.event == "UserPromptSubmit" { record.since = event.at }
         if record.state == .waiting && previous != .waiting {
             record.notice = .blocked
             record.noticeID = event.id
@@ -165,7 +177,7 @@ struct HookSessionState: Equatable {
             record.notice = .finished
             record.noticeID = event.id
         }
-        if record.state == .busy {
+        if record.state == .busy && record.notice != .started {
             record.notice = nil
             record.noticeID = nil
         }
