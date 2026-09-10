@@ -42,7 +42,7 @@ final class ConfiguredUsageProvider: UsageProvider {
             status: snapshot.status, windows: snapshot.windows,
             headlineID: entry.headlineID ?? defaultHeadline,
             block: snapshot.block, icon: entry.icon, manualQuery: !entry.usesLocalAccount,
-            queryFailure: snapshot.queryFailure)
+            queryFailure: snapshot.queryFailure, queryRetryAfter: snapshot.queryRetryAfter)
     }
 
     func fetchSnapshot() async throws -> ProviderSnapshot {

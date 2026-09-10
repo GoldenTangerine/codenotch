@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.11",
+            headline: String(localized: "Reliable refresh and session recovery."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Retry failed usage queries"),
+                    detail: String(localized: "Timed-out queries no longer block another refresh. Successful retries restore the ring color, and the card shows refresh progress or the rate-limit retry time.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Keep activity on its supplier"),
+                    detail: String(localized: "Recover supplier links when a session start event is missed. Unlinked CLI activity is labeled clearly. Update Code Switch R to 2.11.19 for packed session metadata support.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Recover waiting states safely"),
+                    detail: String(localized: "Answers clear uniquely matched questions even when a call ID is missing or arrives later. Ambiguous parallel questions keep their waiting mark until the turn ends.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.10",
             headline: String(localized: "A simpler provider menu."),
             changes: [

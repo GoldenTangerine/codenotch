@@ -10,8 +10,13 @@
 import Foundation
 
 struct ActivityRouting {
+    enum UnmatchedReason: String, CaseIterable {
+        case missingBinding, platformMismatch, staleBinding
+    }
+
     var snapshots: [ProviderSnapshot]
     var sessions: [String: [AgentSession]] = [:]
+    var unmatched: [UnmatchedReason: Int] = [:]
 
     init(local: [ProviderSnapshot], linked: [ProviderSnapshot], sources: [String: String],
          sessions native: [String: [AgentSession]], bindings: [String: CodeSwitchSessionLink], now: Date = Date()) {
@@ -21,8 +26,24 @@ struct ActivityRouting {
             let localIDs = local.filter { sources[$0.id] == source }.map(\.id)
             for session in native[source] ?? [] {
                 let needsEntrance = session.state != .idle || (session.noticeID != nil && now.timeIntervalSince(session.since) < 15)
-                if let key = session.hookSessionKey, let link = bindings[key],
-                   session.hookTurnStartedAt.map({ link.binding.updatedAt >= ($0.timeIntervalSince1970 * 1000).rounded(.down) }) ?? false {
+                var link = session.hookSessionKey.flatMap { bindings[$0] }
+                var reason = UnmatchedReason.missingBinding
+                if let candidate = link {
+                    if candidate.platform != (source == "codex" ? "codex" : "claude") {
+                        link = nil
+                        reason = .platformMismatch
+                    } else if let start = session.hookTurnStartedAt,
+                              candidate.binding.updatedAt < (start.timeIntervalSince1970 * 1000).rounded(.down) {
+                        link = nil
+                        reason = .staleBinding
+                    }
+                }
+                // A listener started mid-turn may never see UserPromptSubmit.
+                // The latest explicit session association still identifies its supplier.
+                if needsEntrance, session.hookSessionKey != nil, link == nil {
+                    unmatched[reason, default: 0] += 1
+                }
+                if let link {
                     let id = link.snapshot.id
                     sessions[id, default: []].append(session)
                     if needsEntrance, visible.insert(id).inserted {

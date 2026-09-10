@@ -422,6 +422,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let merged = hookMonitor.state.merging(nativeSessions)
         let routing = ActivityRouting(local: localSnapshots, linked: codeSwitch?.snapshots ?? [],
                                       sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:])
+        if (activityRouting?.unmatched ?? [:]) != routing.unmatched {
+            let summary = ActivityRouting.UnmatchedReason.allCases.map {
+                "\($0.rawValue)=\(routing.unmatched[$0, default: 0])"
+            }.joined(separator: " ")
+            Log.sessions.notice("activity routing: \(summary, privacy: .public)")
+        }
         if activityRouting?.sessions != routing.sessions {
             notchFleet?.setSessions(routing.sessions)
         }

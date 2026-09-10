@@ -265,7 +265,7 @@ import Testing
         #expect(state.merging(["codex": [native]])["codex"]?.first?.state == .waiting)
     }
 
-    @Test func oldSupplierCannotOwnNewTurnOrUnknownTurn() {
+    @Test func oldSupplierCannotOwnKnownNewTurnButMissingStartUsesLatestAssociation() {
         var state = HookSessionState()
         let binding = CodeSwitchSessionBinding(sessionKey: event("x").sessionKey, providerId: "42", providerName: "Old",
                                                icon: "openai", sequence: 1, updatedAt: now.timeIntervalSince1970 * 1000)
@@ -282,7 +282,108 @@ import Testing
         #expect(current.snapshots.map(\.id) == [newLink.snapshot.id])
         absorb(event("PreToolUse", at: 12, toolName: "Bash", call: "b", turn: "unknown-start"), into: &state)
         let unknown = ActivityRouting(local: [], linked: [], sources: [:], sessions: state.merging([:]), bindings: [binding.sessionKey: newLink])
-        #expect(unknown.snapshots.map(\.id) == ["activity:codex"])
+        #expect(unknown.snapshots.map(\.id) == [newLink.snapshot.id])
+    }
+
+    @Test(arguments: ["request_user_input", "request_user_input_async", "AskUserQuestion"])
+    func questionCompletionRecoversOneMissingCallID(_ tool: String) {
+        for (before, after) in [(Optional("q"), nil), (nil, Optional("q")), (nil, nil)] {
+            var state = HookSessionState()
+            absorb(event("PreToolUse", toolName: tool, call: before), into: &state)
+            absorb(event("PostToolUse", at: 1, toolName: tool, call: after), into: &state)
+            #expect(state.records.values.first?.state == .busy)
+            #expect(state.records.values.first?.waiting.isEmpty == true)
+            #expect(state.records.values.first?.waitingCalls.isEmpty == true)
+            #expect(state.records.values.first?.noticeID == nil)
+        }
+    }
+
+    @Test func missingCompletionIDDoesNotGuessBetweenParallelQuestions() {
+        var state = HookSessionState()
+        for id in ["a", "b"] { absorb(event("PreToolUse", toolName: "request_user_input", call: id), into: &state) }
+        absorb(event("PostToolUse", at: 1, toolName: "request_user_input"), into: &state)
+        #expect(state.records.values.first?.waiting.count == 2)
+        #expect(state.records.values.first?.completionMismatch == .ambiguousCall)
+        absorb(event("PostToolUse", at: 2, toolName: "request_user_input", call: "a"), into: &state)
+        #expect(state.records.values.first?.waiting.keys.sorted() == ["b"])
+        absorb(event("PostToolUse", at: 3, toolName: "request_user_input"), into: &state)
+        #expect(state.records.values.first?.state == .busy)
+        #expect(state.records.values.first?.completionMismatch == nil)
+    }
+
+    @Test func conflictingCallIDsAndUnrelatedToolsCannotAnswerQuestion() {
+        var state = HookSessionState()
+        absorb(event("PreToolUse", toolName: "request_user_input", call: "q"), into: &state)
+        absorb(event("PostToolUse", at: 1, toolName: "request_user_input", call: "other"), into: &state)
+        #expect(state.records.values.first?.completionMismatch == .conflictingCall)
+        absorb(event("PostToolUse", at: 2, toolName: "Bash"), into: &state)
+        #expect(state.records.values.first?.waiting.keys.sorted() == ["q"])
+        absorb(event("PostToolUse", at: 3, toolName: "request_user_input", call: "q"), into: &state)
+        #expect(state.records.values.first?.state == .busy)
+    }
+
+    @Test func duplicateCompletionCannotAnswerNewAnonymousQuestion() {
+        var state = HookSessionState()
+        absorb(event("PreToolUse", toolName: "request_user_input", call: "old"), into: &state)
+        absorb(event("PostToolUse", at: 1, toolName: "request_user_input", call: "old"), into: &state)
+        absorb(event("PreToolUse", at: 2, toolName: "request_user_input"), into: &state)
+        absorb(event("PostToolUse", at: 3, toolName: "request_user_input", call: "old"), into: &state)
+        #expect(state.records.values.first?.state == .waiting)
+        absorb(event("PostToolUse", at: 4, toolName: "request_user_input", call: "new"), into: &state)
+        #expect(state.records.values.first?.state == .busy)
+    }
+
+    @Test func anonymousQuestionDoesNotBorrowAnotherActiveInvocation() {
+        var state = HookSessionState()
+        absorb(event("PreToolUse", toolName: "request_user_input"), into: &state)
+        absorb(event("PreToolUse", at: 1, toolName: "request_user_input", call: "other"), into: &state)
+        absorb(event("PostToolUse", at: 2, toolName: "request_user_input", call: "other"), into: &state)
+        #expect(state.records.values.first?.waitingCalls.count == 1)
+        #expect(state.records.values.first?.waitingCalls.values.first?.id == nil)
+        absorb(event("PostToolUse", at: 3, toolName: "request_user_input"), into: &state)
+        #expect(state.records.values.first?.state == .busy)
+    }
+
+    @Test(arguments: ["request_user_input", "request_user_input_async", "AskUserQuestion"])
+    func permissionEnrichesTheOnlyAnonymousQuestion(_ tool: String) {
+        var state = HookSessionState()
+        absorb(event("PreToolUse", toolName: tool), into: &state)
+        absorb(event("PermissionRequest", at: 1, toolName: tool, call: "q"), into: &state)
+        #expect(state.records.values.first?.waiting.keys.sorted() == ["q"])
+        absorb(event("PostToolUse", at: 2, toolName: tool, call: "q"), into: &state)
+        #expect(state.records.values.first?.state == .busy)
+        #expect(state.records.values.first?.waitingCalls.isEmpty == true)
+    }
+
+    @Test func permissionForKnownParallelCallDoesNotMergeAnonymousQuestion() {
+        var state = HookSessionState()
+        absorb(event("PreToolUse", toolName: "request_user_input"), into: &state)
+        absorb(event("PreToolUse", at: 1, toolName: "request_user_input", call: "q"), into: &state)
+        absorb(event("PermissionRequest", at: 2, toolName: "request_user_input", call: "q"), into: &state)
+        #expect(state.records.values.first?.waiting.count == 2)
+        absorb(event("PostToolUse", at: 3, toolName: "request_user_input", call: "q"), into: &state)
+        #expect(state.records.values.first?.state == .waiting)
+        #expect(state.records.values.first?.waiting.count == 1)
+    }
+
+    @Test func anonymousParallelQuestionsRemainAmbiguousUntilTurnEnds() {
+        var state = HookSessionState()
+        let first = event("PreToolUse", toolName: "request_user_input")
+        let second = event("PreToolUse", toolName: "request_user_input")
+        absorb(first, into: &state)
+        absorb(second, into: &state)
+        absorb(first, into: &state)
+        #expect(state.records.values.first?.waiting.count == 2)
+        absorb(event("PostToolUse", at: 1, toolName: "request_user_input"), into: &state)
+        #expect(state.records.values.first?.state == .waiting)
+        #expect(state.records.values.first?.completionMismatch == .ambiguousCall)
+        absorb(event("PermissionRequest", at: 2, toolName: "request_user_input", call: "q"), into: &state)
+        absorb(event("PostToolUse", at: 3, toolName: "request_user_input", call: "q"), into: &state)
+        #expect(state.records.values.first?.waiting.count == 2)
+        absorb(event("Stop", at: 4), into: &state)
+        #expect(state.records.values.first?.waiting.isEmpty == true)
+        #expect(state.records.values.first?.waitingCalls.isEmpty == true)
+        #expect(state.records.values.first?.completionMismatch == nil)
     }
 
     @Test func completionExpiryChangesStateOnlyOnce() {

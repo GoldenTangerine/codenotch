@@ -13,9 +13,20 @@ import Foundation
 
 struct HookSessionState: Equatable {
     struct Record: Equatable {
+        struct WaitingCall: Equatable {
+            let tool: String?
+            let id: String?
+        }
+
+        enum CompletionMismatch: String {
+            case missingTool, ambiguousCall, conflictingCall
+        }
+
         var event: HookEvent
         var state: AgentSession.State = .idle
         var waiting: [String: String] = [:]
+        var waitingCalls: [String: WaitingCall] = [:]
+        var completionMismatch: CompletionMismatch?
         var resolvedCalls: Set<String> = []
         var activeTools: [String: String] = [:]
         // Codex approval events omit call IDs. Keep all possible owners until
@@ -76,6 +87,8 @@ struct HookSessionState: Equatable {
         if let turn = event.turnID, let previous = record.turn, turn != previous {
             record.retiredTurns.insert(previous)
             record.waiting.removeAll()
+            record.waitingCalls.removeAll()
+            record.completionMismatch = nil
             record.resolvedCalls.removeAll()
             record.activeTools.removeAll()
             record.approvalCandidates.removeAll()
@@ -105,6 +118,8 @@ struct HookSessionState: Equatable {
                 record.turn = nil
             }
             record.waiting.removeAll()
+            record.waitingCalls.removeAll()
+            record.completionMismatch = nil
             record.resolvedCalls.removeAll()
             record.activeTools.removeAll()
             record.approvalCandidates.removeAll()
@@ -126,7 +141,24 @@ struct HookSessionState: Equatable {
                 record.approvalCandidates[tool, default: []].formUnion(record.activeTools.filter { $0.value == tool }.keys)
                 record.waiting["approval:" + tool] = isQuestion ? "question" : "approval"
             } else if (isQuestion || event.event == "PermissionRequest"), event.callID == nil || !record.resolvedCalls.contains(call) {
-                record.waiting[call] = isQuestion ? "question" : "approval"
+                if event.event == "PermissionRequest", event.callID != nil,
+                   record.activeTools[call] == nil, record.waitingCalls[call] == nil,
+                   let tool = event.toolName {
+                    let candidates = Set(record.activeTools.filter { $0.value == tool }.keys)
+                        .union(record.waitingCalls.filter { $0.value.tool == tool }.keys)
+                    // A permission event can enrich a preceding anonymous start;
+                    // an independently observed invocation must keep its own wait.
+                    if candidates.count == 1, let candidate = candidates.first,
+                       let pending = record.waitingCalls[candidate], pending.id == nil {
+                        record.waiting.removeValue(forKey: candidate)
+                        record.waitingCalls.removeValue(forKey: candidate)
+                    }
+                }
+                // Tool names are not invocation identities. Distinct anonymous
+                // starts remain ambiguous until an unambiguous completion or Stop.
+                let waitingKey = event.callID ?? "anonymous:" + event.id
+                record.waiting[waitingKey] = isQuestion ? "question" : "approval"
+                record.waitingCalls[waitingKey] = Record.WaitingCall(tool: event.toolName, id: event.callID)
             }
             record.state = record.waiting.isEmpty ? .busy : .waiting
         case "Notification":
@@ -137,9 +169,37 @@ struct HookSessionState: Equatable {
             record.state = .waiting
         case "PostToolUse", "PostToolUseFailure":
             guard !record.ended, !record.interrupted else { return }
-            record.waiting.removeValue(forKey: call)
+            var completedCall = event.callID
+            if let tool = event.toolName {
+                let candidates = Set(record.activeTools.filter { $0.value == tool }.keys)
+                    .union(record.waitingCalls.filter { $0.value.tool == tool }.keys)
+                // Missing IDs can only be recovered from one possible owner.
+                // An explicit, different invocation must never answer another wait.
+                if event.callID == nil {
+                    completedCall = candidates.count == 1 ? candidates.first : nil
+                } else if record.activeTools[call] == nil, record.waitingCalls[call] == nil,
+                          !record.resolvedCalls.contains(call), candidates.count == 1,
+                          let candidate = candidates.first,
+                          let pending = record.waitingCalls[candidate], pending.id == nil {
+                    completedCall = candidate
+                }
+                if record.waitingCalls.values.contains(where: { $0.tool == tool }),
+                   completedCall.flatMap({ record.waitingCalls[$0] }) == nil {
+                    record.completionMismatch = candidates.count > 1 ? .ambiguousCall : .conflictingCall
+                }
+            } else if completedCall == nil, !record.waitingCalls.isEmpty {
+                record.completionMismatch = .missingTool
+            }
+            if let completedCall {
+                record.waiting.removeValue(forKey: completedCall)
+                if let pending = record.waitingCalls.removeValue(forKey: completedCall) {
+                    record.completionMismatch = nil
+                    if let id = pending.id { record.resolvedCalls.insert(id) }
+                }
+                if record.activeTools[completedCall] != nil { record.resolvedCalls.insert(completedCall) }
+            }
             if let tool = event.toolName, var candidates = record.approvalCandidates[tool] {
-                if let id = event.callID { candidates.remove(id) }
+                if let completedCall { candidates.remove(completedCall) }
                 if candidates.isEmpty {
                     record.waiting.removeValue(forKey: "approval:" + tool)
                     record.approvalCandidates.removeValue(forKey: tool)
@@ -147,18 +207,20 @@ struct HookSessionState: Equatable {
                     record.approvalCandidates[tool] = candidates
                 }
             }
-            if let id = event.callID { record.activeTools.removeValue(forKey: id) }
+            if let completedCall { record.activeTools.removeValue(forKey: completedCall) }
             record.waiting.removeValue(forKey: "notification")
             if event.callID != nil { record.resolvedCalls.insert(call) }
             record.state = record.waiting.isEmpty ? .busy : .waiting
         case "Stop":
             guard !record.ended, !record.interrupted else { return }
             record.waiting.removeAll()
+            record.waitingCalls.removeAll()
             record.activeTools.removeAll()
             record.approvalCandidates.removeAll()
             record.state = .idle
         case "Interrupt", "SessionEnd":
             record.waiting.removeAll()
+            record.waitingCalls.removeAll()
             record.activeTools.removeAll()
             record.approvalCandidates.removeAll()
             record.state = .idle
@@ -168,6 +230,7 @@ struct HookSessionState: Equatable {
             record.noticeID = nil
         default: return
         }
+        if record.waiting.isEmpty { record.completionMismatch = nil }
         record.event = event
         if record.state != previous || wasEnded || event.event == "UserPromptSubmit" { record.since = event.at }
         if record.state == .waiting && previous != .waiting {
@@ -344,6 +407,13 @@ final class HookSessionMonitor: ObservableObject {
             next.absorb(event)
             guard next != state else { continue }
             guard next.records.values.contains(where: { $0.event.id == event.id }) else { continue }
+            let key = event.tool + ":" + event.configDirectory + ":" + event.sessionID
+            if let record = next.records[key],
+               record.completionMismatch != state.records[key]?.completionMismatch
+                || (record.completionMismatch != nil && record.waiting.count != state.records[key]?.waiting.count) {
+                let reason = record.completionMismatch?.rawValue ?? "resolved"
+                Log.sessions.notice("hook completion match: reason=\(reason, privacy: .public) waiting=\(record.waiting.count)")
+            }
             state = next
             lastEvents[event.tool + ":" + event.configDirectory] = Date(timeIntervalSince1970: event.at)
         }

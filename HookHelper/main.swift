@@ -35,7 +35,8 @@ func forwardHook() {
     let event = HookEvent(tool: args[2], configDirectory: args[3], sessionID: session,
                           turnID: raw["turn_id"] as? String, event: name,
                           toolName: raw["tool_name"] as? String,
-                          callID: (raw["tool_use_id"] ?? raw["call_id"]) as? String,
+                          callID: ["tool_use_id", "call_id"].compactMap { raw[$0] as? String }
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty },
                           notificationType: raw["notification_type"] as? String,
                           cwd: raw["cwd"] as? String ?? "",
                           pid: process?.0, processStartedAt: process?.1)

@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "session": "routing-fixture",
+  "sequence": 1,
+  "heartbeatAt": 1800000000000,
+  "platforms": [
+    {
+      "sessionBindings": [
+        {
+          "sessionKey": "3ed74720411e4f22645815435b64052ecd60ee1e89f61d440b750cad4c8c36a8",
+          "providerId": "42",
+          "providerName": "Fixture supplier",
+          "icon": "openai",
+          "sequence": 2,
+          "updatedAt": 1800000000000
+        },
+        {
+          "sessionKey": "6b3e07d8c226d9a5e21d80887c3fd14565962411e5bded5ebca83e8ea1ded3d6",
+          "providerId": "42",
+          "providerName": "Fixture supplier",
+          "icon": "openai",
+          "sequence": 3,
+          "updatedAt": 1800000000000
+        },
+        {
+          "sessionKey": "d3f691a7763732a761396db8b1f3ca194c77142d6f19bceb567038f2d2c388ac",
+          "providerId": "42",
+          "providerName": "Fixture supplier",
+          "icon": "openai",
+          "sequence": 1,
+          "updatedAt": 1800000000000
+        }
+      ],
+      "platform": "codex",
+      "name": "Codex",
+      "icon": "openai",
+      "error": false,
+      "providers": [
+        {
+          "providerId": "42",
+          "providerName": "Fixture supplier",
+          "icon": "openai",
+          "activeRequests": 3,
+          "status": "active",
+          "loading": false,
+          "updatedAt": 0,
+          "quotas": [],
+          "stats": null
+        }
+      ]
+    }
+  ]
+}

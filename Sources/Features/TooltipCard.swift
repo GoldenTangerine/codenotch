@@ -412,20 +412,17 @@ private struct ProviderTooltip: View {
     let now: Date
     let resetTimeFormat: ResetTimeFormat
     var fullContent = false
+    var isRefreshing = false
 
     /// Only worth saying when the numbers are not current. A remembered reading
     /// has to be dated, or it quietly passes itself off as live.
     private var readingAge: String? {
-        if snapshot.queryFailure != nil { return String(localized: "Refresh failed") }
-        guard snapshot.hasReading, let since = snapshot.status.staleSince,
-              since != .distantPast
-        else { return nil }
-        return ElapsedCopy.ago(since: since, now: now)
+        snapshot.refreshNote(isRefreshing: isRefreshing, now: now)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            TooltipHeader(title: String(localized: "\(snapshot.displayName) Usage"), note: readingAge) {
+            TooltipHeader(title: snapshot.tooltipTitle, note: readingAge) {
                 QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph)
                     .foregroundStyle(Palette.textPrimary)
             }
@@ -590,6 +587,7 @@ struct TooltipCard: View {
     let snapshot: ProviderSnapshot
     var activity: ActivitySummary?
     let now: Date
+    var isRefreshing = false
     /// Which way the card sits from the notch, which follows from the edge.
     var direction: NotchEdge.TooltipDirection = .leading
     /// How many sessions this screen has room to list. Solved from the display
@@ -659,7 +657,7 @@ struct TooltipCard: View {
                                   resetTimeFormat: resetTimeFormat, fullContent: heightMode == .full)
             } else {
                 ProviderTooltip(snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat,
-                                fullContent: heightMode == .full)
+                                fullContent: heightMode == .full, isRefreshing: isRefreshing)
                 if let activity {
                     SessionList(summary: activity, now: now,
                                 cap: heightMode == .full ? activity.sessions.count : sessionCap)

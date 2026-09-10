@@ -75,9 +75,11 @@ Waiting sessions keep their supplier visible after requests settle, with the
 last available quota reading. When an association cannot be established, or the
 bridge disconnects, the session appears under its CLI tool instead. The same
 fallback applies until an association is newer than the current submitted turn;
-an old route is never inherited by a new turn, and an unknown turn start is not
-used to guess a supplier. The same
-event is announced once even if its supplier changes. Older snapshots keep the
+when the turn's start event was missed, the latest explicit association for the
+same session is used instead. A late association moves the session to its supplier
+and removes the CLI entry if no unresolved sessions remain. Unlinked CLI entries
+say **Provider not linked yet**, since they do not query usage themselves.
+The same event is announced once even if its supplier changes. Older snapshots keep the
 existing request spinner without guessing which supplier a question belongs to.
 
 ### Local providers
@@ -124,6 +126,12 @@ Each entry has active and idle refresh intervals in **seconds**, defaulting to
 accounts do not inherit local account sessions. Automatic refresh can be turned
 off independently. Rate-limit responses defer retries, and failures mark the
 last successful reading stale. Changing credentials or the query clears it.
+Clicking a ring retries a failed query; the card shows when a refresh is running
+or when a rate-limit cooldown ends. A timed-out query releases the refresh slot
+even if its underlying I/O is slow to cancel. Late results are discarded, and a
+successful retry restores the normal reading and ring color.
+Cancellation before or during script startup also cancels the worker and stops
+its helper process; cleanup does not depend on the deadline operation starting.
 
 Scripts return `{ request, extractor }`, matching Code Switch R's query shape:
 
@@ -203,6 +211,14 @@ answering anything. Codenotch does not need to be running for the CLI to proceed
 The helper briefly retries a full socket queue. Codex approvals without call IDs
 are reconciled against in-flight calls of the same tool; ambiguous parallel calls
 retain the waiting mark until all candidate calls finish.
+For question and approval completion events with an ID missing on one side,
+only a unique matching invocation of the same tool can clear the wait. Different
+explicit IDs and ambiguous parallel calls are not merged. A permission event
+that supplies the ID for a unique anonymous question replaces that question's
+anonymous record. Multiple anonymous questions stay distinct; when completion
+ownership cannot be determined, the wait remains until an explicit turn stop,
+interruption, session end, or new turn. Routing and completion
+matching failures log only reason codes and counts when their state changes.
 Return to the original application to answer or approve; the panel does not
 offer remote approval controls.
 

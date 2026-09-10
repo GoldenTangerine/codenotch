@@ -270,7 +270,15 @@ final class UsageStore: ObservableObject {
               !refreshing.contains(providerID) else { return }
 
         if provider is ConfiguredUsageProvider,
-           let until = backoffs[providerID] ?? archive.loadBackoffUntil(providerID: providerID), until > Date() { return }
+           let until = backoffs[providerID] ?? archive.loadBackoffUntil(providerID: providerID), until > Date() {
+            backoffs[providerID] = until
+            if let index = snapshots.firstIndex(where: { $0.id == providerID }) {
+                let failure = configuredFailure(provider: provider,
+                    error: UsageProviderError.rateLimited(retryAfter: until.timeIntervalSinceNow))
+                if snapshots[index] != failure { snapshots[index] = failure }
+            }
+            return
+        }
 
         refreshing.insert(providerID)
         attempts[providerID] = Date()
@@ -611,6 +619,7 @@ final class UsageStore: ObservableObject {
         default: message = String(localized: "Query failed.")
         }
         snapshot.queryFailure = message
+        snapshot.queryRetryAfter = backoffs[provider.id]
         snapshot.status = snapshot.hasReading ? .stale(since: lastGood[provider.id]?.fetchedAt ?? Date()) : .error(message)
         return snapshot
     }

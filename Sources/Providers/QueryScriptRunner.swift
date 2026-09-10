@@ -12,14 +12,65 @@ import Darwin
 
 enum QueryDeadline {
     static func run<Value>(seconds: Double, operation: @escaping @Sendable () async throws -> Value) async throws -> Value {
-        try await withThrowingTaskGroup(of: Value.self) { group in
-            group.addTask { try await operation() }
-            group.addTask {
-                try await Task.sleep(for: .seconds(seconds))
-                throw QueryError.timeout
+        try Task.checkCancellation()
+        let race = Completion<Value>()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                race.install(continuation)
+                race.track(Task {
+                    do {
+                        try Task.checkCancellation()
+                        race.finish(.success(try await operation()))
+                    } catch { race.finish(.failure(error)) }
+                })
+                race.track(Task {
+                    do {
+                        try await Task.sleep(for: .seconds(seconds))
+                        race.finish(.failure(QueryError.timeout))
+                    } catch { race.finish(.failure(error)) }
+                })
             }
-            defer { group.cancelAll() }
-            return try await group.next()!
+        } onCancel: {
+            race.finish(.failure(CancellationError()))
+        }
+    }
+
+    // A task group waits for cancelled children before returning. Callback-based
+    // I/O can ignore cancellation, so finish the caller independently and discard
+    // late results. Cancel outside the lock: cancellation handlers can re-enter.
+    private final class Completion<Value>: @unchecked Sendable {
+        private let lock = NSLock()
+        private var result: Result<Value, Error>?
+        private var continuation: CheckedContinuation<Value, Error>?
+        private var tasks: [Task<Void, Never>] = []
+
+        func install(_ continuation: CheckedContinuation<Value, Error>) {
+            lock.lock()
+            let result = result
+            if result == nil { self.continuation = continuation }
+            lock.unlock()
+            if let result { continuation.resume(with: result) }
+        }
+
+        func track(_ task: Task<Void, Never>) {
+            lock.lock()
+            let finished = result != nil
+            if !finished { tasks.append(task) }
+            lock.unlock()
+            if finished { task.cancel() }
+        }
+
+        func finish(_ result: Result<Value, Error>) {
+            lock.lock()
+            guard self.result == nil else { lock.unlock(); return }
+            self.result = result
+            let continuation = continuation
+            self.continuation = nil
+            let tasks = tasks
+            self.tasks = []
+            lock.unlock()
+            continuation?.resume(with: result)
+            tasks.forEach { $0.cancel() }
         }
     }
 }
@@ -47,6 +98,7 @@ final class QueryHTTPClient: NSObject, URLSessionTaskDelegate {
 
     func data(for request: URLRequest) async throws -> Data {
         let (bytes, response) = try await session.bytes(for: request)
+        defer { bytes.task.cancel() }
         guard let http = response as? HTTPURLResponse else { throw UsageProviderError.badResponse(status: 0) }
         if http.statusCode == 401 || http.statusCode == 403 { throw UsageProviderError.needsAuth }
         if http.statusCode == 429 {
@@ -171,6 +223,7 @@ final class QueryScriptRunner: @unchecked Sendable {
     }
 
     func run(code: String, variables: [String: String], timeout: Double) async throws -> [LimitWindow] {
+        try Task.checkCancellation()
         let task = Task.detached { [self] in
             defer {
                 stop()
@@ -187,14 +240,20 @@ final class QueryScriptRunner: @unchecked Sendable {
             guard let result = try receive()["result"] else { throw QueryError.script }
             return try QueryResultParser.windows(result)
         }
-        return try await QueryDeadline.run(seconds: timeout) {
-            try await withTaskCancellationHandler {
+        // The deadline may finish before it starts its operation. Ownership of
+        // the already-created worker must therefore stay outside that operation.
+        defer {
+            task.cancel()
+            stop()
+        }
+        return try await withTaskCancellationHandler {
+            try await QueryDeadline.run(seconds: timeout) {
                 try Task.checkCancellation()
                 return try await task.value
-            } onCancel: {
-                task.cancel()
-                self.stop()
             }
+        } onCancel: {
+            task.cancel()
+            self.stop()
         }
     }
 }

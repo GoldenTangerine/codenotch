@@ -223,6 +223,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
     var icon: ProviderIcon?
     var manualQuery: Bool = false
     var queryFailure: String?
+    var queryRetryAfter: Date?
     var linked: CodeSwitchDetails?
 
     /// The number on the cell: the provider's declared primary window — for
@@ -286,8 +287,25 @@ struct ProviderSnapshot: Identifiable, Equatable {
         }
     }
 
+    var isActivityOnly: Bool { id.hasPrefix("activity:") }
+
+    var tooltipTitle: String {
+        isActivityOnly ? displayName : String(localized: "\(displayName) Usage")
+    }
+
+    func refreshNote(isRefreshing: Bool, now: Date) -> String? {
+        if isRefreshing { return String(localized: "Refreshing…") }
+        if let until = queryRetryAfter, until > now {
+            return String(localized: "Retry after \(until.formatted(date: .omitted, time: .standard))")
+        }
+        if queryFailure != nil { return String(localized: "Refresh failed") }
+        guard hasReading, let since = status.staleSince, since != .distantPast else { return nil }
+        return ElapsedCopy.ago(since: since, now: now)
+    }
+
     /// What the tooltip says instead of limit rows when there is nothing to show.
     var statusMessage: String? {
+        if isActivityOnly { return String(localized: "Provider not linked yet") }
         if hasReading { return nil }
         switch status {
         case .needsAuth:      return authPrompt

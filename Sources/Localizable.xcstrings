@@ -1,6 +1,15 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Reliable refresh and session recovery." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "刷新与会话状态恢复更可靠。"}}}},
+    "Retry failed usage queries" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "查询失败后可再次刷新"}}}},
+    "Timed-out queries no longer block another refresh. Successful retries restore the ring color, and the card shows refresh progress or the rate-limit retry time." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "查询超时后可再次刷新，成功后恢复圆环颜色；卡片显示刷新进度或限流后的可重试时间。"}}}},
+    "Keep activity on its supplier" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "会话活动归属实际供应商"}}}},
+    "Recover supplier links when a session start event is missed. Unlinked CLI activity is labeled clearly. Update Code Switch R to 2.11.19 for packed session metadata support." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "漏收会话开始事件时可恢复供应商关联，未关联的 CLI 活动显示明确说明。请求使用打包会话元数据时，请同时更新 Code Switch R 至 2.11.19。"}}}},
+    "Recover waiting states safely" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "准确恢复提问等待状态"}}}},
+    "Answers clear uniquely matched questions even when a call ID is missing or arrives later. Ambiguous parallel questions keep their waiting mark until the turn ends." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "调用 ID 缺失或稍后补齐时，回答可清除唯一匹配的提问；归属不明的并行提问保留等待标记，直到轮次结束。"}}}},
+    "Retry after %@" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "%@ 后重试"}}}},
+    "Provider not linked yet" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "尚未关联供应商"}}}},
     "A simpler provider menu." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "供应商菜单更简洁。"}}}},
     "Drag to reorder providers" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "拖动调整供应商顺序"}}}},
     "In Accounts, reorder providers by dragging their handles. The duplicate move actions have been removed from the menu." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "在账户设置中拖动手柄即可调整供应商顺序，更多菜单中重复的上移、下移已移除。"}}}},

@@ -62,6 +62,7 @@ struct NotchRootView: View {
                         snapshot: snapshot,
                         activity: activity,
                         now: model.now,
+                        isRefreshing: model.refreshing.contains(snapshot.id),
                         direction: model.edge.tooltipDirection,
                         sessionCap: model.sessionCap,
                         tailOffset: model.tooltipTailOffset(index: index, snapshot: snapshot),

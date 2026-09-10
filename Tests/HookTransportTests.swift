@@ -107,6 +107,10 @@ import Testing
                 payload["tool_input"] = ["command": "synthetic-private-input"]
             }
             if ["PreToolUse", "PostToolUse"].contains(name) { payload["tool_use_id"] = "shell" }
+            if name == "PostToolUse" {
+                payload["tool_use_id"] = NSNull()
+                payload["call_id"] = "shell"
+            }
             let process = Process()
             process.executableURL = helper
             process.arguments = ["--codenotch-hook", "codex", directory.path, "--socket", path]
