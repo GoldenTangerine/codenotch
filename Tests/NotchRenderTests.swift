@@ -9,6 +9,7 @@
  */
 import SwiftUI
 import XCTest
+import Combine
 @testable import Codenotch
 
 /// The layout maths can be right in every unit and still put nothing on the
@@ -298,7 +299,8 @@ final class EdgeArrivalTests: XCTestCase {
     }
 
     private func openController() -> NotchWindowController {
-        let controller = NotchWindowController()
+        // Keep the runner's real pointer from opening or folding the notch during arrival.
+        let controller = NotchWindowController(mouseLocation: { CGPoint(x: -1_000_000, y: -1_000_000) })
         controller.show()
         controller.model.snapshots = (0..<3).map { index in
             ProviderSnapshot(id: "p\(index)", displayName: "P", glyph: .claude,
@@ -313,10 +315,9 @@ final class EdgeArrivalTests: XCTestCase {
     @discardableResult
     private func wait(upTo seconds: TimeInterval = 3,
                       for condition: () -> Bool) -> Bool {
-        var waited: TimeInterval = 0
-        while !condition(), waited < seconds {
+        let deadline = ProcessInfo.processInfo.systemUptime + seconds
+        while !condition(), ProcessInfo.processInfo.systemUptime < deadline {
             pump(0.02)
-            waited += 0.02
         }
         return condition()
     }
@@ -330,12 +331,32 @@ final class EdgeArrivalTests: XCTestCase {
         let controller = openController()
         defer { controller.stop() }
 
+        let landed = expectation(description: "landed folded at full strength on a later turn")
+        let opened = expectation(description: "opened after landing")
+        var sawFold = false
+        var landedOnLaterTurn = false
+        // Record the transition itself: polling can miss the 50 ms arrival beat on a busy runner.
+        let observation = controller.model.$isExpanded.dropFirst().sink { expanded in
+            guard controller.model.edge == .top else { return }
+            if !expanded, !sawFold {
+                sawFold = true
+                XCTAssertLessThan(controller.panelAlphaForTesting, 1, "it never went away")
+                // Published emits in willSet; inspect the completed landing on the next queue turn.
+                DispatchQueue.main.async {
+                    XCTAssertFalse(controller.model.isExpanded,
+                                   "it arrived at full size instead of opening into place")
+                    XCTAssertEqual(controller.panelAlphaForTesting, 1, accuracy: 0.01, "it never came back")
+                    landedOnLaterTurn = true
+                    landed.fulfill()
+                }
+            } else if expanded, sawFold {
+                XCTAssertTrue(landedOnLaterTurn, "it folded and opened in the same turn")
+                opened.fulfill()
+            }
+        }
+        defer { observation.cancel() }
         controller.apply(edge: .top)
-        XCTAssertTrue(wait { controller.panelAlphaForTesting < 1 }, "it never went away")
-        XCTAssertTrue(wait { controller.panelAlphaForTesting == 1 }, "it never came back")
-        XCTAssertFalse(controller.model.isExpanded,
-                       "it arrived at full size instead of opening into place")
-        XCTAssertTrue(wait { controller.model.isExpanded }, "it never opened")
+        wait(for: [landed, opened], timeout: 5, enforceOrder: true)
     }
 
     /// And it is on screen while it opens, not still fading in underneath.
@@ -343,10 +364,16 @@ final class EdgeArrivalTests: XCTestCase {
         let controller = openController()
         defer { controller.stop() }
 
+        let opened = expectation(description: "opened on the destination edge at full strength")
+        let observation = controller.model.$isExpanded.dropFirst().sink { expanded in
+            guard expanded, controller.model.edge == .bottom else { return }
+            XCTAssertEqual(controller.panelAlphaForTesting, 1, accuracy: 0.01,
+                           "it is still fading while it opens — two animations over each other")
+            opened.fulfill()
+        }
+        defer { observation.cancel() }
         controller.apply(edge: .bottom)
-        XCTAssertTrue(wait { controller.model.isExpanded }, "it never opened")
-        XCTAssertEqual(controller.panelAlphaForTesting, 1, accuracy: 0.01,
-                       "it is still fading while it opens — two animations over each other")
+        wait(for: [opened], timeout: 5)
     }
 
     /// A notch that was folded stays folded: moving it is not a reason to open.
@@ -356,7 +383,8 @@ final class EdgeArrivalTests: XCTestCase {
         controller.model.isExpanded = false
 
         controller.apply(edge: .left)
-        pump(0.6)
+        XCTAssertTrue(wait { controller.model.edge == .left && controller.panelAlphaForTesting == 1 },
+                      "it never landed on the destination edge")
         XCTAssertFalse(controller.model.isExpanded, "moving it opened it uninvited")
         XCTAssertEqual(controller.model.edge, .left)
     }

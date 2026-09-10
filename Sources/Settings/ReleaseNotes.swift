@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.15",
+            headline: String(localized: "Arrange linked providers your way."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "One provider order across settings and the notch"),
+                    detail: String(localized: "Drag linked providers to reorder them locally. Settings and the notch share the same default and saved order without changing Code Switch R priorities.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Clearer drag placement"),
+                    detail: String(localized: "Wider handles and insertion lines make placement easier. Cancelling a drag clears its state, and search must be cleared before reordering.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Compact rows with room for details"),
+                    detail: String(localized: "See requests, cost and the main quota at a glance, then expand for more. Resize Settings from its edges; the window remembers its size and position.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.14",
             headline: String(localized: "Arrange linked providers your way."),
             changes: [
