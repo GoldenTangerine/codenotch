@@ -59,11 +59,16 @@ It does not mean only providers handling a request. Older publishers temporarily
 fall back to tray selection with an upgrade message; an upgraded publisher is
 recognized automatically.
 
-The same page shows a compact table with supplier identity, today's success rate,
-requests, tokens and cost, first-token latency and speed, plus quota progress and
-reset times. Cells wrap in narrow windows; missing data stays distinct from zero.
-Quota cells initially show an error or the most-used allowance, with an option to
-expand all quotas. Warning colors follow the notch's usage thresholds. Providers
+The same page shows compact supplier rows with today's requests and cost plus
+the most-used allowance or a quota error. Expand a row for success rate, tokens,
+latency, speed, all quotas and reset times. Drag a row by its handle to reorder
+linked suppliers in both Settings and the notch; the order is saved only in
+Codenotch and does not change Code Switch R priorities. Clear search before
+reordering. An insertion line shows whether the drop goes before or after a row;
+cancelling clears the drag state. Both views use the same name-based default order.
+The Settings window can be resized from its edges and remembers its
+size and position. Missing data stays distinct from zero.
+Warning colors follow the notch's usage thresholds. Providers
 retained only for session association keep their visibility control but show no
 cached statistics or quotas as current readings.
 Search by name, platform or supplier ID, and hide individual linked suppliers. Choices are

@@ -8,6 +8,7 @@
  @FilePath: Sources/Settings/CodeSwitchSettingsView.swift
  */
 import SwiftUI
+import AppKit
 
 struct CodeSwitchSettingsRow: Identifiable {
     let id: String
@@ -20,24 +21,21 @@ struct CodeSwitchSettingsRow: Identifiable {
     var savedName: String { snapshot == nil ? name : name + " · " + platform }
 
     static func rows(snapshots: [ProviderSnapshot], bindings: [String: CodeSwitchSessionLink],
-                     hidden: Set<String>, names: [String: String], search: String) -> [Self] {
+                     hidden: Set<String>, names: [String: String], search: String, order: [String] = []) -> [Self] {
         var live = Dictionary(snapshots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let currentIDs = Set(live.keys)
         for link in bindings.values where live[link.snapshot.id] == nil { live[link.snapshot.id] = link.snapshot }
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
-        return Set(live.keys).union(hidden).map { id in
+        let items: [Self] = Set(live.keys).union(hidden).map { id -> Self in
             let snapshot = live[id]
             return Self(id: id, name: snapshot?.displayName ?? names[id] ?? String(localized: "Unavailable provider"),
                         platform: snapshot?.linked?.platform ?? String(localized: "Not currently synced"), snapshot: snapshot,
                         reference: snapshot?.linked?.provider.providerId ?? providerReference(id),
                         isCurrent: currentIDs.contains(id))
-        }.filter {
-            query.isEmpty || [$0.name, $0.platform, $0.reference].contains { $0.localizedCaseInsensitiveContains(query) }
-        }.sorted {
-            if $0.name != $1.name { return $0.name.localizedStandardCompare($1.name) == .orderedAscending }
-            if $0.platform != $1.platform { return $0.platform.localizedStandardCompare($1.platform) == .orderedAscending }
-            return $0.id < $1.id
+        }.filter { row in
+            query.isEmpty || [row.name, row.platform, row.reference].contains(where: { $0.localizedCaseInsensitiveContains(query) })
         }
+        return CodeSwitchProviderOrder.arrange(items, by: order, id: \.id, name: \.name, platform: \.platform)
     }
 
     private static func providerReference(_ id: String) -> String {
@@ -82,10 +80,18 @@ struct CodeSwitchSettingsView: View {
     @ObservedObject var preferences: Preferences
     @ObservedObject var bridge: CodeSwitchBridge
     @State private var search = ""
+    @StateObject private var drag = CodeSwitchProviderDrag()
+
+    private var rows: [CodeSwitchSettingsRow] {
+        CodeSwitchSettingsRow.rows(snapshots: bridge.snapshots, bindings: bridge.bindings,
+            hidden: preferences.hiddenCodeSwitchProviders, names: preferences.hiddenCodeSwitchNames,
+            search: search, order: preferences.codeSwitchProviderOrder)
+    }
+
+    private var canReorder: Bool { search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
-        let rows = CodeSwitchSettingsRow.rows(snapshots: bridge.snapshots, bindings: bridge.bindings,
-            hidden: preferences.hiddenCodeSwitchProviders, names: preferences.hiddenCodeSwitchNames, search: search)
+        let rows = self.rows
         let duplicates = Dictionary(grouping: rows, by: \.savedName).mapValues(\.count)
         GeometryReader { geometry in
             let width = max(0, geometry.size.width - 40)
@@ -109,20 +115,26 @@ struct CodeSwitchSettingsView: View {
                                 .font(.caption).foregroundStyle(.secondary).padding(.vertical, 24)
                         }
                         ForEach(rows) { row in
-                            tableRow(row, width: width, duplicate: duplicates[row.savedName, default: 0] > 1)
+                            CodeSwitchSettingsProviderRow(row: row, width: width, preferences: preferences,
+                                duplicate: duplicates[row.savedName, default: 0] > 1, canReorder: canReorder,
+                                drag: drag, acceptDrop: { payload, placement in
+                                    guard let id = drag.takeSource(payload), canReorder else { return false }
+                                    return preferences.moveCodeSwitchProvider(id, onto: row.id, placement: placement,
+                                                                             visible: self.rows.map(\.id))
+                                })
                             Divider()
                         }
                     } header: {
-                        columns(width: width) {
-                            Text("Show")
+                        codeSwitchSummaryColumns(width: width) {
+                            Text("Show").frame(maxWidth: .infinity, alignment: .trailing)
                         } identity: {
                             Text("Provider")
-                        } statistics: {
+                        } today: {
                             Text("Today")
-                        } performance: {
-                            Text("Performance")
                         } quota: {
                             Text("Quota")
+                        } details: {
+                            Color.clear.frame(height: 1).accessibilityHidden(true)
                         }
                         .font(.caption.weight(.medium)).foregroundStyle(.secondary)
                         .padding(.vertical, 10)
@@ -135,6 +147,8 @@ struct CodeSwitchSettingsView: View {
                 .padding(.horizontal, 20).padding(.bottom, 20)
             }
         }
+        .onChange(of: search) { _, _ in drag.reset() }
+        .onDisappear { drag.reset() }
     }
 
     private var controls: some View {
@@ -150,84 +164,191 @@ struct CodeSwitchSettingsView: View {
         }
     }
 
-    private func columns<Show: View, Identity: View, Statistics: View, Performance: View, Quota: View>(
-        width: CGFloat, @ViewBuilder show: () -> Show, @ViewBuilder identity: () -> Identity,
-        @ViewBuilder statistics: () -> Statistics, @ViewBuilder performance: () -> Performance,
-        @ViewBuilder quota: () -> Quota
-    ) -> some View {
-        let available = max(0, width - 56)
-        return HStack(alignment: .top, spacing: 6) {
-            show().frame(width: 32, alignment: .leading)
-            identity().frame(width: available * 0.26, alignment: .leading)
-            statistics().frame(width: available * 0.29, alignment: .leading)
-            performance().frame(width: available * 0.19, alignment: .leading)
-            VStack(alignment: .leading) { quota() }.frame(width: available * 0.26, alignment: .leading)
+}
+
+@MainActor
+final class CodeSwitchProviderDrag: ObservableObject {
+    private var source: String?
+    private var payload: String?
+    @Published private(set) var isActive = false
+
+    func begin(_ id: String) -> String {
+        source = id
+        let token = UUID().uuidString
+        payload = token
+        isActive = true
+        return token
+    }
+
+    func accepts(_ items: [String], target: String) -> Bool {
+        isActive && source != target && items.count == 1 && items.first == payload
+    }
+
+    func update(_ phase: DragSession.Phase, items: [String]) {
+        guard items.count == 1, items.first == payload else { return }
+        switch phase {
+        case .ended(let operation):
+            isActive = false
+            // A successful drop can deliver its payload after the pointer session ends.
+            if operation != .move && operation != .copy { reset() }
+        case .dataTransferCompleted:
+            reset()
+        default:
+            break
         }
     }
 
-    private func tableRow(_ row: CodeSwitchSettingsRow, width: CGFloat, duplicate: Bool) -> some View {
-        let metrics = CodeSwitchTableMetrics(stats: row.currentSnapshot?.linked?.provider.stats)
-        return columns(width: width) {
-            Toggle(row.savedName, isOn: Binding(get: { !preferences.hiddenCodeSwitchProviders.contains(row.id) }, set: { visible in
-                if visible {
-                    preferences.hiddenCodeSwitchProviders.remove(row.id)
-                    preferences.hiddenCodeSwitchNames.removeValue(forKey: row.id)
-                } else {
-                    preferences.hiddenCodeSwitchNames[row.id] = row.savedName
-                    preferences.hiddenCodeSwitchProviders.insert(row.id)
-                }
-            })).labelsHidden().toggleStyle(.checkbox).help(row.savedName)
-        } identity: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .top, spacing: 5) {
-                    QueryIconView(icon: row.snapshot?.icon, fallback: row.snapshot?.glyph ?? .third, size: 16)
-                        .accessibilityHidden(true)
-                    Text(row.name).font(.callout.weight(.medium)).lineLimit(2).help(row.name)
-                }
-                Text(row.platform).foregroundStyle(.secondary)
-                if !row.isCurrent && row.snapshot != nil {
-                    Text("Session provider").foregroundStyle(.secondary)
-                }
-                if duplicate { Text(row.reference).foregroundStyle(.secondary).lineLimit(1).help(row.reference) }
-            }
-        } statistics: {
-            ViewThatFits(in: .horizontal) {
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack { metric("Success rate", metrics.success); metric("Requests", metrics.requests) }
-                    HStack { metric("Tokens", metrics.tokens); metric("Cost", metrics.cost) }
-                }.fixedSize(horizontal: true, vertical: false)
-                VStack(alignment: .leading, spacing: 5) {
-                    metric("Success rate", metrics.success)
-                    metric("Requests", metrics.requests)
-                    metric("Tokens", metrics.tokens)
-                    metric("Cost", metrics.cost)
-                }
-            }
-        } performance: {
-            VStack(alignment: .leading, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("First token").foregroundStyle(.secondary)
-                    Text(metrics.firstToken)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Speed").foregroundStyle(.secondary)
-                    Text(metrics.speed)
-                }
-            }
-        } quota: {
-            CodeSwitchTableQuotaCell(snapshot: row.currentSnapshot, accent: preferences.accentColor.color,
-                                     resetTimeFormat: preferences.resetTimeFormat)
+    func takeSource(_ items: [String]) -> String? {
+        guard items.count == 1, items.first == payload else { return nil }
+        defer { reset() }
+        return source
+    }
+
+    func reset() { source = nil; payload = nil; isActive = false }
+}
+
+private func codeSwitchSummaryColumns<Controls: View, Identity: View, Today: View, Quota: View, Details: View>(
+    width: CGFloat, @ViewBuilder controls: () -> Controls, @ViewBuilder identity: () -> Identity,
+    @ViewBuilder today: () -> Today, @ViewBuilder quota: () -> Quota, @ViewBuilder details: () -> Details
+) -> some View {
+    let available = max(0, width - 108)
+    return HStack(alignment: .center, spacing: 10) {
+        controls().frame(width: 48, alignment: .leading)
+        identity().frame(width: available * 0.40, alignment: .leading)
+        today().frame(width: available * 0.24, alignment: .leading)
+        VStack(alignment: .leading) { quota() }.frame(width: available * 0.36, alignment: .leading)
+        details().frame(width: 20)
+    }
+}
+
+struct CodeSwitchSettingsProviderRow: View {
+    let row: CodeSwitchSettingsRow
+    let width: CGFloat
+    @ObservedObject var preferences: Preferences
+    let duplicate: Bool
+    let canReorder: Bool
+    @ObservedObject var drag: CodeSwitchProviderDrag
+    let acceptDrop: ([String], CodeSwitchProviderOrder.Placement) -> Bool
+    @State var expanded = false
+    @State private var insertion: CodeSwitchProviderOrder.Placement?
+    @State private var rowHeight: CGFloat = 0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            summary
+            if expanded { detail }
         }
         .font(.caption).monospacedDigit()
-        .padding(.vertical, 10)
+        .padding(.vertical, 12)
+        .frame(width: width, alignment: .leading)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowHeight = $0 }
+        .overlay(alignment: insertion == .before ? .top : .bottom) {
+            if insertion != nil && drag.isActive && canReorder {
+                Rectangle().fill(preferences.accentColor.color).frame(height: 2)
+                    .allowsHitTesting(false).accessibilityHidden(true)
+            }
+        }
+        .contentShape(Rectangle())
+        .dropDestination(for: String.self, isEnabled: canReorder) { items, session in
+            insertion = nil
+            if canReorder { _ = acceptDrop(items, .at(y: session.location.y, height: rowHeight)) }
+        }
+        .dropConfiguration { session in
+            DropConfiguration(operation: canReorder && drag.accepts(
+                session.localSession?.draggedItemIDs(for: String.self) ?? [], target: row.id) ? .move : .forbidden)
+        }
+        .onDropSessionUpdated { session in
+            switch session.phase {
+            case .entering, .active:
+                insertion = canReorder && drag.accepts(
+                    session.localSession?.draggedItemIDs(for: String.self) ?? [], target: row.id)
+                    ? .at(y: session.location.y, height: rowHeight) : nil
+            default:
+                insertion = nil
+            }
+        }
+        .onChange(of: drag.isActive) { _, active in if !active { insertion = nil } }
         .accessibilityElement(children: .contain)
     }
 
-    private func metric(_ label: LocalizedStringKey, _ value: String) -> some View {
-        Text("\(Text(label).foregroundColor(.secondary)) \(Text(verbatim: value))")
-            .fixedSize(horizontal: false, vertical: true)
+    private var summary: some View {
+        let metrics = CodeSwitchTableMetrics(stats: row.currentSnapshot?.linked?.provider.stats)
+        return codeSwitchSummaryColumns(width: width) {
+            HStack(spacing: 5) {
+                Image(systemName: "line.3.horizontal")
+                    .foregroundStyle(.secondary).opacity(canReorder ? 1 : 0.35)
+                    .frame(width: 24, height: 32).contentShape(Rectangle())
+                    .draggable(String.self, id: \.self) { canReorder ? drag.begin(row.id) : nil }
+                    .dragConfiguration(DragConfiguration(
+                        operationsWithinApp: .init(allowCopy: false, allowMove: true),
+                        operationsOutsideApp: .init(allowCopy: false)))
+                    .onDragSessionUpdated { session in
+                        drag.update(session.phase, items: session.draggedItemIDs(for: String.self))
+                    }
+                    .pointerStyle(canReorder ? .grabIdle : nil)
+                    .help(canReorder ? String(localized: "Drag to reorder") : String(localized: "Clear search to reorder"))
+                Toggle(row.savedName, isOn: Binding(get: { !preferences.hiddenCodeSwitchProviders.contains(row.id) }, set: { visible in
+                    if visible {
+                        preferences.hiddenCodeSwitchProviders.remove(row.id)
+                        preferences.hiddenCodeSwitchNames.removeValue(forKey: row.id)
+                    } else {
+                        preferences.hiddenCodeSwitchNames[row.id] = row.savedName
+                        preferences.hiddenCodeSwitchProviders.insert(row.id)
+                    }
+                })).labelsHidden().toggleStyle(.checkbox).help(row.savedName)
+            }
+        } identity: {
+            HStack(alignment: .top, spacing: 6) {
+                QueryIconView(icon: row.snapshot?.icon, fallback: row.snapshot?.glyph ?? .third, size: 20)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(row.name).font(.callout.weight(.medium)).lineLimit(2).help(row.name)
+                    Text(row.platform).foregroundStyle(.secondary).lineLimit(1).help(row.platform)
+                    if !row.isCurrent && row.snapshot != nil { Text("Session provider").foregroundStyle(.secondary) }
+                    if duplicate { Text(row.reference).foregroundStyle(.secondary).lineLimit(1).help(row.reference) }
+                }
+            }
+        } today: {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("\(metrics.requests) requests")
+                Text(metrics.cost).foregroundStyle(.secondary)
+            }.fixedSize(horizontal: false, vertical: true)
+        } quota: {
+            CodeSwitchTableQuotaCell(snapshot: row.currentSnapshot, accent: preferences.accentColor.color,
+                                     resetTimeFormat: preferences.resetTimeFormat, showsReset: false)
+        } details: {
+            Button { expanded.toggle() } label: {
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .frame(width: 20, height: 32).contentShape(Rectangle())
+            }.buttonStyle(.plain).foregroundStyle(.secondary)
+                .accessibilityLabel(expanded ? String(localized: "Hide details") : String(localized: "Show details"))
+                .help(expanded ? String(localized: "Hide details") : String(localized: "Show details"))
+        }
     }
 
+    private var detail: some View {
+        let metrics = CodeSwitchTableMetrics(stats: row.currentSnapshot?.linked?.provider.stats)
+        return VStack(alignment: .leading, spacing: 12) {
+            Divider()
+            HStack(alignment: .top, spacing: 24) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Today").fontWeight(.medium)
+                    LabeledContent("Success rate", value: metrics.success)
+                    LabeledContent("Tokens", value: metrics.tokens)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Performance").fontWeight(.medium)
+                    LabeledContent("First token", value: metrics.firstToken)
+                    LabeledContent("Speed", value: metrics.speed)
+                }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Text("Quota").fontWeight(.medium)
+            CodeSwitchTableQuotaCell(snapshot: row.currentSnapshot, accent: preferences.accentColor.color,
+                                     resetTimeFormat: preferences.resetTimeFormat, expanded: true)
+        }
+        .padding(12)
+        .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+    }
 }
 
 struct CodeSwitchTableQuota: Identifiable {
@@ -256,7 +377,8 @@ struct CodeSwitchTableQuotaCell: View {
     let snapshot: ProviderSnapshot?
     let accent: Color
     let resetTimeFormat: ResetTimeFormat
-    @State var expanded = false
+    var expanded = false
+    var showsReset = true
 
     var body: some View {
         if let snapshot, let provider = snapshot.linked?.provider {
@@ -264,43 +386,46 @@ struct CodeSwitchTableQuotaCell: View {
             let visible = expanded ? items : items.max(by: { $0.priority < $1.priority }).map { [$0] } ?? []
             if provider.loading { Text("Loading…").foregroundStyle(.secondary) }
             else if provider.quotas.isEmpty { Text("No reading").foregroundStyle(.secondary) }
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(visible) { item in
-                    VStack(alignment: .leading, spacing: 3) {
-                        if let window = item.window {
-                            if let fraction = window.usedFraction {
-                                Text("\(Text(item.quota.title).foregroundColor(.secondary)) \(Text(QuotaQuantity.format(fraction * 100) + "%"))")
-                                    .fixedSize(horizontal: false, vertical: true)
-                                ProgressView(value: min(1, max(0, fraction))).progressViewStyle(.linear)
-                                    .tint(item.band.color(accent: accent))
-                                    .accessibilityLabel(item.quota.title)
-                            } else {
-                                Text(item.quota.title).foregroundStyle(.secondary)
-                                Text(window.quantity?.summary ?? String(localized: "No reading"))
-                            }
-                            if let reset = window.resetsAt {
-                                TimelineView(.periodic(from: .now, by: 60)) { context in
-                                    Text(ResetCopy.text(for: reset, now: context.date, format: resetTimeFormat))
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        } else if !item.quota.active && item.quota.displayKind != "error" && item.quota.invalidMessage?.isEmpty != false {
-                            Text(item.quota.title).foregroundStyle(.secondary)
-                            Text("Period has not started").foregroundStyle(.secondary)
-                        } else {
-                            Text(item.quota.title).foregroundStyle(.secondary)
-                            Text("Quota unavailable").foregroundStyle(Palette.critical)
-                        }
-                    }
+            if expanded {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), alignment: .topLeading)], alignment: .leading, spacing: 12) {
+                    ForEach(visible) { item in quotaItem(item) }
                 }
-                if items.count > 1 {
-                    Button { expanded.toggle() } label: {
-                        if expanded { Text("Fewer quotas") } else { Text("All quotas") }
-                    }.buttonStyle(.link).font(.caption)
+            } else {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(visible) { item in quotaItem(item) }
                 }
             }
         } else {
             Text("Not currently synced").foregroundStyle(.secondary)
+        }
+    }
+
+    private func quotaItem(_ item: CodeSwitchTableQuota) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let window = item.window {
+                if let fraction = window.usedFraction {
+                    Text("\(Text(item.quota.title).foregroundColor(.secondary)) \(Text(QuotaQuantity.format(fraction * 100) + "%"))")
+                        .fixedSize(horizontal: false, vertical: true)
+                    ProgressView(value: min(1, max(0, fraction))).progressViewStyle(.linear)
+                        .tint(item.band.color(accent: accent))
+                        .accessibilityLabel(item.quota.title)
+                } else {
+                    Text(item.quota.title).foregroundStyle(.secondary)
+                    Text(window.quantity?.summary ?? String(localized: "No reading"))
+                }
+                if showsReset, let reset = window.resetsAt {
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        Text(ResetCopy.text(for: reset, now: context.date, format: resetTimeFormat))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else if !item.quota.active && item.quota.displayKind != "error" && item.quota.invalidMessage?.isEmpty != false {
+                Text(item.quota.title).foregroundStyle(.secondary)
+                Text("Period has not started").foregroundStyle(.secondary)
+            } else {
+                Text(item.quota.title).foregroundStyle(.secondary)
+                Text("Quota unavailable").foregroundStyle(Palette.critical)
+            }
         }
     }
 }

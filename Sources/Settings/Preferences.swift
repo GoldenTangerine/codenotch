@@ -30,6 +30,9 @@ final class Preferences: ObservableObject {
     @Published var hiddenCodeSwitchNames: [String: String] {
         didSet { defaults.set(hiddenCodeSwitchNames, forKey: "hiddenCodeSwitchNames") }
     }
+    @Published private(set) var codeSwitchProviderOrder: [String] {
+        didSet { defaults.set(codeSwitchProviderOrder, forKey: "codeSwitchProviderOrder") }
+    }
     /// Providers the user has switched off. Stored as the *disconnected* set
     /// rather than the connected one, so a provider added in a later version is
     /// on by default instead of silently staying dark.
@@ -362,6 +365,7 @@ final class Preferences: ObservableObject {
         self.hiddenCodeSwitchProviders = hiddenCodeSwitchProviders
         self.hiddenCodeSwitchNames = (defaults.dictionary(forKey: "hiddenCodeSwitchNames") as? [String: String] ?? [:])
             .filter { hiddenCodeSwitchProviders.contains($0.key) }
+        self.codeSwitchProviderOrder = CodeSwitchProviderOrder.normalized(defaults.stringArray(forKey: "codeSwitchProviderOrder") ?? [])
         self.domainName = domainName ?? (defaults === UserDefaults.standard ? Bundle.main.bundleIdentifier : nil)
         self.isFirstLaunch = !defaults.bool(forKey: Keys.hasLaunched)
         defaults.set(true, forKey: Keys.hasLaunched)
@@ -492,6 +496,16 @@ final class Preferences: ObservableObject {
     /// returned, for something the user never did.
     func setProviderOrder(_ ids: [String]) {
         providerOrder = ProviderOrder.remember(ids, keeping: providerOrder)
+    }
+
+    @discardableResult
+    func moveCodeSwitchProvider(_ id: String, onto target: String,
+                               placement: CodeSwitchProviderOrder.Placement, visible: [String]) -> Bool {
+        guard let order = CodeSwitchProviderOrder.moving(id, onto: target, placement: placement,
+                                                        visible: visible, remembered: codeSwitchProviderOrder),
+              order != codeSwitchProviderOrder else { return false }
+        codeSwitchProviderOrder = order
+        return true
     }
 
     /// Forget everything this app has stored and quit.

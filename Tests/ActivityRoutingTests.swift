@@ -49,6 +49,46 @@ import SQLite3
         #expect(model.activity(for: "code-switch:5:codex:42")?.state == .waiting)
     }
 
+    @Test func linkedOrderIncludesSessionSuppliersWithoutMovingLocalOrFallbackSlots() throws {
+        let state = try bridge()
+        let original = try #require(state.snapshots.first)
+        let provider = CodeSwitchProvider(providerId: "84", providerName: "Another", icon: "openai",
+            activeRequests: 0, status: "enabled", loading: false, updatedAt: 0, quotas: [], stats: nil)
+        let other = provider.snapshot(platform: try fixture().platforms[0])
+        let local = ProviderSnapshot(id: "local", displayName: "Local", glyph: .third,
+                                     fidelity: .official, status: .ok, windows: [])
+        let native = ["codex": [session(1), session(99)]]
+        let order = [original.id, other.id]
+        let routing = ActivityRouting(local: [local], linked: [other], sources: [:], sessions: native,
+            bindings: state.bindings, linkedOrder: order, now: now)
+        #expect(routing.snapshots.map(\.id) == [local.id, original.id, other.id, "activity:codex"])
+        #expect(routing.sessions[original.id]?.map(\.id) == [session(1).id])
+        let settingsRows = CodeSwitchSettingsRow.rows(snapshots: [other], bindings: state.bindings,
+            hidden: [], names: [:], search: "", order: order)
+        #expect(settingsRows.map(\.id) == routing.snapshots.filter { $0.linked != nil }.map(\.id))
+        let hidden = ActivityRouting(local: [local], linked: [other], sources: [:], sessions: native,
+            bindings: state.bindings, hiddenLinked: [original.id], linkedOrder: order, now: now)
+        #expect(hidden.snapshots.map(\.id) == [local.id, other.id, "activity:codex"])
+        #expect(hidden.sessions[original.id] == nil)
+    }
+
+    @Test func defaultLinkedOrderMatchesSettingsWithoutMovingOtherSlots() throws {
+        let platform = try fixture().platforms[0]
+        let linked = ["Zulu", "Alpha", "Provider 10", "Provider 2"].map { name in
+            CodeSwitchProvider(providerId: name, providerName: name, icon: "openai", activeRequests: 0,
+                status: "enabled", loading: false, updatedAt: 0, quotas: [], stats: nil).snapshot(platform: platform)
+        }
+        let local = ProviderSnapshot(id: "local", displayName: "Local", glyph: .third,
+                                     fidelity: .official, status: .ok, windows: [])
+        let routing = ActivityRouting(local: [local], linked: linked, sources: [:],
+            sessions: ["codex": [session(99)]], bindings: [:], now: now)
+        let rows = CodeSwitchSettingsRow.rows(snapshots: linked, bindings: [:], hidden: [], names: [:], search: "")
+        #expect(rows.map(\.name) == ["Alpha", "Provider 2", "Provider 10", "Zulu"])
+        #expect(routing.snapshots.map(\.id) == [local.id] + rows.map(\.id) + ["activity:codex"])
+        let interleaved = CodeSwitchProviderOrder.apply([], to: [linked[0], local, linked[1]])
+        #expect(interleaved.map(\.id) == [linked[1].id, local.id, linked[0].id])
+    }
+
     @Test func lateAssociationRemovesOnlyTheResolvedFallbackSessions() throws {
         let state = try bridge()
         let first = session(1), second = session(2)

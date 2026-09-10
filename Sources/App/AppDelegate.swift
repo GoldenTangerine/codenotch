@@ -294,6 +294,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.$hiddenCodeSwitchProviders.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
+            preferences.$codeSwitchProviderOrder.dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.updateActivity() }
+                .store(in: &cancellables)
             codeSwitch.$bindings.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
@@ -425,7 +428,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let merged = hookMonitor.state.merging(nativeSessions)
         let routing = ActivityRouting(local: localSnapshots, linked: codeSwitch?.snapshots ?? [],
                                       sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:],
-                                      hiddenLinked: preferences?.hiddenCodeSwitchProviders ?? [])
+                                      hiddenLinked: preferences?.hiddenCodeSwitchProviders ?? [],
+                                      linkedOrder: preferences?.codeSwitchProviderOrder ?? [])
         if (activityRouting?.unmatched ?? [:]) != routing.unmatched {
             let summary = ActivityRouting.UnmatchedReason.allCases.map {
                 "\($0.rawValue)=\(routing.unmatched[$0, default: 0])"

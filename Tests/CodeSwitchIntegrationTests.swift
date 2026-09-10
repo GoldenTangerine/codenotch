@@ -162,23 +162,132 @@ import Testing
         #expect(items.dropLast().max(by: { $0.priority < $1.priority })?.quota.key == "weekly")
     }
 
-    @Test @MainActor func settingsQuotaDisclosureKeepsDefaultRowsCompact() throws {
+    @Test @MainActor func settingsProviderDetailsKeepSummaryRowsCompact() throws {
         _ = NSApplication.shared
         let snapshot = tableProvider([tableQuota("five_hour"), tableQuota("weekly", used: 95), tableQuota("monthly")])
             .snapshot(platform: try fixture().platforms[0])
-        for width in [100.0, 150.0] {
+        let row = try #require(CodeSwitchSettingsRow.rows(snapshots: [snapshot], bindings: [:], hidden: [], names: [:], search: "").first)
+        let domain = "codenotch.row.render." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let preferences = Preferences(defaults: defaults, domainName: domain)
+        for width in [444.0, 640.0, 900.0] {
             func height(expanded: Bool) -> CGFloat {
-                let host = NSHostingView(rootView: VStack(alignment: .leading) {
-                    CodeSwitchTableQuotaCell(snapshot: snapshot, accent: .blue, resetTimeFormat: .remaining, expanded: expanded)
-                }.font(.caption).frame(width: width).fixedSize(horizontal: false, vertical: true))
+                let host = NSHostingView(rootView: CodeSwitchSettingsProviderRow(row: row, width: width,
+                    preferences: preferences, duplicate: false, canReorder: true,
+                    drag: CodeSwitchProviderDrag(), acceptDrop: { _, _ in false }, expanded: expanded)
+                    .fixedSize(horizontal: false, vertical: true))
                 host.layoutSubtreeIfNeeded()
                 return host.fittingSize.height
             }
             let collapsed = height(expanded: false)
             let expanded = height(expanded: true)
-            #expect(collapsed > 0 && collapsed < 120)
-            #expect(expanded > collapsed + 40)
+            #expect(collapsed > 0 && collapsed < 110)
+            #expect(expanded > collapsed + 80)
         }
+    }
+
+    @Test @MainActor func settingsOrderPersistsAndPreservesAbsentSlots() throws {
+        let domain = "codenotch.order." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let ids = ["a", "offline", "b", "new"].map { "code-switch:5:codex:" + $0 }
+        defaults.set([ids[0], ids[1], ids[2], ids[0], "local"], forKey: "codeSwitchProviderOrder")
+        let preferences = Preferences(defaults: defaults, domainName: domain)
+        preferences.hiddenCodeSwitchProviders = [ids[2]]
+        #expect(preferences.codeSwitchProviderOrder == Array(ids.prefix(3)))
+        #expect(preferences.moveCodeSwitchProvider(ids[3], onto: ids[0], placement: .before, visible: [ids[0], ids[2], ids[3]]))
+        let restored = Preferences(defaults: defaults, domainName: domain)
+        #expect(restored.codeSwitchProviderOrder == [ids[3], ids[1], ids[0], ids[2]])
+        #expect(restored.hiddenCodeSwitchProviders == [ids[2]])
+        let names = Dictionary(uniqueKeysWithValues: ids.map { ($0, $0) })
+        let rows = CodeSwitchSettingsRow.rows(snapshots: [], bindings: [:], hidden: Set(ids), names: names,
+                                              search: "", order: restored.codeSwitchProviderOrder)
+        #expect(rows.map(\.id) == restored.codeSwitchProviderOrder)
+        #expect(!restored.moveCodeSwitchProvider("missing", onto: ids[0], placement: .before, visible: ids))
+        #expect(!restored.moveCodeSwitchProvider(ids[0], onto: ids[0], placement: .before, visible: ids))
+        #expect(restored.codeSwitchProviderOrder == preferences.codeSwitchProviderOrder)
+    }
+
+    @Test @MainActor func settingsDragRejectsForeignAndCancelledPayloads() {
+        let drag = CodeSwitchProviderDrag()
+        let first = drag.begin("code-switch:5:codex:1")
+        #expect(!drag.accepts(["foreign"], target: "other"))
+        #expect(!drag.accepts([first], target: "code-switch:5:codex:1"))
+        #expect(drag.takeSource(["foreign"]) == nil)
+        #expect(drag.isActive)
+        #expect(drag.takeSource([first]) == "code-switch:5:codex:1")
+        let cancelled = drag.begin("code-switch:5:codex:1")
+        drag.update(.ended(.cancel), items: [cancelled])
+        #expect(!drag.isActive)
+        #expect(drag.takeSource([cancelled]) == nil)
+        let rejected = drag.begin("code-switch:5:codex:1")
+        drag.update(.ended(.forbidden), items: [rejected])
+        #expect(!drag.isActive)
+        #expect(drag.takeSource([rejected]) == nil)
+        let token = drag.begin("code-switch:5:codex:2")
+        drag.update(.dataTransferCompleted, items: [cancelled])
+        #expect(drag.accepts([token], target: "other"))
+        drag.update(.ended(.move), items: [token])
+        #expect(!drag.isActive)
+        #expect(drag.takeSource([token]) == "code-switch:5:codex:2")
+        #expect(drag.takeSource([token]) == nil)
+        let completed = drag.begin("code-switch:5:codex:2")
+        drag.update(.ended(.move), items: [completed])
+        drag.update(.dataTransferCompleted, items: [completed])
+        #expect(drag.takeSource([completed]) == nil)
+    }
+
+    @Test func insertionFeedbackMatchesMovesInBothDirections() {
+        let ids = ["a", "b", "c", "d"].map { "code-switch:5:codex:" + $0 }
+        func move(_ source: Int, _ target: Int, y: CGFloat) -> [String]? {
+            CodeSwitchProviderOrder.moving(ids[source], onto: ids[target],
+                placement: .at(y: y, height: 100), visible: ids, remembered: [])
+        }
+        #expect(move(0, 2, y: 25) == [ids[1], ids[0], ids[2], ids[3]])
+        #expect(move(0, 2, y: 75) == [ids[1], ids[2], ids[0], ids[3]])
+        #expect(move(3, 1, y: 25) == [ids[0], ids[3], ids[1], ids[2]])
+        #expect(move(3, 1, y: 75) == [ids[0], ids[1], ids[3], ids[2]])
+        #expect(move(0, 1, y: 25) == nil)
+        #expect(move(1, 0, y: 75) == nil)
+        #expect(move(1, 1, y: 25) == nil)
+        #expect(move(3, 0, y: 0) == [ids[3], ids[0], ids[1], ids[2]])
+        #expect(move(0, 3, y: 100) == [ids[1], ids[2], ids[3], ids[0]])
+    }
+
+    @Test @MainActor func settingsWindowSupportsResizingAndRestoresSavedDimensions() throws {
+        _ = NSApplication.shared
+        let name = "codenotch.window.test." + UUID().uuidString
+        defer { NSWindow.removeFrame(usingName: name) }
+        func window() -> NSWindow {
+            NSWindow(contentRect: NSRect(x: 0, y: 0, width: 680, height: 520),
+                     styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
+        }
+        let first = window()
+        first.isReleasedWhenClosed = false
+        SettingsWindowController.configureResizing(first, autosaveName: name)
+        #expect(first.styleMask.contains(.resizable))
+        #expect(first.contentMinSize == NSSize(width: 680, height: 520))
+        first.setContentSize(NSSize(width: 920, height: 680))
+        first.saveFrame(usingName: name)
+        first.setFrameAutosaveName("")
+        let expected = first.frame.size
+        let saved = try #require(UserDefaults.standard.string(forKey: "NSWindow Frame " + name))
+            .split(separator: " ").compactMap { Double($0) }
+        try #require(saved.count == 8)
+        #expect(abs(saved[2] - Double(expected.width)) < 1)
+        #expect(abs(saved[3] - Double(expected.height)) < 1)
+        let second = window()
+        second.isReleasedWhenClosed = false
+        SettingsWindowController.configureResizing(second, autosaveName: name)
+        // AppKit declines frame restoration when no display is connected.
+        if !NSScreen.screens.isEmpty {
+            #expect(abs(second.frame.width - expected.width) < 1)
+            #expect(abs(second.frame.height - expected.height) < 1)
+        }
+        second.setFrameAutosaveName("")
+        first.close()
+        second.close()
     }
 
     @Test @MainActor func settingsTableRendersLoadingAndOfflineRowsAtBothWidths() async throws {
@@ -202,7 +311,7 @@ import Testing
         preferences.hiddenCodeSwitchProviders = ["code-switch:5:codex:offline"]
         preferences.hiddenCodeSwitchNames = ["code-switch:5:codex:offline": "Offline fixture"]
         let height = SettingsView.height - SettingsView.headerHeight
-        for width in [SettingsView.width - SettingsView.sidebarWidth, SettingsView.width] {
+        for width in [SettingsView.width - SettingsView.sidebarWidth, SettingsView.width, 900] {
             for scheme in [ColorScheme.light, .dark] {
                 let view = CodeSwitchSettingsView(preferences: preferences, bridge: bridge)
                     .frame(width: width, height: height).environment(\.colorScheme, scheme)

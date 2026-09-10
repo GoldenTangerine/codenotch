@@ -1,6 +1,17 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Arrange linked providers your way." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "按你的习惯排列联动供应商。"}}}},
+    "One provider order across settings and the notch" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "设置与刘海同步排序"}}}},
+    "Drag linked providers to reorder them locally. Settings and the notch share the same default and saved order without changing Code Switch R priorities." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "拖动调整联动供应商的本地顺序。设置与刘海使用相同的默认和保存顺序，不修改 Code Switch R 的供应商优先级。"}}}},
+    "Clearer drag placement" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "拖动落点更清晰"}}}},
+    "Wider handles and insertion lines make placement easier. Cancelling a drag clears its state, and search must be cleared before reordering." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "加宽手柄并用插入线指示位置，取消拖动后及时清除状态。清空搜索后即可拖动排序。"}}}},
+    "Compact rows with room for details" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "摘要更简洁，详情按需展开"}}}},
+    "See requests, cost and the main quota at a glance, then expand for more. Resize Settings from its edges; the window remembers its size and position." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "摘要显示请求数、费用和主要额度，展开后查看更多数据。可从设置窗口边缘调整大小，自动记住尺寸与位置。"}}}},
+    "Clear search to reorder" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "清空搜索后可拖动排序"}}}},
+    "Show details" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "展开详情"}}}},
+    "Hide details" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "收起详情"}}}},
+    "%@ requests" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "%@ 次请求"}}}},
     "Compare your linked providers at a glance." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "联动供应商数据一目了然。"}}}},
     "Provider statistics in one table" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "供应商统计集中展示"}}}},
     "Compare daily usage, latency, speed and quotas in Code Switch R settings. Search, hide or restore providers, and expand additional quotas when needed." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "在 Code Switch R 设置页对比每日用量、延迟、速度和额度，支持搜索、隐藏、恢复供应商，以及展开更多额度。"}}}},

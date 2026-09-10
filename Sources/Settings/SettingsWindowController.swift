@@ -115,6 +115,18 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         layoutTrafficLights(in: window)
     }
 
+    func windowDidResize(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        layoutTrafficLights(in: window)
+    }
+
+    static func configureResizing(_ window: NSWindow, autosaveName: String = "CodenotchSettings") {
+        window.styleMask.insert(.resizable)
+        window.contentMinSize = NSSize(width: SettingsView.width, height: SettingsView.height)
+        if !window.setFrameUsingName(autosaveName) { window.center() }
+        window.setFrameAutosaveName(autosaveName)
+    }
+
     func show() {
         if let window {
             // Re-centered every time, not only at creation: a window is
@@ -164,7 +176,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                                    retry: retry,
                                    updater: updater, catalog: catalog, usageStore: usageStore, hooks: hooks, codeSwitch: codeSwitch)
         )
-        window.center()
+        Self.configureResizing(window)
         window.isReleasedWhenClosed = false
         self.window = window
         layoutTrafficLights(in: window)

@@ -20,7 +20,7 @@ struct ActivityRouting {
 
     init(local: [ProviderSnapshot], linked: [ProviderSnapshot], sources: [String: String],
          sessions native: [String: [AgentSession]], bindings: [String: CodeSwitchSessionLink],
-         hiddenLinked: Set<String> = [], now: Date = Date()) {
+         hiddenLinked: Set<String> = [], linkedOrder: [String] = [], now: Date = Date()) {
         let hasLinkedCodex = linked.contains {
             $0.linked != nil && $0.id.hasPrefix("code-switch:5:codex:") && !hiddenLinked.contains($0.id)
         }
@@ -81,6 +81,7 @@ struct ActivityRouting {
             snapshots.removeAll { hiddenLinked.contains($0.id) && $0.id.hasPrefix("code-switch:") }
             sessions = sessions.filter { !hiddenLinked.contains($0.key) || !$0.key.hasPrefix("code-switch:") }
         }
+        snapshots = CodeSwitchProviderOrder.apply(linkedOrder, to: snapshots)
     }
 
     func providerID(for session: AgentSession) -> String? {
