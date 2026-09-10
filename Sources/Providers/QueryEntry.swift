@@ -214,13 +214,6 @@ final class QueryCatalog: ObservableObject {
         persist([])
     }
 
-    func move(_ id: String, by offset: Int) {
-        guard let index = entries.firstIndex(where: { $0.id == id }),
-              entries.indices.contains(index + offset) else { return }
-        entries.swapAt(index, index + offset)
-        persist([])
-    }
-
     @discardableResult
     func move(_ id: String, onto targetID: String) -> Bool {
         guard let from = entries.firstIndex(where: { $0.id == id }),

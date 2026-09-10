@@ -40,6 +40,16 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.10",
+            headline: String(localized: "A simpler provider menu."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Drag to reorder providers"),
+                    detail: String(localized: "In Accounts, reorder providers by dragging their handles. The duplicate move actions have been removed from the menu.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.9",
             headline: String(localized: "Start alerts and more sounds."),
             changes: [

@@ -101,7 +101,7 @@ Existing providers and their enabled states migrate on first launch. Deleted
 entries stay deleted; new local profiles can be added from the editor.
 Existing configurations can add GitHub Copilot or Gemini API through
 **Add provider → Automatic → Local provider**. Drag a provider's handle to
-reorder it, or use **Move up** and **Move down** from its menu.
+reorder it.
 
 Manual queries accept the credential required by the selected endpoint: for
 example, Claude's OAuth access token, Cursor's Cookie, or a GLM API key. Manual

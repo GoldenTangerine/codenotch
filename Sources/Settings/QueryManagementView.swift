@@ -56,15 +56,11 @@ struct QueryManagementView: View {
                     .help("Refresh").disabled(!entry.enabled || store.refreshing.contains(entry.id))
                     Button { editing = entry } label: { Image(systemName: "pencil") }.help("Edit provider")
                     Menu {
-                        Button("Move up", systemImage: "arrow.up") { catalog.move(entry.id, by: -1) }
-                            .disabled(catalog.entries.first?.id == entry.id)
-                        Button("Move down", systemImage: "arrow.down") { catalog.move(entry.id, by: 1) }
-                            .disabled(catalog.entries.last?.id == entry.id)
                         if entry.usesLocalAccount {
                             Button("Allow access…", systemImage: "key") { store.reauthorize(providerID: entry.id) }
                             Button("Open account source", systemImage: "arrow.up.forward.app") { _ = store.openAccountSource(providerID: entry.id) }
+                            Divider()
                         }
-                        Divider()
                         Button("Delete provider", systemImage: "trash", role: .destructive) { deleting = entry }
                     } label: { Image(systemName: "ellipsis") }
                     .menuStyle(.borderlessButton).fixedSize().help("Provider actions")

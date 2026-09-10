@@ -1,6 +1,9 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "A simpler provider menu." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "供应商菜单更简洁。"}}}},
+    "Drag to reorder providers" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "拖动调整供应商顺序"}}}},
+    "In Accounts, reorder providers by dragging their handles. The duplicate move actions have been removed from the menu." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "在账户设置中拖动手柄即可调整供应商顺序，更多菜单中重复的上移、下移已移除。"}}}},
     "Start alerts and more sounds." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "每轮开始有提醒，提示音选择更丰富。"}}}},
     "Alerts when a turn starts" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "每轮开始时提醒"}}}},
     "With CLI hooks installed, Claude Code and Codex can open the rings when you submit a message. Start alerts default to 5 seconds with sound off, with separate controls in Notifications." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "安装 CLI hooks 后，在 Claude Code 或 Codex 中提交消息即可展开用量环。默认展开 5 秒、声音关闭，可在通知设置中独立调整。"}}}},
@@ -3124,28 +3127,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "供应商操作"
-          }
-        }
-      }
-    },
-    "Move up": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上移"
-          }
-        }
-      }
-    },
-    "Move down": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "下移"
           }
         }
       }
