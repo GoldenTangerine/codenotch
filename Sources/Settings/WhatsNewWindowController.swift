@@ -1,3 +1,12 @@
+/**
+ @name: 更新说明窗口
+ @Descripttion: 展示版本更新说明并实时应用界面强调色。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-10 09:52:17
+ @LastEditTime: 2026-09-10 09:52:17
+ @FilePath: Sources/Settings/WhatsNewWindowController.swift
+ */
 import AppKit
 import SwiftUI
 
@@ -13,6 +22,7 @@ final class WhatsNewWindowController {
     var onDismiss: (() -> Void)?
 
     private var window: NSWindow?
+    var contentViewForTesting: NSView? { window?.contentView }
     private let preferences: Preferences
     private let version: String
 
@@ -51,9 +61,9 @@ final class WhatsNewWindowController {
         )
         window.title = String(localized: "What's New")
         window.contentView = NSHostingView(
-            rootView: WhatsNewView(note: note) { [weak self] in self?.dismiss() }
-                .tint(preferences.accentColor.color)
-                .environment(\.codenotchAccentColor, preferences.accentColor.color)
+            rootView: WhatsNewRootView(preferences: preferences, note: note) {
+                [weak self] in self?.dismiss()
+            }
         )
         window.center()
         window.isReleasedWhenClosed = false
@@ -89,6 +99,18 @@ final class WhatsNewWindowController {
     }
 
     private lazy var closeWatcher = CloseWatcher { [weak self] in self?.dismiss() }
+}
+
+private struct WhatsNewRootView: View {
+    @ObservedObject var preferences: Preferences
+    let note: ReleaseNote
+    let onContinue: () -> Void
+
+    var body: some View {
+        WhatsNewView(note: note, onContinue: onContinue)
+            .tint(preferences.accentColor.color)
+            .environment(\.codenotchAccentColor, preferences.accentColor.color)
+    }
 }
 
 /// An `NSWindowDelegate` has to be an Objective-C class, which a `@MainActor`

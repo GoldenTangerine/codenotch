@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.8",
+            headline: String(localized: "Separate colors for your interface and notch."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Choose each accent independently"),
+                    detail: String(localized: "In Appearance, set Interface accent color for Settings and What's New, and Notch accent color for rings and detail cards.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Keep your existing colors"),
+                    detail: String(localized: "Upgrading keeps your previous accent for both choices. Future changes are saved separately and take effect immediately.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Position editing matches your notch"),
+                    detail: String(localized: "The outline shown while moving the notch now uses its accent color. Warning and error colors keep their existing meaning.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.7",
             headline: String(localized: "More room for provider details."),
             changes: [

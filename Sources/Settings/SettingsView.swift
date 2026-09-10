@@ -412,6 +412,10 @@ struct SettingsView: View {
     private var appearancePane: some View {
         Form {
             Section("Notch") {
+                LabeledContent("Notch accent color") {
+                    AccentColorPicker(selection: $preferences.notchAccentColor)
+                }
+
                 Picker("Reset time", selection: $preferences.resetTimeFormat) {
                     ForEach(ResetTimeFormat.allCases) { Text($0.title).tag($0) }
                 }
@@ -492,20 +496,8 @@ struct SettingsView: View {
             // Apart from the notch's own group: these are about the app, not
             // the thing it draws on the screen edge.
             Section("App") {
-                LabeledContent("Accent color") {
-                    // 2pt, not 7: each swatch is now sized to its own
-                    // selection ring, so the gap the eye sees is this plus
-                    // the 6pt of ring standing clear of the dot inside it.
-                    HStack(spacing: 2) {
-                        ForEach(AccentColorChoice.allCases) { choice in
-                            AccentColorSwatch(
-                                choice: choice,
-                                isSelected: preferences.accentColor == choice
-                            ) {
-                                preferences.accentColor = choice
-                            }
-                        }
-                    }
+                LabeledContent("Interface accent color") {
+                    AccentColorPicker(selection: $preferences.accentColor)
                 }
 
                 // "App icon", not "Icon": the picker above is about the
@@ -1001,6 +993,23 @@ private struct GrabCursor: NSViewRepresentable {
 @MainActor
 final class DragState {
     var id: String?
+}
+
+private struct AccentColorPicker: View {
+    @Binding var selection: AccentColorChoice
+
+    var body: some View {
+        // 2pt, not 7: each swatch is now sized to its own
+        // selection ring, so the gap the eye sees is this plus
+        // the 6pt of ring standing clear of the dot inside it.
+        HStack(spacing: 2) {
+            ForEach(AccentColorChoice.allCases) { choice in
+                AccentColorSwatch(choice: choice, isSelected: selection == choice) {
+                    selection = choice
+                }
+            }
+        }
+    }
 }
 
 /// A compact macOS-style colour choice. The outer ring makes pale colours and

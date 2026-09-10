@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏渲染测试
+ @Descripttion: 验证显示栏绘制、编辑配色和窗口交互行为。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-10 10:05:32
+ @LastEditTime: 2026-09-10 10:05:32
+ @FilePath: Tests/NotchRenderTests.swift
+ */
 import SwiftUI
 import XCTest
 @testable import Codenotch
@@ -57,6 +66,37 @@ final class NotchRenderTests: XCTestCase {
                 "\(edge): the panel came out blank — the notch drew nothing"
             )
         }
+    }
+
+    func testPositionEditingOutlineUsesTheNotchAccent() throws {
+        let model = model(edge: .right, cells: 0)
+        model.isEditingPosition = true
+
+        func colouredPixels(_ choice: AccentColorChoice, in image: NSBitmapImageRep) throws -> Int {
+            let expected = try XCTUnwrap(NSColor(choice.color).usingColorSpace(.deviceRGB))
+            var count = 0
+            for x in 0..<image.pixelsWide {
+                for y in 0..<image.pixelsHigh {
+                    guard let colour = image.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                          colour.alphaComponent > 0.2 else { continue }
+                    let hueDistance = abs(colour.hueComponent - expected.hueComponent)
+                    if colour.saturationComponent > 0.5,
+                       min(hueDistance, 1 - hueDistance) < 0.04 {
+                        count += 1
+                    }
+                }
+            }
+            return count
+        }
+
+        model.accentColor = .pink
+        let pink = try XCTUnwrap(render(model))
+        XCTAssertGreaterThan(try colouredPixels(.pink, in: pink), 0)
+
+        model.accentColor = .green
+        let green = try XCTUnwrap(render(model))
+        XCTAssertGreaterThan(try colouredPixels(.green, in: green), 0)
+        XCTAssertEqual(try colouredPixels(.pink, in: green), 0)
     }
 
     /// And it paints it against the bezel, not somewhere in the middle of the

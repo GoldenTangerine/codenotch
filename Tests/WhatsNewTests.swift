@@ -1,3 +1,12 @@
+/**
+ @name: 更新说明测试
+ @Descripttion: 验证更新说明展示、已读记录和界面强调色实时刷新。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-10 10:05:32
+ @LastEditTime: 2026-09-10 10:05:32
+ @FilePath: Tests/WhatsNewTests.swift
+ */
 import SwiftUI
 import XCTest
 @testable import Codenotch
@@ -139,6 +148,71 @@ final class WhatsNewMemoryTests: XCTestCase {
 
         let second = WhatsNewWindowController(preferences: preferences, version: version)
         XCTAssertFalse(second.showIfNeeded(), "it showed the same release twice")
+    }
+}
+
+@MainActor
+final class WhatsNewAccentTests: XCTestCase {
+    private func accentPixels(_ choice: AccentColorChoice, in content: NSView) throws -> Int {
+        content.layoutSubtreeIfNeeded()
+        content.displayIfNeeded()
+        let image = try XCTUnwrap(content.bitmapImageRepForCachingDisplay(in: content.bounds))
+        content.cacheDisplay(in: content.bounds, to: image)
+        let expected = try XCTUnwrap(NSColor(choice.color).usingColorSpace(.deviceRGB))
+        let scale = CGFloat(image.pixelsWide) / content.bounds.width
+        var count = 0
+        // Only the list's bullet gutter: the app icon can contain either colour.
+        for x in Int(28 * scale)..<Int(40 * scale) {
+            for y in 0..<image.pixelsHigh {
+                guard let colour = image.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                      colour.alphaComponent > 0.2 else { continue }
+                // AppKit can adjust brightness when compositing the window.
+                // Hue distinguishes these accents without depending on that adjustment.
+                let hueDistance = abs(colour.hueComponent - expected.hueComponent)
+                if colour.saturationComponent > 0.5,
+                   min(hueDistance, 1 - hueDistance) < 0.04 {
+                    count += 1
+                }
+            }
+        }
+        return count
+    }
+
+    private func waitForAccent(_ choice: AccentColorChoice, in content: NSView) throws {
+        let deadline = Date().addingTimeInterval(1)
+        repeat {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+            if try accentPixels(choice, in: content) > 0 { return }
+        } while Date() < deadline
+        XCTFail("The open What's New window did not render \(choice)")
+    }
+
+    func testOpenWindowTracksInterfaceAccentAndIgnoresNotchAccent() throws {
+        guard !NSScreen.screens.isEmpty else { throw XCTSkip("Requires a display") }
+        let name = "WhatsNewAccentTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let preferences = Preferences(defaults: defaults)
+        preferences.accentColor = .green
+        preferences.notchAccentColor = .blue
+        let controller = WhatsNewWindowController(
+            preferences: preferences, version: try XCTUnwrap(ReleaseNotes.all.first).version
+        )
+        defer { controller.dismiss() }
+        XCTAssertTrue(controller.showIfNeeded())
+        let content = try XCTUnwrap(controller.contentViewForTesting)
+        content.appearance = NSAppearance(named: .aqua)
+        try waitForAccent(.green, in: content)
+
+        preferences.accentColor = .pink
+        try waitForAccent(.pink, in: content)
+        XCTAssertEqual(try accentPixels(.green, in: content), 0)
+
+        preferences.notchAccentColor = .green
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertTrue(controller.contentViewForTesting === content)
+        XCTAssertGreaterThan(try accentPixels(.pink, in: content), 0)
+        XCTAssertEqual(try accentPixels(.green, in: content), 0)
     }
 }
 

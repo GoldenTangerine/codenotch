@@ -1,6 +1,15 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Separate colors for your interface and notch." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "界面和悬浮窗，分别配色。"}}}},
+    "Choose each accent independently" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "分别选择强调色"}}}},
+    "In Appearance, set Interface accent color for Settings and What's New, and Notch accent color for rings and detail cards." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "在外观设置中，“界面强调色”用于设置和更新说明，“悬浮窗强调色”用于用量环和详情卡片。"}}}},
+    "Keep your existing colors" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "保留原有配色"}}}},
+    "Upgrading keeps your previous accent for both choices. Future changes are saved separately and take effect immediately." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "升级后两项均保留原强调色，后续修改分别保存并即时生效。"}}}},
+    "Position editing matches your notch" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "定位边框跟随悬浮窗配色"}}}},
+    "The outline shown while moving the notch now uses its accent color. Warning and error colors keep their existing meaning." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "移动悬浮窗时，定位边框使用悬浮窗强调色；预警与错误颜色保持原有规则。"}}}},
+    "Interface accent color" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "界面强调色"}}}},
+    "Notch accent color" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "悬浮窗强调色"}}}},
     "More room for provider details." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "供应商详情，展示更完整。"}}}},
     "Choose your tooltip height" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "选择气泡高度"}}}},
     "In Appearance, choose Show all to fit every session, quota and available statistic. Default keeps the existing layout." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "在外观设置中选择“完整显示”，展开全部会话、额度及已有统计信息；“默认”保持现有布局。"}}}},

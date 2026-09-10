@@ -249,11 +249,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(tooltipHeightMode: $0) }
                 .store(in: &cancellables)
 
-            preferences.$accentColor
-                .receive(on: RunLoop.main)
-                .sink { [weak fleet] in fleet?.apply(accentColor: $0) }
-                .store(in: &cancellables)
-
             let codeSwitch = CodeSwitchBridge()
             self.codeSwitch = codeSwitch
             preferences.$codeSwitchEnabled
@@ -382,8 +377,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(alongOffset: preferences.offset(for: preferences.notchEdge))
         fleet.apply(resetTimeFormat: preferences.resetTimeFormat)
         fleet.apply(tooltipHeightMode: preferences.tooltipHeightMode)
-        fleet.apply(accentColor: preferences.accentColor)
+        Self.bindNotchAccentColor(preferences, to: fleet)
+            .store(in: &cancellables)
         fleet.show()
+    }
+
+    // Apply the saved colour before any window is shown; subsequent changes
+    // use the same binding in normal launches and the demo.
+    static func bindNotchAccentColor(_ preferences: Preferences, to fleet: NotchFleet) -> AnyCancellable {
+        fleet.apply(accentColor: preferences.notchAccentColor)
+        return preferences.$notchAccentColor
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak fleet] in fleet?.apply(accentColor: $0) }
     }
 
     /// Open the notch, and make a noise, when something has just finished.

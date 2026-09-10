@@ -294,9 +294,14 @@ In Settings → Appearance → Reset time, choose **Time remaining** for countdo
 like "Resets in 3 Days 3h". **Reset date** keeps the reset date and time, with
 minutes shown when less than an hour remains.
 
-Appearance also carries the ring's accent colour. The device accent is the
-default; fixed presets are available for pink, red, orange, yellow, green,
-teal, blue, indigo, purple and off-white.
+Appearance has separate **Interface accent color** and **Notch accent color**
+choices. The interface colour applies to Settings and What's New; the notch
+colour applies to rings and detail cards on every display. Each choice is saved
+independently and takes effect immediately. Both default to the device accent;
+fixed presets are available for pink, red, orange, yellow, green, teal, blue,
+indigo, purple and off-white. Upgrading preserves the previous colour for both
+choices, which can then be changed independently. Warning and error colours
+keep their existing meaning.
 
 The app itself can show a Dock icon, a menu bar icon, or neither.
 

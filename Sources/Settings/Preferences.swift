@@ -125,9 +125,13 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(resetTimeFormat.rawValue, forKey: Keys.resetTimeFormat) }
     }
 
-    /// The colour used for positive usage and active-work indicators.
     @Published var accentColor: AccentColorChoice {
         didSet { defaults.set(accentColor.rawValue, forKey: Keys.accentColor) }
+    }
+
+    /// The colour used for positive usage and active-work indicators.
+    @Published var notchAccentColor: AccentColorChoice {
+        didSet { defaults.set(notchAccentColor.rawValue, forKey: Keys.notchAccentColor) }
     }
     /// Where the app itself shows up: Dock, menu bar, or nowhere.
     @Published var appPresence: AppPresence {
@@ -259,6 +263,7 @@ final class Preferences: ObservableObject {
         static let resetTimeFormat = "resetTimeFormat"
         static let scope = "notchScope"
         static let accentColor = "accentColor"
+        static let notchAccentColor = "notchAccentColor"
         static let lastSeenVersion = "lastSeenVersion"
         static let order = "providerOrder"
         static let announceSessionEnd = "announceSessionEnd"
@@ -360,6 +365,18 @@ final class Preferences: ObservableObject {
         // Follow the Mac unless the user explicitly chooses a Codenotch colour.
         self.accentColor = defaults.string(forKey: Keys.accentColor)
             .flatMap(AccentColorChoice.init(rawValue:)) ?? .system
+        // Snapshot the shared choice once, before either picker can change it.
+        // A stored but invalid notch choice falls back independently.
+        let notchAccentColor: AccentColorChoice
+        if defaults.object(forKey: Keys.notchAccentColor) == nil {
+            notchAccentColor = defaults.string(forKey: Keys.accentColor)
+                .flatMap(AccentColorChoice.init(rawValue:)) ?? .system
+            defaults.set(notchAccentColor.rawValue, forKey: Keys.notchAccentColor)
+        } else {
+            notchAccentColor = defaults.string(forKey: Keys.notchAccentColor)
+                .flatMap(AccentColorChoice.init(rawValue:)) ?? .system
+        }
+        self.notchAccentColor = notchAccentColor
         // Absent means nothing has been shown yet, which is true of a fresh
         // install — so the current release reads as new to it.
         self.lastSeenVersion = defaults.string(forKey: Keys.lastSeenVersion)

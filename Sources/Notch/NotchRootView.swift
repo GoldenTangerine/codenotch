@@ -122,7 +122,7 @@ struct NotchRootView: View {
             .overlay {
                 if model.isEditingPosition {
                     SideNotchShape(edge: model.edge, joining: model.joinedNotch)
-                        .stroke(Color.accentColor, lineWidth: 1)
+                        .stroke(model.accentColor.color, lineWidth: 1)
                         .allowsHitTesting(false)
                 }
             }
