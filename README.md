@@ -59,7 +59,14 @@ It does not mean only providers handling a request. Older publishers temporarily
 fall back to tray selection with an upgrade message; an upgraded publisher is
 recognized automatically.
 
-The same page lets you search and hide individual linked suppliers. Choices are
+The same page shows a compact table with supplier identity, today's success rate,
+requests, tokens and cost, first-token latency and speed, plus quota progress and
+reset times. Cells wrap in narrow windows; missing data stays distinct from zero.
+Quota cells initially show an error or the most-used allowance, with an option to
+expand all quotas. Warning colors follow the notch's usage thresholds. Providers
+retained only for session association keep their visibility control but show no
+cached statistics or quotas as current readings.
+Search by name, platform or supplier ID, and hide individual linked suppliers. Choices are
 saved by platform and provider ID, apply in both modes, and also hide associated
 session activity. Hidden entries remain available to restore, including while
 offline. Local accounts and Code Switch R provider switches are unaffected.

@@ -8,6 +8,8 @@
  @FilePath: Tests/CodeSwitchIntegrationTests.swift
  */
 import Foundation
+import AppKit
+import SwiftUI
 import Testing
 @testable import Codenotch
 
@@ -28,6 +30,192 @@ import Testing
 
     private func write<T: Encodable>(_ value: T, _ url: URL) throws {
         try JSONEncoder().encode(value).write(to: url, options: .atomic)
+    }
+
+    @Test func subscriptionUsesIntegerMillisecondsAtFractionalClockTime() async throws {
+        let dir = try directory(); defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("tray-snapshot-v1.json")
+        let reader = CodeSwitchReader(file: file)
+        let fractionalNow = now.addingTimeInterval(0.000125)
+        _ = await reader.read(now: fractionalNow, mode: .enabled, generation: 1)
+        // Go's original int64 decoder rejects fractional JSON numbers.
+        struct IntegerLease: Decodable { let heartbeatAt: Int64 }
+        let data = try Data(contentsOf: dir.appendingPathComponent("codenotch-subscription-v1.json"))
+        let lease = try JSONDecoder().decode(IntegerLease.self, from: data)
+        #expect(lease.heartbeatAt == Int64((fractionalNow.timeIntervalSince1970 * 1000).rounded(.down)))
+        await reader.reset(generation: 2)
+    }
+
+    @Test func settingsTableKeepsSupplierIdentityAndOfflineHiddenEntries() throws {
+        var state = CodeSwitchSnapshotState()
+        state.accept(try fixture(), now: now)
+        let live = try #require(state.snapshots.first)
+        let platform = "custom:工具"
+        let offlineID = "code-switch:\(platform.utf8.count):\(platform):ref:offline"
+        let rows = CodeSwitchSettingsRow.rows(snapshots: state.snapshots + state.snapshots,
+            bindings: state.bindings, hidden: [live.id, offlineID], names: [offlineID: live.displayName], search: "")
+        #expect(Set(rows.map(\.id)).count == rows.count)
+        #expect(rows.first(where: { $0.id == live.id })?.snapshot == live)
+        let offline = try #require(rows.first(where: { $0.id == offlineID }))
+        #expect(offline.snapshot == nil)
+        #expect(offline.reference == "ref:offline")
+        #expect(offline.savedName == live.displayName)
+        let searched = CodeSwitchSettingsRow.rows(snapshots: state.snapshots, bindings: state.bindings,
+            hidden: [offlineID], names: [offlineID: live.displayName], search: "  REF:OFFLINE  ")
+        #expect(searched.map(\.id) == [offlineID])
+        let platformSearch = CodeSwitchSettingsRow.rows(snapshots: state.snapshots, bindings: [:], hidden: [], names: [:], search: "codex")
+        #expect(platformSearch.map(\.id) == state.snapshots.map(\.id))
+        let noMatch = CodeSwitchSettingsRow.rows(snapshots: state.snapshots, bindings: state.bindings,
+            hidden: [], names: [:], search: "nonexistent-fixture")
+        #expect(noMatch.isEmpty)
+    }
+
+    @Test func settingsMetricsMatchUpstreamAndDistinguishMissingFromZero() {
+        let absent = CodeSwitchTableMetrics(stats: nil)
+        #expect([absent.success, absent.requests, absent.tokens, absent.cost, absent.firstToken, absent.speed].allSatisfy { $0 == "—" })
+        let stats = CodeSwitchStats(totalRequests: 10, successfulRequests: 8, failedRequests: 2, successRate: 0.8,
+                                   inputTokens: 100, outputTokens: 200, cacheReadTokens: 300,
+                                   costTotal: 0.0012, avgFirstTokenSec: 0.263, avgTokensPerSec: 29.8)
+        let values = CodeSwitchTableMetrics(stats: stats)
+        #expect(values.success == "80%")
+        #expect(values.requests == "10")
+        #expect(values.tokens == "600")
+        #expect(values.firstToken == "263 ms")
+        #expect(values.speed == QuotaQuantity.format(29.8) + " t/s")
+        #expect(values.cost == 0.0012.formatted(.currency(code: "USD").precision(.fractionLength(2...4))))
+        let zero = CodeSwitchTableMetrics(stats: CodeSwitchStats(totalRequests: 0, successfulRequests: 0, failedRequests: 0,
+            successRate: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, costTotal: 0, avgFirstTokenSec: 0, avgTokensPerSec: 0))
+        #expect(zero.success == "—")
+        #expect(zero.requests == "0")
+        #expect(zero.tokens == "0")
+        #expect(zero.cost != "—")
+        #expect(zero.firstToken == "—")
+        #expect(zero.speed == "—")
+    }
+
+    private func tableQuota(_ key: String, used: Double = 25, active: Bool = true,
+                            kind: String = "progress", unlimited: Bool = false) -> CodeSwitchQuota {
+        CodeSwitchQuota(key: key, label: nil, used: used, total: 100, unlimited: unlimited,
+            nextReset: "2027-01-16T12:00:00Z", active: active, valueMode: "count", unit: "",
+            extra: nil, invalidMessage: nil, displayKind: kind)
+    }
+
+    private func tableProvider(_ quotas: [CodeSwitchQuota]) -> CodeSwitchProvider {
+        CodeSwitchProvider(providerId: "42", providerName: "GLM Coding Plan · 联动供应商", icon: "openai",
+            activeRequests: 0, status: "enabled", loading: false, updatedAt: now.timeIntervalSince1970 * 1000,
+            quotas: quotas, stats: CodeSwitchStats(totalRequests: 10, successfulRequests: 8, failedRequests: 2,
+                successRate: 0.8, inputTokens: 100, outputTokens: 200, cacheReadTokens: 300,
+                costTotal: 0.0012, avgFirstTokenSec: 0.263, avgTokensPerSec: 29.8))
+    }
+
+    @Test func settingsTableDoesNotPresentSessionCacheAsCurrentData() throws {
+        let source = try fixture()
+        let platform = source.platforms[0]
+        let provider = tableProvider([tableQuota("daily")])
+        func snapshot(_ time: Date, _ sequence: UInt64, _ providers: [CodeSwitchProvider]) -> CodeSwitchSnapshot {
+            CodeSwitchSnapshot(version: 1, session: source.session, sequence: sequence,
+                heartbeatAt: time.timeIntervalSince1970 * 1000, platforms: [CodeSwitchPlatform(
+                    platform: platform.platform, name: platform.name, icon: platform.icon,
+                    error: false, providers: providers, sessionBindings: platform.sessionBindings)])
+        }
+        var state = CodeSwitchSnapshotState()
+        state.accept(snapshot(now, 1, [provider]), now: now)
+        let id = try #require(state.snapshots.first?.id)
+        func row() throws -> CodeSwitchSettingsRow {
+            try #require(CodeSwitchSettingsRow.rows(snapshots: state.snapshots, bindings: state.bindings,
+                hidden: [id], names: [id: "Saved supplier"], search: "").first)
+        }
+        #expect(try row().currentSnapshot?.linked?.provider.stats?.totalRequests == 10)
+        let later = now.addingTimeInterval(23 * 3600)
+        state.accept(snapshot(later, 2, []), now: later)
+        let sessionOnly = try row()
+        #expect(state.snapshots.isEmpty)
+        #expect(sessionOnly.snapshot?.linked?.provider.stats?.totalRequests == 10)
+        #expect(sessionOnly.snapshot?.windows.isEmpty == false)
+        #expect(!sessionOnly.isCurrent)
+        #expect(sessionOnly.currentSnapshot == nil)
+        #expect(sessionOnly.reference == "42")
+        #expect(sessionOnly.savedName.contains(platform.name))
+        state.accept(snapshot(later, 3, [provider]), now: later)
+        #expect(try row().currentSnapshot?.windows.count == 1)
+        state.expire(now: later, missing: true)
+        #expect(try row().currentSnapshot == nil)
+        #expect(try row().savedName == "Saved supplier")
+    }
+
+    @Test func settingsQuotasPreserveWindowAlignmentAndWarningPriority() throws {
+        let quotas = [tableQuota("daily", active: false), tableQuota("daily", used: 50),
+                      tableQuota("weekly", used: 95), tableQuota("balance", kind: "balance"),
+                      tableQuota("total", unlimited: true), tableQuota("broken", kind: "error")]
+        let snapshot = tableProvider(quotas).snapshot(platform: try fixture().platforms[0])
+        let items = CodeSwitchTableQuota.items(snapshot)
+        #expect(items.count == quotas.count)
+        #expect(items[0].window == nil)
+        #expect(items[1].window?.usedFraction == 0.5)
+        #expect(items[1].band == .watch)
+        #expect(items[2].band == .critical)
+        #expect(items[3].window?.quantity?.remaining == 75)
+        #expect(items[4].window?.quantity?.unlimited == true)
+        #expect(items[5].window == nil)
+        #expect(items.compactMap(\.window) == snapshot.windows)
+        #expect(items.max(by: { $0.priority < $1.priority })?.quota.key == "broken")
+        #expect(items.dropLast().max(by: { $0.priority < $1.priority })?.quota.key == "weekly")
+    }
+
+    @Test @MainActor func settingsQuotaDisclosureKeepsDefaultRowsCompact() throws {
+        _ = NSApplication.shared
+        let snapshot = tableProvider([tableQuota("five_hour"), tableQuota("weekly", used: 95), tableQuota("monthly")])
+            .snapshot(platform: try fixture().platforms[0])
+        for width in [100.0, 150.0] {
+            func height(expanded: Bool) -> CGFloat {
+                let host = NSHostingView(rootView: VStack(alignment: .leading) {
+                    CodeSwitchTableQuotaCell(snapshot: snapshot, accent: .blue, resetTimeFormat: .remaining, expanded: expanded)
+                }.font(.caption).frame(width: width).fixedSize(horizontal: false, vertical: true))
+                host.layoutSubtreeIfNeeded()
+                return host.fittingSize.height
+            }
+            let collapsed = height(expanded: false)
+            let expanded = height(expanded: true)
+            #expect(collapsed > 0 && collapsed < 120)
+            #expect(expanded > collapsed + 40)
+        }
+    }
+
+    @Test @MainActor func settingsTableRendersLoadingAndOfflineRowsAtBothWidths() async throws {
+        _ = NSApplication.shared
+        let dir = try directory(); defer { try? FileManager.default.removeItem(at: dir) }
+        let source = try fixture()
+        let loading = CodeSwitchProvider(providerId: "loading", providerName: "Loading fixture", icon: "openai",
+                                         activeRequests: 0, status: "enabled", loading: true, updatedAt: 0, quotas: [], stats: nil)
+        let original = source.platforms[0]
+        let file = dir.appendingPathComponent("tray-snapshot-v1.json")
+        try write(CodeSwitchSnapshot(version: 1, session: source.session, sequence: 1, heartbeatAt: source.heartbeatAt,
+            platforms: [CodeSwitchPlatform(platform: original.platform, name: original.name, icon: original.icon,
+                error: false, providers: [tableProvider([tableQuota("five_hour"), tableQuota("weekly", used: 95),
+                                                        tableQuota("monthly")]), loading])]), file)
+        let bridge = CodeSwitchBridge(file: file)
+        await bridge.poll(now: now)
+        let domain = "codenotch.table.render." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let preferences = Preferences(defaults: defaults, domainName: domain)
+        preferences.hiddenCodeSwitchProviders = ["code-switch:5:codex:offline"]
+        preferences.hiddenCodeSwitchNames = ["code-switch:5:codex:offline": "Offline fixture"]
+        let height = SettingsView.height - SettingsView.headerHeight
+        for width in [SettingsView.width - SettingsView.sidebarWidth, SettingsView.width] {
+            for scheme in [ColorScheme.light, .dark] {
+                let view = CodeSwitchSettingsView(preferences: preferences, bridge: bridge)
+                    .frame(width: width, height: height).environment(\.colorScheme, scheme)
+                let host = NSHostingView(rootView: view)
+                host.frame = NSRect(x: 0, y: 0, width: width, height: height)
+                host.layoutSubtreeIfNeeded()
+                let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+                // Exercise conditional cell content; it must not become extra columns.
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                #expect(bitmap.pixelsWide >= Int(width))
+                #expect(host.bounds.height == height)
+            }
+        }
     }
 
     @Test func legacyUpgradeRevisionReuseAndModeReprojection() async throws {

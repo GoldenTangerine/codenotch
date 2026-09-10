@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.13",
+            headline: String(localized: "Compare your linked providers at a glance."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Provider statistics in one table"),
+                    detail: String(localized: "Compare daily usage, latency, speed and quotas in Code Switch R settings. Search, hide or restore providers, and expand additional quotas when needed.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Current readings and consistent warnings"),
+                    detail: String(localized: "Session-only providers no longer show cached data as current. Quotas use the same warning colors as the notch and highlight errors or the most-used allowance.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Restore all enabled providers"),
+                    detail: String(localized: "Fix subscriptions that kept showing only tray providers. Code Switch R 2.11.21 also supports subscriptions from older Codenotch versions.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.12",
             headline: String(localized: "Choose your linked providers."),
             changes: [

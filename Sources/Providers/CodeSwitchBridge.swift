@@ -132,9 +132,13 @@ struct CodeSwitchQuota: Codable, Equatable {
         return nil
     }
 
+    var hasWindow: Bool {
+        active && ["progress", "balance"].contains(displayKind) && invalidMessage?.isEmpty != false
+            && used.isFinite && total.isFinite && used >= 0 && total >= 0
+    }
+
     var window: LimitWindow? {
-        guard active, ["progress", "balance"].contains(displayKind), invalidMessage?.isEmpty != false,
-              used.isFinite, total.isFinite, used >= 0, total >= 0 else { return nil }
+        guard hasWindow else { return nil }
         let balance = displayKind == "balance"
         return LimitWindow(id: key, label: title,
             usedFraction: !balance && total > 0 && unlimited != true ? used / total : nil,

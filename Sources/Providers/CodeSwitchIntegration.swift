@@ -39,7 +39,7 @@ struct CodeSwitchSubscription: Codable {
     let version: Int
     let session: String
     let mode: String
-    let heartbeatAt: Double
+    let heartbeatAt: Int64
 }
 
 enum CodeSwitchConnection: Equatable {
@@ -113,7 +113,7 @@ actor CodeSwitchReader {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                attributes: [.posixPermissions: 0o700])
         let subscription = CodeSwitchSubscription(version: 1, session: consumerSession, mode: "enabled",
-                                                   heartbeatAt: now.timeIntervalSince1970 * 1000)
+                                                   heartbeatAt: Int64((now.timeIntervalSince1970 * 1000).rounded(.down)))
         let temporary = directory.appendingPathComponent(".codenotch-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: temporary) }
         guard FileManager.default.createFile(atPath: temporary.path, contents: try JSONEncoder().encode(subscription),
