@@ -21,6 +21,15 @@ final class Preferences: ObservableObject {
     @Published var codeSwitchEnabled: Bool {
         didSet { defaults.set(codeSwitchEnabled, forKey: "codeSwitchEnabled") }
     }
+    @Published var codeSwitchDisplayMode: CodeSwitchDisplayMode {
+        didSet { defaults.set(codeSwitchDisplayMode.rawValue, forKey: "codeSwitchDisplayMode") }
+    }
+    @Published var hiddenCodeSwitchProviders: Set<String> {
+        didSet { defaults.set(hiddenCodeSwitchProviders.sorted(), forKey: "hiddenCodeSwitchProviders") }
+    }
+    @Published var hiddenCodeSwitchNames: [String: String] {
+        didSet { defaults.set(hiddenCodeSwitchNames, forKey: "hiddenCodeSwitchNames") }
+    }
     /// Providers the user has switched off. Stored as the *disconnected* set
     /// rather than the connected one, so a provider added in a later version is
     /// on by default instead of silently staying dark.
@@ -347,6 +356,12 @@ final class Preferences: ObservableObject {
             .flatMap(TooltipHeightMode.init(rawValue:)) ?? .standard
         self.defaults = defaults
         self.codeSwitchEnabled = defaults.object(forKey: "codeSwitchEnabled") as? Bool ?? true
+        self.codeSwitchDisplayMode = defaults.string(forKey: "codeSwitchDisplayMode")
+            .flatMap(CodeSwitchDisplayMode.init(rawValue:)) ?? .tray
+        let hiddenCodeSwitchProviders = Set(defaults.stringArray(forKey: "hiddenCodeSwitchProviders") ?? [])
+        self.hiddenCodeSwitchProviders = hiddenCodeSwitchProviders
+        self.hiddenCodeSwitchNames = (defaults.dictionary(forKey: "hiddenCodeSwitchNames") as? [String: String] ?? [:])
+            .filter { hiddenCodeSwitchProviders.contains($0.key) }
         self.domainName = domainName ?? (defaults === UserDefaults.standard ? Bundle.main.bundleIdentifier : nil)
         self.isFirstLaunch = !defaults.bool(forKey: Keys.hasLaunched)
         defaults.set(true, forKey: Keys.hasLaunched)

@@ -59,6 +59,63 @@ import Testing
         }
     }
 
+    @Test(arguments: [false, true])
+    func slowAutomaticRefreshWaitsForItsIntervalAfterCompletion(failFirst: Bool) async throws {
+        let suite = "UsageRefreshRecoveryTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let probe = SlowScheduleProbe(failFirst: failFirst)
+        var entry = QueryEntry()
+        entry.id = probe.id
+        entry.mode = .automatic
+        entry.timeout = 3
+        entry.schedule.activeSeconds = 1
+        entry.schedule.idleSeconds = 1
+        let provider = ConfiguredUsageProvider(entry: entry, automatic: probe, secrets: RecoverySecrets())
+        let store = UsageStore(providers: [provider], archive: UsageArchive(defaults: defaults))
+        defer { store.stop() }
+        store.refreshDue()
+        try await waitUntil { store.refreshing.isEmpty }
+        #expect(await probe.calls == 1)
+        #expect((store.snapshots[0].queryFailure != nil) == failFirst)
+        store.refreshDue()
+        #expect(store.refreshing.isEmpty, "Slow completion must not immediately start another automatic request")
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(await probe.calls == 1)
+        store.refreshDue(now: Date().addingTimeInterval(1.1))
+        try await waitUntil { await probe.calls == 2 }
+        try await waitUntil { store.refreshing.isEmpty }
+        store.refresh(providerID: probe.id)
+        try await waitUntil { await probe.calls == 3 }
+    }
+
+    @Test func credentialReadTimeoutReleasesRefreshAndPreservesRetry() async throws {
+        let suite = "UsageRefreshRecoveryTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = DelayedRecoverySecrets()
+        var entry = QueryEntry()
+        entry.id = "slow-credentials"
+        entry.timeout = 1
+        entry.schedule.enabled = false
+        let provider = ConfiguredUsageProvider(entry: entry, automatic: nil, secrets: secrets)
+        let store = UsageStore(providers: [provider], archive: UsageArchive(defaults: defaults))
+        defer { store.stop() }
+        store.refresh(providerID: entry.id)
+        try await waitUntil(timeout: .milliseconds(1800)) { store.refreshing.isEmpty }
+        #expect(store.snapshots[0].queryFailure == QueryError.timeout.localizedDescription)
+        // A retry must complete even while the previous credential call is blocked.
+        store.refresh(providerID: entry.id)
+        try await waitUntil { store.refreshing.isEmpty }
+        #expect(secrets.calls == 2)
+        #expect(store.snapshots[0].queryFailure != QueryError.timeout.localizedDescription)
+        let retryFailure = store.snapshots[0].queryFailure
+        try await waitUntil { secrets.firstReturned }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(store.snapshots[0].queryFailure == retryFailure)
+        #expect(store.refreshing.isEmpty)
+    }
+
     @Test func timeoutReleasesRefreshAndLateResponseCannotOverwriteRetry() async throws {
         try await withStore(hangs: true) { store, probe in
             store.refresh(providerID: probe.id)
@@ -253,6 +310,48 @@ private actor RecoveryProbe: UsageProvider {
 
 private final class RecoverySecrets: QuerySecretStorage {
     func load(_ reference: String) throws -> QuerySecrets { QuerySecrets() }
+    func save(_ secrets: QuerySecrets, reference: String) throws {}
+    func remove(_ reference: String) throws {}
+}
+
+private actor SlowScheduleProbe: UsageProvider {
+    nonisolated let id = "slow-schedule"
+    nonisolated let displayName = "Slow schedule"
+    nonisolated let glyph = ProviderGlyph.third
+    let failFirst: Bool
+    var calls = 0
+    init(failFirst: Bool) { self.failFirst = failFirst }
+    func fetchSnapshot() async throws -> ProviderSnapshot {
+        calls += 1
+        if calls == 1 {
+            try await Task.sleep(for: .milliseconds(1100))
+            if failFirst { throw URLError(.notConnectedToInternet) }
+        }
+        return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph, fidelity: .derived,
+                                status: .ok, windows: [LimitWindow(id: "daily", label: "Daily", usedFraction: 0.2)])
+    }
+}
+
+private final class DelayedRecoverySecrets: QuerySecretStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    private var returned = false
+    var calls: Int { lock.lock(); defer { lock.unlock() }; return count }
+    var firstReturned: Bool { lock.lock(); defer { lock.unlock() }; return returned }
+    func load(_ reference: String) throws -> QuerySecrets {
+        lock.lock()
+        count += 1
+        let first = count == 1
+        lock.unlock()
+        if first {
+            // Model a synchronous credential API that does not acknowledge cancellation.
+            Thread.sleep(forTimeInterval: 2.5)
+            lock.lock()
+            returned = true
+            lock.unlock()
+        }
+        return QuerySecrets()
+    }
     func save(_ secrets: QuerySecrets, reference: String) throws {}
     func remove(_ reference: String) throws {}
 }

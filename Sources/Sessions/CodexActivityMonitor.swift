@@ -74,22 +74,22 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
         // in different places: the CLI and the VS Code extension append to a
         // rollout, and the desktop app writes to its own catalogue. Whichever
         // moved last is the one that is working.
-        var candidates: [(id: String, name: String, at: Date)] = []
+        var candidates: [(id: String, threadID: String, name: String, at: Date)] = []
 
         if let rollout = CodexStore.newestRollout(in: stateStore),
            let modified = (try? FileManager.default
-               .attributesOfItem(atPath: rollout.path))?[.modificationDate] as? Date {
-            candidates.append((id: "codex.\(rollout.lastPathComponent)",
+               .attributesOfItem(atPath: rollout.url.path))?[.modificationDate] as? Date {
+            candidates.append((id: "codex.\(rollout.url.lastPathComponent)", threadID: rollout.id,
                                name: "Codex", at: modified))
         }
         if let desktop = CodexStore.newestDesktopThread(in: desktopStore) {
-            candidates.append((id: "codex.desktop", name: desktop.title,
+            candidates.append((id: "codex.desktop:\(desktop.id)", threadID: desktop.id, name: desktop.title,
                                at: desktop.updatedAt))
         }
 
         guard let newest = candidates.max(by: { $0.at < $1.at }),
               let session = session(id: newest.id, name: newest.name,
-                                    modified: newest.at, staleAfter: staleAfter, now: now)
+                                    modified: newest.at, staleAfter: staleAfter, now: now, threadID: newest.threadID)
         else { return [] }
         return [session]
     }
@@ -98,7 +98,7 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
     /// finished turn, and reporting it as work in progress would be a guess
     /// dressed as a fact.
     static func session(
-        id: String, name: String, modified: Date, staleAfter: TimeInterval, now: Date
+        id: String, name: String, modified: Date, staleAfter: TimeInterval, now: Date, threadID: String? = nil
     ) -> AgentSession? {
         guard now.timeIntervalSince(modified) <= staleAfter else { return nil }
         return AgentSession(
@@ -107,7 +107,11 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
             detail: String(localized: "Working"),
             state: .busy,
             waitingFor: nil,
-            since: modified
+            since: modified,
+            nativeSessionKey: threadID.flatMap {
+                let id = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                return id.isEmpty || id.utf8.count > 512 ? nil : HookEvent.sessionKey(tool: "codex", id: id)
+            }
         )
     }
 }

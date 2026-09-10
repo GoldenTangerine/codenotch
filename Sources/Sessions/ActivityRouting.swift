@@ -19,14 +19,25 @@ struct ActivityRouting {
     var unmatched: [UnmatchedReason: Int] = [:]
 
     init(local: [ProviderSnapshot], linked: [ProviderSnapshot], sources: [String: String],
-         sessions native: [String: [AgentSession]], bindings: [String: CodeSwitchSessionLink], now: Date = Date()) {
-        snapshots = local + linked
+         sessions native: [String: [AgentSession]], bindings: [String: CodeSwitchSessionLink],
+         hiddenLinked: Set<String> = [], now: Date = Date()) {
+        let hasLinkedCodex = linked.contains {
+            $0.linked != nil && $0.id.hasPrefix("code-switch:5:codex:") && !hiddenLinked.contains($0.id)
+        }
+        let displayedLocal = local.filter { snapshot in
+            // A placeholder local account adds no usage beside the linked supplier.
+            // Authentication and query errors remain actionable and visible.
+            !(hasLinkedCodex && sources[snapshot.id] == "codex" && !snapshot.hasReading
+              && (snapshot.status == .ok || snapshot.status == .stale(since: .distantPast))
+              && snapshot.queryFailure == nil && snapshot.queryRetryAfter == nil)
+        }
+        snapshots = displayedLocal + linked
         var visible = Set(snapshots.map(\.id))
         for source in native.keys.sorted() {
-            let localIDs = local.filter { sources[$0.id] == source }.map(\.id)
+            let localIDs = displayedLocal.filter { sources[$0.id] == source }.map(\.id)
             for session in native[source] ?? [] {
                 let needsEntrance = session.state != .idle || (session.noticeID != nil && now.timeIntervalSince(session.since) < 15)
-                var link = session.hookSessionKey.flatMap { bindings[$0] }
+                var link = session.providerSessionKey.flatMap { bindings[$0] }
                 var reason = UnmatchedReason.missingBinding
                 if let candidate = link {
                     if candidate.platform != (source == "codex" ? "codex" : "claude") {
@@ -54,7 +65,10 @@ struct ActivityRouting {
                 } else if session.hookSessionKey != nil {
                     let id = "activity:" + source
                     sessions[id, default: []].append(session)
-                    if needsEntrance, visible.insert(id).inserted {
+                    let needsFallback = source == "codex"
+                        ? session.state == .waiting || (session.state == .idle && needsEntrance)
+                        : needsEntrance
+                    if needsFallback, visible.insert(id).inserted {
                         let claude = source != "codex"
                         snapshots.append(ProviderSnapshot(id: id, displayName: claude ? "Claude Code" : "Codex CLI",
                                                           glyph: claude ? .claude : .openai, fidelity: .derived,
@@ -62,6 +76,10 @@ struct ActivityRouting {
                     }
                 }
             }
+        }
+        if !hiddenLinked.isEmpty {
+            snapshots.removeAll { hiddenLinked.contains($0.id) && $0.id.hasPrefix("code-switch:") }
+            sessions = sessions.filter { !hiddenLinked.contains($0.key) || !$0.key.hasPrefix("code-switch:") }
         }
     }
 

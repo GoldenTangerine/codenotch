@@ -17,13 +17,14 @@ import SwiftUI
 /// crossing-and-notification machinery it switches is Notifications' to
 /// explain.
 private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case accounts, appearance, notifications, general
+    case accounts, codeSwitch, appearance, notifications, general
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .accounts:      return String(localized: "Accounts")
+        case .codeSwitch:    return "Code Switch R"
         case .appearance:    return String(localized: "Appearance")
         case .notifications: return String(localized: "Notifications")
         case .general:       return String(localized: "General")
@@ -33,6 +34,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     var icon: String {
         switch self {
         case .accounts:      return "person.crop.circle.fill"
+        case .codeSwitch:    return "arrow.triangle.2.circlepath"
         case .appearance:    return "paintbrush.fill"
         case .notifications: return "bell.badge.fill"
         case .general:       return "gearshape.fill"
@@ -45,6 +47,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     var tint: Color {
         switch self {
         case .accounts:      return .blue
+        case .codeSwitch:    return .green
         case .appearance:    return .indigo
         case .notifications: return .red
         case .general:       return .gray
@@ -150,6 +153,7 @@ struct SettingsView: View {
     var catalog: QueryCatalog? = nil
     var usageStore: UsageStore? = nil
     var hooks: HookSettings? = nil
+    var codeSwitch: CodeSwitchBridge? = nil
 
     var body: some View {
         // A plain HStack rather than `NavigationSplitView`: the sidebar here
@@ -327,6 +331,8 @@ struct SettingsView: View {
         case .appearance:    appearancePane
         case .notifications: notificationsPane
         case .general:       generalPane
+        case .codeSwitch:
+            if let codeSwitch { CodeSwitchSettingsView(preferences: preferences, bridge: codeSwitch) }
         }
     }
 
@@ -684,7 +690,6 @@ struct SettingsView: View {
                     }
                 }
                 Toggle("Open Codenotch at login", isOn: $preferences.launchAtLogin)
-                Toggle("Code Switch R integration", isOn: $preferences.codeSwitchEnabled)
                 if let problem = preferences.launchAtLoginProblem {
                     Text(problem)
                         .font(.caption)

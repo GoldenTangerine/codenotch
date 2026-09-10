@@ -76,28 +76,28 @@ final class CodeSwitchBridgeTests: XCTestCase {
         XCTAssertTrue(state.snapshots.isEmpty)
     }
 
-    func testAtomicReplacementCorruptionAndDeletion() throws {
+    func testAtomicReplacementCorruptionAndDeletion() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("snapshot.json")
         let bridge = CodeSwitchBridge(file: file)
         defer { bridge.stop() }
-        bridge.poll(now: now)
+        await bridge.poll(now: now)
         XCTAssertTrue(bridge.snapshots.isEmpty)
         try JSONEncoder().encode(fixture()).write(to: file, options: .atomic)
-        bridge.poll(now: now)
+        await bridge.poll(now: now)
         XCTAssertEqual(bridge.snapshots.count, 1)
         try Data("broken".utf8).write(to: file, options: .atomic)
-        bridge.poll(now: now.addingTimeInterval(1))
+        await bridge.poll(now: now.addingTimeInterval(1))
         XCTAssertEqual(bridge.snapshots.count, 1)
-        bridge.poll(now: now.addingTimeInterval(4))
+        await bridge.poll(now: now.addingTimeInterval(4))
         XCTAssertTrue(bridge.snapshots.isEmpty)
         try JSONEncoder().encode(fixture(sequence: 2, heartbeat: now.addingTimeInterval(5))).write(to: file, options: .atomic)
-        bridge.poll(now: now.addingTimeInterval(5))
+        await bridge.poll(now: now.addingTimeInterval(5))
         XCTAssertEqual(bridge.snapshots.count, 1)
         try FileManager.default.removeItem(at: file)
-        bridge.poll(now: now.addingTimeInterval(5))
+        await bridge.poll(now: now.addingTimeInterval(5))
         XCTAssertTrue(bridge.snapshots.isEmpty)
     }
 

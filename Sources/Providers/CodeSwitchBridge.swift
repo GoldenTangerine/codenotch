@@ -17,8 +17,22 @@ struct CodeSwitchSnapshot: Codable {
     let sequence: UInt64
     let heartbeatAt: Double
     let platforms: [CodeSwitchPlatform]
+    var codenotch: CodeSwitchIntegrationInfo? = nil
 
     var heartbeat: Date { Date(timeIntervalSince1970: heartbeatAt / 1000) }
+}
+
+extension CodeSwitchSnapshot {
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        version = try values.decode(Int.self, forKey: .version)
+        session = try values.decode(String.self, forKey: .session)
+        sequence = try values.decode(UInt64.self, forKey: .sequence)
+        heartbeatAt = try values.decode(Double.self, forKey: .heartbeatAt)
+        platforms = try values.decode([CodeSwitchPlatform].self, forKey: .platforms)
+        // Optional protocol extensions must not invalidate a usable tray snapshot.
+        codenotch = try? values.decode(CodeSwitchIntegrationInfo.self, forKey: .codenotch)
+    }
 }
 
 struct CodeSwitchPlatform: Codable, Equatable {
@@ -157,6 +171,7 @@ struct CodeSwitchDetails: Equatable {
 
     var activityText: String {
         if provider.status == "session" { return String(localized: "Session provider") }
+        if provider.status == "enabled" { return String(localized: "Enabled provider") }
         return provider.status == "active"
             ? String(localized: "Calling · \(provider.activeRequests)")
             : String(localized: "Default provider")
@@ -169,43 +184,52 @@ struct CodeSwitchSnapshotState {
     private var session: String?
     private var sequence: UInt64 = 0
     private var heartbeat: Date?
-    private var retiredSessions: Set<String> = []
+    private var retiredSessions: [String] = []
+    private var lastPlatforms: [CodeSwitchPlatform]?
 
-    mutating func accept(_ snapshot: CodeSwitchSnapshot, now: Date) {
+    mutating func accept(_ snapshot: CodeSwitchSnapshot, now: Date, platforms selected: [CodeSwitchPlatform]? = nil) {
         guard snapshot.version == 1, !snapshot.session.isEmpty,
               snapshot.heartbeatAt.isFinite,
               (-1...3).contains(now.timeIntervalSince(snapshot.heartbeat)),
               !retiredSessions.contains(snapshot.session) else { expire(now: now); return }
         if session == snapshot.session {
-            guard snapshot.sequence > sequence else { expire(now: now); return }
+            guard snapshot.sequence >= sequence else { expire(now: now); return }
         } else {
             if let heartbeat, snapshot.heartbeat < heartbeat { expire(now: now); return }
-            if let session { retiredSessions.insert(session) }
+            if let session {
+                retiredSessions.append(session)
+                if retiredSessions.count > 16 { retiredSessions.removeFirst() }
+            }
             session = snapshot.session
         }
         sequence = snapshot.sequence
         heartbeat = snapshot.heartbeat
+        let platforms = selected ?? snapshot.platforms
+        guard lastPlatforms != platforms else { return }
+        lastPlatforms = platforms
         let previousBindings = bindings
         let previousSnapshots = snapshots
+        let previousByID = Dictionary(previousSnapshots.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         bindings.removeAll()
-        for platform in snapshot.platforms where !platform.error && ["claude", "codex"].contains(platform.platform) {
+        for platform in platforms where !platform.error && ["claude", "codex"].contains(platform.platform) {
+            let providers = Dictionary(platform.providers.map { ($0.providerId, $0) }, uniquingKeysWith: { first, _ in first })
             for binding in platform.sessionBindings ?? [] {
                 guard binding.sessionKey.count == 64, binding.sessionKey.allSatisfy({ $0.isHexDigit }),
                       !binding.providerId.isEmpty, binding.updatedAt.isFinite,
                       binding.sequence > (bindings[binding.sessionKey]?.binding.sequence ?? 0) else { continue }
                 let id = binding.snapshot(platform: platform).id
-                let previous = platform.providers.first(where: { $0.providerId == binding.providerId })?.snapshot(platform: platform)
-                    ?? previousSnapshots.first(where: { $0.id == id })
+                let previous = providers[binding.providerId]?.snapshot(platform: platform)
+                    ?? previousByID[id]
                     ?? previousBindings[binding.sessionKey].flatMap { $0.snapshot.id == id ? $0.snapshot : nil }
                 bindings[binding.sessionKey] = CodeSwitchSessionLink(platform: platform.platform, binding: binding,
                                                                      snapshot: binding.snapshot(platform: platform, retaining: previous))
             }
         }
         var seen = Set<String>()
-        snapshots = snapshot.platforms.filter { !$0.error }.flatMap { platform in
+        snapshots = platforms.filter { !$0.error }.flatMap { platform in
             platform.providers.compactMap { provider in
                 guard !provider.providerId.isEmpty, provider.activeRequests >= 0,
-                      ["active", "default"].contains(provider.status) else { return nil }
+                      ["active", "default", "enabled"].contains(provider.status) else { return nil }
                 let item = provider.snapshot(platform: platform)
                 return seen.insert(item.id).inserted ? item : nil
             }
@@ -216,6 +240,7 @@ struct CodeSwitchSnapshotState {
         if missing || heartbeat == nil || !(-1...3).contains(now.timeIntervalSince(heartbeat!)) {
             snapshots = []
             bindings = [:]
+            lastPlatforms = nil
         }
     }
 }
@@ -227,19 +252,30 @@ final class CodeSwitchBridge: ObservableObject {
     private let file: URL
     private var timer: Timer?
     private var watcher: DispatchSourceFileSystemObject?
-    private var state = CodeSwitchSnapshotState()
+    @Published private(set) var connection: CodeSwitchConnection = .disabled
+    private let reader: CodeSwitchReader
     private var running = false
+    private var mode: CodeSwitchDisplayMode = .tray
+    private var generation: UInt64 = 0
+    private var readTask: Task<Void, Never>?
+    private var pending = false
 
     init(file: URL = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Library/Caches/code-switch/tray-snapshot-v1.json")) {
         self.file = file
+        reader = CodeSwitchReader(file: file)
     }
 
-    func setEnabled(_ enabled: Bool) {
+    func setEnabled(_ enabled: Bool) { configure(enabled: enabled, mode: mode) }
+
+    func configure(enabled: Bool, mode: CodeSwitchDisplayMode) {
+        guard enabled != running || mode != self.mode else { return }
         stop()
+        self.mode = mode
         guard enabled else { return }
         running = true
-        poll()
+        connection = .waiting
+        refresh()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
@@ -253,17 +289,35 @@ final class CodeSwitchBridge: ObservableObject {
         timer = nil
         watcher?.cancel()
         watcher = nil
-        state = CodeSwitchSnapshotState()
+        generation &+= 1
+        let next = generation
+        Task { await reader.reset(generation: next) }
+        pending = false
+        connection = .disabled
         if !snapshots.isEmpty { snapshots = [] }
         if !bindings.isEmpty { bindings = [:] }
     }
 
     func refresh() {
         guard running else { return }
-        poll()
+        if readTask != nil { pending = true; return }
+        readTask = Task { [weak self] in
+            guard let self else { return }
+            while self.running {
+                self.pending = false
+                await self.poll()
+                if !self.pending { break }
+            }
+            self.readTask = nil
+        }
     }
 
-    func poll(now: Date = Date()) {
+    func stopAndWait() async {
+        stop()
+        await reader.reset(generation: generation)
+    }
+
+    func poll(now: Date = Date()) async {
         if running && watcher == nil {
             let descriptor = open(file.deletingLastPathComponent().path, O_EVTONLY)
             if descriptor >= 0 {
@@ -284,26 +338,12 @@ final class CodeSwitchBridge: ObservableObject {
                 source.resume()
             }
         }
-        do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: file.path)
-            guard let size = attributes[.size] as? NSNumber, size.intValue <= 2_000_000 else {
-                state.expire(now: now)
-                publish()
-                return
-            }
-            let data = try Data(contentsOf: file)
-            let snapshot = try JSONDecoder().decode(CodeSwitchSnapshot.self, from: data)
-            state.accept(snapshot, now: now)
-        } catch {
-            state.expire(now: now, missing: (error as NSError).code == NSFileNoSuchFileError
-                || (error as NSError).code == NSFileReadNoSuchFileError)
-        }
-        publish()
-    }
-
-    private func publish() {
-        if bindings != state.bindings { bindings = state.bindings }
-        if snapshots != state.snapshots { snapshots = state.snapshots }
+        let current = generation
+        guard let result = await reader.read(now: now, mode: mode, generation: current),
+              current == generation else { return }
+        if bindings != result.bindings { bindings = result.bindings }
+        if snapshots != result.snapshots { snapshots = result.snapshots }
+        if connection != result.connection { connection = result.connection }
     }
 
     deinit {

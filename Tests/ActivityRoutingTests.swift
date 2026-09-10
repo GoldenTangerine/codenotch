@@ -9,6 +9,7 @@
  */
 import Foundation
 import Testing
+import SQLite3
 @testable import Codenotch
 
 @Suite @MainActor struct ActivityRoutingTests {
@@ -176,5 +177,130 @@ import Testing
                                         status: .ok, windows: [])
         #expect(ordinary.tooltipTitle == String(localized: "Codex Usage"))
         #expect(ordinary.statusMessage == String(localized: "Waiting for the first reading…"))
+    }
+
+    @Test func unansweredQuestionKeepsAttentionButAnswerRemovesEmptyCodexEntrance() throws {
+        let state = try bridge()
+        var hooks = HookSessionState()
+        var event = HookEvent(tool: "codex", configDirectory: "/tmp/routing-fixture", sessionID: "unlinked",
+                              event: "PreToolUse", toolName: "request_user_input", callID: "question",
+                              cwd: "/tmp/fixture", at: now.timeIntervalSince1970)
+        hooks.absorb(event, now: now)
+        let waiting = ActivityRouting(local: [], linked: state.snapshots, sources: [:], sessions: hooks.merging([:]),
+                                      bindings: state.bindings, now: now)
+        #expect(waiting.snapshots.count == 2)
+        #expect(waiting.sessions["activity:codex"]?.first?.waitingFor == String(localized: "Needs your answer"))
+        #expect(waiting.snapshots.last?.isActivityOnly == true)
+        #expect(waiting.snapshots.last?.statusMessage != String(localized: "Waiting for the first reading…"))
+        // A lone visible supplier still does not prove ownership of an unknown session.
+        #expect(waiting.sessions[state.snapshots[0].id] == nil)
+        event.id = UUID().uuidString
+        event.event = "PostToolUse"
+        event.at += 1
+        hooks.absorb(event, now: now.addingTimeInterval(1))
+        let answered = ActivityRouting(local: [], linked: state.snapshots, sources: [:], sessions: hooks.merging([:]),
+                                       bindings: state.bindings, now: now.addingTimeInterval(1))
+        #expect(answered.snapshots == state.snapshots)
+        #expect(hooks.merging([:])["codex"]?.first?.state == .busy)
+        let longAfter = ActivityRouting(local: [], linked: state.snapshots, sources: [:], sessions: hooks.merging([:]),
+                                        bindings: state.bindings, now: now.addingTimeInterval(21 * 60))
+        #expect(longAfter.snapshots == state.snapshots)
+    }
+
+    @Test func emptyLocalCodexIsSuppressedBesideLinkedUsageButErrorsAndReadingsRemain() throws {
+        let state = try bridge()
+        let placeholder = ProviderSnapshot(id: "local-codex", displayName: "Codex CLI", glyph: .openai,
+                                           fidelity: .derived, status: .stale(since: .distantPast), windows: [])
+        let sources = [placeholder.id: "codex"]
+        let hidden = ActivityRouting(local: [placeholder], linked: state.snapshots, sources: sources,
+                                     sessions: ["codex": [session(1)]], bindings: state.bindings, now: now)
+        #expect(hidden.snapshots == state.snapshots)
+        #expect(hidden.sessions[state.snapshots[0].id]?.first?.state == .waiting)
+        let standalone = ActivityRouting(local: [placeholder], linked: [], sources: sources,
+                                         sessions: [:], bindings: [:], now: now)
+        #expect(standalone.snapshots == [placeholder])
+        let allLinkedHidden = ActivityRouting(local: [placeholder], linked: state.snapshots, sources: sources,
+                                              sessions: ["codex": [session(1)]], bindings: state.bindings,
+                                              hiddenLinked: Set(state.snapshots.map(\.id)), now: now)
+        #expect(allLinkedHidden.snapshots == [placeholder])
+        #expect(allLinkedHidden.sessions.isEmpty)
+        for status in [ProviderStatus.needsAuth, .error("offline"), .accessDenied] {
+            let error = ProviderSnapshot(id: placeholder.id, displayName: "Codex", glyph: .openai,
+                                         fidelity: .derived, status: status, windows: [])
+            let visible = ActivityRouting(local: [error], linked: state.snapshots, sources: sources,
+                                          sessions: [:], bindings: [:], now: now)
+            #expect(visible.snapshots.count == 2)
+        }
+        let reading = ProviderSnapshot(id: placeholder.id, displayName: "Codex", glyph: .openai,
+                                       fidelity: .derived, status: .ok,
+                                       windows: [LimitWindow(id: "daily", label: "Daily", usedFraction: 0.27)])
+        #expect(reading.hasReading)
+        #expect(ActivityRouting(local: [reading], linked: state.snapshots, sources: sources,
+                                sessions: [:], bindings: [:], now: now).snapshots.count == 2)
+    }
+
+    @Test func nativeCodexIdentityAndHooksShareOneSupplierThroughQuestionAndAnswer() throws {
+        let state = try bridge()
+        let native = try #require(CodexActivityMonitor.session(id: "codex.rollout", name: "Fixture", modified: now,
+                                                              staleAfter: 8, now: now, threadID: "session-1"))
+        #expect(native.hookSessionKey == nil)
+        #expect(native.nativeSessionKey == HookEvent.sessionKey(tool: "codex", id: "session-1"))
+        let initial = ActivityRouting(local: [], linked: state.snapshots, sources: [:], sessions: ["codex": [native]],
+                                      bindings: state.bindings, now: now)
+        #expect(initial.sessions[state.snapshots[0].id]?.count == 1)
+        var hooks = HookSessionState()
+        var question = HookEvent(tool: "codex", configDirectory: "/tmp/routing-fixture", sessionID: "session-1",
+                                 event: "PreToolUse", toolName: "request_user_input", callID: "q",
+                                 cwd: "/tmp/fixture", at: now.timeIntervalSince1970)
+        hooks.absorb(question, now: now)
+        let another = try #require(CodexActivityMonitor.session(id: "codex.other", name: "Fixture", modified: now,
+                                                               staleAfter: 8, now: now, threadID: "session-2"))
+        let combined = hooks.merging(["codex": [native, another]])
+        #expect(combined["codex"]?.count == 2)
+        let waiting = ActivityRouting(local: [], linked: state.snapshots, sources: [:], sessions: combined,
+                                      bindings: state.bindings, now: now)
+        #expect(waiting.snapshots == state.snapshots)
+        #expect(waiting.sessions[state.snapshots[0].id]?.count == 2)
+        #expect(waiting.sessions[state.snapshots[0].id]?.filter { $0.state == .waiting }.count == 1)
+        question.id = UUID().uuidString
+        question.at += 1
+        question.event = "PostToolUse"
+        hooks.absorb(question, now: now.addingTimeInterval(1))
+        let answered = ActivityRouting(local: [], linked: state.snapshots, sources: [:],
+                                       sessions: hooks.merging(["codex": [native]]), bindings: state.bindings, now: now)
+        #expect(answered.snapshots == state.snapshots)
+        #expect(answered.sessions[state.snapshots[0].id]?.count == 1)
+        #expect(answered.sessions[state.snapshots[0].id]?.first?.state == .busy)
+        hooks.remove(tool: "codex", directory: question.configDirectory)
+        let recovered = ActivityRouting(local: [], linked: state.snapshots, sources: [:],
+                                        sessions: hooks.merging(["codex": [native]]), bindings: state.bindings, now: now)
+        #expect(recovered.sessions[state.snapshots[0].id] == [native])
+    }
+
+    @Test func nativeDatabaseReadersPreserveThreadIdentityWithoutReadingRolloutContents() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let rollout = dir.appendingPathComponent("opaque-filename.jsonl")
+        try Data().write(to: rollout)
+        try FileManager.default.setAttributes([.modificationDate: now], ofItemAtPath: rollout.path)
+        let store = dir.appendingPathComponent("state.sqlite")
+        var db: OpaquePointer?
+        #expect(sqlite3_open(store.path, &db) == SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let sql = """
+        CREATE TABLE threads (id TEXT, rollout_path TEXT, archived INTEGER, updated_at_ms INTEGER);
+        INSERT INTO threads VALUES ('session-1', '\(rollout.path)', 0, 1);
+        CREATE TABLE local_thread_catalog (thread_id TEXT, display_title TEXT, source_updated_at REAL);
+        INSERT INTO local_thread_catalog VALUES ('session-2', 'Same folder', \(now.timeIntervalSince1970 + 1));
+        """
+        #expect(sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK)
+        let absent = dir.appendingPathComponent("absent.sqlite")
+        let cli = CodexActivityMonitor.read(stateStore: store, desktopStore: absent, staleAfter: 8, now: now)
+        #expect(cli.first?.nativeSessionKey == HookEvent.sessionKey(tool: "codex", id: "session-1"))
+        let desktop = CodexActivityMonitor.read(stateStore: absent, desktopStore: store, staleAfter: 8,
+                                               now: now.addingTimeInterval(1))
+        #expect(desktop.first?.nativeSessionKey == HookEvent.sessionKey(tool: "codex", id: "session-2"))
+        #expect(desktop.first?.id == "codex.desktop:session-2")
     }
 }

@@ -50,12 +50,30 @@ With a compatible Code Switch R running on the same Mac, Codenotch automatically
 appends its current tray suppliers after your existing providers. Active requests
 select the active suppliers; idle platforms show their default supplier. Hover a
 ring for quota, balance, reset time, calling status and daily statistics. Disable
-this in Settings with **Code Switch R integration**.
+this on the dedicated **Settings → Code Switch R** page.
 
-The integration reads only `~/Library/Caches/code-switch/tray-snapshot-v1.json`.
+The default **Follow tray popup** mode reads `~/Library/Caches/code-switch/tray-snapshot-v1.json`.
+**All enabled providers** includes every provider whose platform has proxy hosting
+on and whose own switch is on, including platforms hidden from the home page or tray.
+It does not mean only providers handling a request. Older publishers temporarily
+fall back to tray selection with an upgrade message; an upgraded publisher is
+recognized automatically.
+
+The same page lets you search and hide individual linked suppliers. Choices are
+saved by platform and provider ID, apply in both modes, and also hide associated
+session activity. Hidden entries remain available to restore, including while
+offline. Local accounts and Code Switch R provider switches are unaffected.
+
+Full mode additionally reads `codenotch-providers-v1.json` in the same cache folder
+and renews `codenotch-subscription-v1.json` every five seconds. Only an active
+subscription enables extra collection and quota jobs. Turning it off or quitting
+revokes that subscription; a crashed consumer expires after 15 seconds. Full data
+is written only on changes and decoded off the main thread only on new revisions.
 It does not read Code Switch R credentials or query suppliers itself. Supplier
-changes normally appear within one second; quota and statistics refresh every
-60 seconds in Code Switch R, including while its tray is closed. Normal exit
+changes normally appear within two seconds; quota and statistics become eligible
+for refresh every 60 seconds in Code Switch R, including while its tray is closed.
+Tray and full mode share four query workers, so slow suppliers may take longer.
+Normal exit
 removes the linked providers; a heartbeat older than three seconds also hides
 them. They return automatically when Code Switch R reconnects. Both applications
 must include this integration; older installed versions do not publish snapshots.
@@ -79,6 +97,13 @@ when the turn's start event was missed, the latest explicit association for the
 same session is used instead. A late association moves the session to its supplier
 and removes the CLI entry if no unresolved sessions remain. Unlinked CLI entries
 say **Provider not linked yet**, since they do not query usage themselves.
+For Codex, an unlinked CLI entrance is shown only while an answer or approval is
+needed, or briefly after completion. Answering removes that empty entrance even
+if the hook still reports ongoing work. Native Codex activity also carries the
+thread ID from its existing database index, so it can resolve the same supplier
+and merge with hooks without reading rollout contents. An empty local Codex
+placeholder is suppressed beside linked suppliers; accounts with readings,
+authentication problems or query errors remain visible.
 The same event is announced once even if its supplier changes. Older snapshots keep the
 existing request spinner without guessing which supplier a question belongs to.
 
@@ -122,13 +147,15 @@ shown as amounts, without inventing a percentage; unlimited quotas are distinct
 from zero balances. Long provider lists and quota details can be scrolled.
 
 Each entry has active and idle refresh intervals in **seconds**, defaulting to
-60 and 300. Activity uses the app's existing local session signal; manual
+60 and 300. Each interval starts when the previous refresh finishes, so slow
+queries do not trigger continuous retries. Activity uses the app's existing local session signal; manual
 accounts do not inherit local account sessions. Automatic refresh can be turned
 off independently. Rate-limit responses defer retries, and failures mark the
 last successful reading stale. Changing credentials or the query clears it.
 Clicking a ring retries a failed query; the card shows when a refresh is running
 or when a rate-limit cooldown ends. A timed-out query releases the refresh slot
-even if its underlying I/O is slow to cancel. Late results are discarded, and a
+even if its underlying I/O is slow to cancel. The timeout includes reading manual
+credentials; a late credential read cannot start another query. Late results are discarded, and a
 successful retry restores the normal reading and ring color.
 Cancellation before or during script startup also cancels the worker and stops
 its helper process; cleanup does not depend on the deadline operation starting.

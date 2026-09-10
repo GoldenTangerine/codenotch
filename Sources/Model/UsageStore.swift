@@ -291,6 +291,9 @@ final class UsageStore: ObservableObject {
                 // A discarded response still finishes its request, but must not
                 // clear the spinner belonging to a replacement request.
                 if self.providerRequestIDs[providerID] == requestID {
+                    // Leave a full polling interval after completion, including
+                    // failures, so slow requests cannot become a retry loop.
+                    self.attempts[providerID] = Date()
                     self.refreshing.remove(providerID)
                     self.providerTasks[providerID] = nil
                     self.providerRequestIDs[providerID] = nil

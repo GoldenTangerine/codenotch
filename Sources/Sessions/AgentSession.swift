@@ -43,6 +43,9 @@ struct AgentSession: Identifiable, Equatable {
     let processID: pid_t?
     let processStartedAt: Date?
     let hookSessionKey: String?
+    // Native identity can route activity without claiming hook lifecycle notices.
+    let nativeSessionKey: String?
+    var providerSessionKey: String? { hookSessionKey ?? nativeSessionKey }
     let hookTurnStartedAt: Date?
     let noticeID: String?
     let notice: SessionCompletionWatcher.Reason?
@@ -62,7 +65,8 @@ struct AgentSession: Identifiable, Equatable {
         hookSessionKey: String? = nil,
         hookTurnStartedAt: Date? = nil,
         noticeID: String? = nil,
-        notice: SessionCompletionWatcher.Reason? = nil
+        notice: SessionCompletionWatcher.Reason? = nil,
+        nativeSessionKey: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -73,6 +77,7 @@ struct AgentSession: Identifiable, Equatable {
         self.processID = processID
         self.processStartedAt = processStartedAt
         self.hookSessionKey = hookSessionKey
+        self.nativeSessionKey = nativeSessionKey
         self.hookTurnStartedAt = hookTurnStartedAt
         self.noticeID = noticeID
         self.notice = notice

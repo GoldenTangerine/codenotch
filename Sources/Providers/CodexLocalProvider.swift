@@ -1,3 +1,12 @@
+/**
+ @name: Codex 用量与会话目录
+ @Descripttion: 读取 Codex 用量以及原生会话身份和活动索引。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-10 18:00:00
+ @LastEditTime: 2026-09-10 18:00:00
+ @FilePath: Sources/Providers/CodexLocalProvider.swift
+ */
 import Foundation
 import SQLite3
 
@@ -104,7 +113,7 @@ enum CodexStore {
     }
 
     /// The most recently touched desktop thread: when, and what it is called.
-    static func newestDesktopThread(in url: URL) -> (title: String, updatedAt: Date)? {
+    static func newestDesktopThread(in url: URL) -> (id: String, title: String, updatedAt: Date)? {
         guard let db = SQLiteStore.open(url) else { return nil }
         defer { sqlite3_close(db) }
 
@@ -120,20 +129,21 @@ enum CodexStore {
         // Seconds since the epoch, with a fractional part — not the
         // milliseconds the `threads` table next door uses.
         let title = row[1].isEmpty ? "Codex" : row[1]
-        return (title, Date(timeIntervalSince1970: seconds))
+        return (row[2], title, Date(timeIntervalSince1970: seconds))
     }
 
     /// The rollout of the most recently touched thread.
-    static func newestRollout(in store: URL) -> URL? {
+    static func newestRollout(in store: URL) -> (id: String, url: URL)? {
         guard let db = SQLiteStore.open(store) else { return nil }
         defer { sqlite3_close(db) }
 
         let paths = SQLiteStore.rows(
             in: db,
-            sql: "SELECT rollout_path FROM threads WHERE archived = 0 ORDER BY updated_at_ms DESC LIMIT 8"
+            sql: "SELECT id, rollout_path FROM threads WHERE archived = 0 ORDER BY updated_at_ms DESC LIMIT 8",
+            columns: 2
         )
         return paths
-            .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
-            .first { FileManager.default.fileExists(atPath: $0.path) }
+            .map { (id: $0[0], url: URL(fileURLWithPath: ($0[1] as NSString).expandingTildeInPath)) }
+            .first { FileManager.default.fileExists(atPath: $0.url.path) }
     }
 }

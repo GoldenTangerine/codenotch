@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.12",
+            headline: String(localized: "Choose your linked providers."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Customize Code Switch R integration"),
+                    detail: String(localized: "Choose tray providers or all proxy-hosted, enabled providers. Search, hide and restore suppliers in the new settings page. Full mode requires Code Switch R 2.11.20.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Keep Codex questions on the right supplier"),
+                    detail: String(localized: "Native sessions and hooks share their supplier identity. Empty duplicate entries disappear, and hiding linked suppliers preserves independent local accounts.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Prevent continuous refresh loops"),
+                    detail: String(localized: "Automatic refresh waits after each attempt finishes. Credential reads share the query timeout, so a stalled read releases the refresh state and allows a retry.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.11",
             headline: String(localized: "Reliable refresh and session recovery."),
             changes: [

@@ -31,6 +31,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let catalog: QueryCatalog?
     private let usageStore: UsageStore?
     private let hooks: HookSettings?
+    private let codeSwitch: CodeSwitchBridge?
 
     init(preferences: Preferences,
          providers: @escaping () -> [ProviderSummary],
@@ -39,7 +40,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
          signIn: @escaping (String) -> Bool,
          switchAccount: @escaping (String) -> Bool,
          retry: @escaping (String) -> Void,
-         catalog: QueryCatalog? = nil, usageStore: UsageStore? = nil, hooks: HookSettings? = nil) {
+         catalog: QueryCatalog? = nil, usageStore: UsageStore? = nil, hooks: HookSettings? = nil,
+         codeSwitch: CodeSwitchBridge? = nil) {
+        self.codeSwitch = codeSwitch
         self.hooks = hooks
         self.catalog = catalog
         self.usageStore = usageStore
@@ -159,7 +162,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                                    signIn: signIn,
                                    switchAccount: switchAccount,
                                    retry: retry,
-                                   updater: updater, catalog: catalog, usageStore: usageStore, hooks: hooks)
+                                   updater: updater, catalog: catalog, usageStore: usageStore, hooks: hooks, codeSwitch: codeSwitch)
         )
         window.center()
         window.isReleasedWhenClosed = false

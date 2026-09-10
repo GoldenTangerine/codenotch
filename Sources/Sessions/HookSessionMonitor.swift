@@ -277,6 +277,9 @@ struct HookSessionState: Equatable {
     }
 
     private static func matches(_ session: AgentSession, record: Record) -> Bool {
+        if record.event.tool == "codex", let key = session.nativeSessionKey {
+            return key == record.event.sessionKey
+        }
         guard session.hookSessionKey == nil else { return false }
         if record.event.tool == "codex" { return session.id.contains(record.event.sessionID) }
         return session.processID != nil && session.processID == record.event.pid

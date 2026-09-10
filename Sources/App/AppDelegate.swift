@@ -151,6 +151,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let hookSettings = HookSettings(monitor: hookMonitor)
             self.hookSettings = hookSettings
+            let codeSwitch = CodeSwitchBridge()
+            self.codeSwitch = codeSwitch
             let settings = SettingsWindowController(
                 preferences: preferences,
                 // A closure so the sheet re-reads accounts each time it comes
@@ -164,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     store?.openAccountSource(providerID: $0) ?? false
                 },
                 retry: { [weak store] in store?.reauthorize(providerID: $0) },
-                catalog: catalog, usageStore: store, hooks: hookSettings
+                catalog: catalog, usageStore: store, hooks: hookSettings, codeSwitch: codeSwitch
             )
             fleet.onOpenSettings = { [weak settings] in settings?.show() }
             self.settings = settings
@@ -250,10 +252,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(tooltipHeightMode: $0) }
                 .store(in: &cancellables)
 
-            let codeSwitch = CodeSwitchBridge()
-            self.codeSwitch = codeSwitch
-            preferences.$codeSwitchEnabled
-                .sink { [weak codeSwitch] in codeSwitch?.setEnabled($0) }
+            preferences.$codeSwitchEnabled.combineLatest(preferences.$codeSwitchDisplayMode)
+                .sink { [weak codeSwitch] enabled, mode in codeSwitch?.configure(enabled: enabled, mode: mode) }
                 .store(in: &cancellables)
             // Redraw the Gemini API ring against the new ceiling.
             //
@@ -285,11 +285,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             store.$snapshots.combineLatest(codeSwitch.$snapshots)
                 .receive(on: RunLoop.main)
                 .sink { [weak self] local, linked in
-                    let snapshots = local + linked
+                    let snapshots = local + linked.filter { self?.preferences?.hiddenCodeSwitchProviders.contains($0.id) != true }
                     self?.localSnapshots = local
                     self?.updateActivity()
                     notifier.observe(snapshots)
                 }
+                .store(in: &cancellables)
+            preferences.$hiddenCodeSwitchProviders.dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
             codeSwitch.$bindings.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.updateActivity() }
@@ -421,7 +424,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hookMonitor.reconcile(nativeSessions)
         let merged = hookMonitor.state.merging(nativeSessions)
         let routing = ActivityRouting(local: localSnapshots, linked: codeSwitch?.snapshots ?? [],
-                                      sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:])
+                                      sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:],
+                                      hiddenLinked: preferences?.hiddenCodeSwitchProviders ?? [])
         if (activityRouting?.unmatched ?? [:]) != routing.unmatched {
             let summary = ActivityRouting.UnmatchedReason.allCases.map {
                 "\($0.rawValue)=\(routing.unmatched[$0, default: 0])"
@@ -487,5 +491,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store?.stop()
         monitors.values.forEach { $0.stop() }
         notchFleet?.stop()
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task { @MainActor in
+            await codeSwitch?.stopAndWait()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }
