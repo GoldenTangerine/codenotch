@@ -118,20 +118,39 @@ final class CodeSwitchBridgeTests: XCTestCase {
 
     func testLinkedTooltipRespectsUsagePacePreference() throws {
         let snapshot = try snapshot(quotas: [quota("weekly")])
+        let window = try XCTUnwrap(snapshot.headline)
+        let testNow = try XCTUnwrap(window.resetsAt).addingTimeInterval(-604800)
+        XCTAssertTrue(try XCTUnwrap(window.usagePace(now: testNow)).isDeficit)
         let domain = "CodeSwitchPaceTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
         defer { defaults.removePersistentDomain(forName: domain) }
-        func render(pace: Bool) throws -> Data {
+        func deficitPixels(pace: Bool) throws -> Int {
             defaults.set(pace, forKey: Preferences.showUsagePaceKey)
-            let renderer = ImageRenderer(content: TooltipCard(snapshot: snapshot, now: now)
-                .defaultAppStorage(defaults))
-            renderer.scale = 1
-            let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
-            return try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+            // 原生滚动区由 AppKit 绘制；避免 ImageRenderer 漏掉额度行。
+            let host = NSHostingView(rootView: TooltipCard(snapshot: snapshot, now: testNow)
+                .defaultAppStorage(defaults)
+                .environment(\.colorScheme, .dark)
+                .environment(\.codenotchReduceTransparency, true))
+            host.frame = NSRect(origin: .zero, size: host.fittingSize)
+            host.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            let orange = try XCTUnwrap(NSColor(Color.orange).usingColorSpace(.deviceRGB))
+            var count = 0
+            for x in 0..<bitmap.pixelsWide {
+                for y in 0..<bitmap.pixelsHigh {
+                    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                          color.alphaComponent > 0.5, color.saturationComponent > 0.5 else { continue }
+                    let hueDistance = abs(color.hueComponent - orange.hueComponent)
+                    if min(hueDistance, 1 - hueDistance) < 0.04 { count += 1 }
+                }
+            }
+            return count
         }
-        let withoutPace = try render(pace: false)
-        XCTAssertNotEqual(try render(pace: true), withoutPace)
-        XCTAssertEqual(try render(pace: false), withoutPace)
+        let withoutPace = try deficitPixels(pace: false)
+        XCTAssertGreaterThan(try deficitPixels(pace: true), withoutPace,
+                             "Enabling pace must display the orange deficit text inside the scroll view")
+        XCTAssertEqual(try deficitPixels(pace: false), withoutPace)
     }
 
     func testBrandIconAliasesAndPathValidation() {
