@@ -46,7 +46,7 @@
 	<key>SUFeedURL</key>
 	<string>https://github.com/GoldenTangerine/codenotch/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
-	<string>rmUfT5r49nR+3HdkbR5/YYLghfnAi6L49eOk3sIegSk=</string>
+	<string>LnqbzvVoWRmOd+dGneAJ5zbo24+T935Q/JWo0WeIlJM=</string>
 	<key>SUScheduledCheckInterval</key>
 	<integer>86400</integer>
 </dict>
