@@ -197,7 +197,13 @@ jobs:
           set -euo pipefail
           # Sparkle ships its tools inside the resolved package artifacts; the
           # archive step above is what fetched them.
-          SPARKLE_BIN=$(dirname "$(find "$HOME/Library/Developer/Xcode/DerivedData/Codenotch-*/SourcePackages/artifacts/sparkle" -name generate_appcast | head -1)")
+          SPARKLE_TOOL=$(find "$HOME/Library/Developer/Xcode/DerivedData" \
+            -type f -path '*/SourcePackages/artifacts/sparkle/*/generate_appcast' -print -quit)
+          if [ -z "$SPARKLE_TOOL" ] || [ ! -x "$SPARKLE_TOOL" ]; then
+            echo "Sparkle generate_appcast tool was not found in resolved package artifacts" >&2
+            exit 1
+          fi
+          SPARKLE_BIN=$(dirname "$SPARKLE_TOOL")
           mkdir -p site
           # Rebuilt from what is actually in the folder, never merged into the
           # old one — see the appcast target in the Makefile.
