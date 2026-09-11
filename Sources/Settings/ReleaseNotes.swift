@@ -40,6 +40,42 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.19",
+            headline: String(localized: "More control over linked provider visibility."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Choose from five display scopes"),
+                    detail: String(localized: "Follow the tray, show all providers, or filter by remaining quota, exhausted quota or active requests. Settings keeps the complete list, including providers with unknown quota.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Include quota-disabled providers"),
+                    detail: String(localized: "Code Switch R 2.11.22 sends enabled and quota-disabled providers across platforms without requiring proxy hosting. Manually disabled providers stay excluded.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Keep sessions and quota alerts visible"),
+                    detail: String(localized: "Busy or waiting sessions can restore filtered suppliers without duplicate Codex placeholders. Manual hiding takes priority, and display filters no longer suppress quota alerts.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.18",
+            headline: String(localized: "More control over linked provider visibility."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Choose from five display scopes"),
+                    detail: String(localized: "Follow the tray, show all providers, or filter by remaining quota, exhausted quota or active requests. Settings keeps the complete list, including providers with unknown quota.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Include quota-disabled providers"),
+                    detail: String(localized: "Code Switch R 2.11.22 sends enabled and quota-disabled providers across platforms without requiring proxy hosting. Manually disabled providers stay excluded.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Keep sessions and quota alerts visible"),
+                    detail: String(localized: "Busy or waiting sessions can restore filtered suppliers without duplicate Codex placeholders. Manual hiding takes priority, and display filters no longer suppress quota alerts.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.17",
             headline: String(localized: "Visible provider icons and a searchable brand library."),
             changes: [

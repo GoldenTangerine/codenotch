@@ -1,6 +1,13 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "More control over linked provider visibility." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "更灵活地选择联动供应商的显示范围。"}}}},
+    "Choose from five display scopes" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "五种显示范围"}}}},
+    "Follow the tray, show all providers, or filter by remaining quota, exhausted quota or active requests. Settings keeps the complete list, including providers with unknown quota." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "支持跟随托盘、全部供应商、仅未耗尽、仅已耗尽和仅活跃。设置页保留完整列表，包含额度未知的供应商。"}}}},
+    "Include quota-disabled providers" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "接收额度自动停用的供应商"}}}},
+    "Code Switch R 2.11.22 sends enabled and quota-disabled providers across platforms without requiring proxy hosting. Manually disabled providers stay excluded." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "配合 Code Switch R 2.11.22，接收各平台已启用及额度自动停用的供应商，无需开启代理托管；手动关闭的供应商仍不推送。"}}}},
+    "Keep sessions and quota alerts visible" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "保留会话入口与额度提醒"}}}},
+    "Busy or waiting sessions can restore filtered suppliers without duplicate Codex placeholders. Manual hiding takes priority, and display filters no longer suppress quota alerts." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "忙碌或等待中的会话可临时显示被筛选的供应商，避免重复的 Codex 空占位。手动隐藏优先，显示筛选不再影响额度提醒。"}}}},
     "All eligible providers" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "全部供应商"}}}},
     "Not exhausted" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "仅未耗尽"}}}},
     "Exhausted only" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "仅已耗尽"}}}},
