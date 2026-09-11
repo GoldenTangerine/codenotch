@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 CodexCredentials.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/CodexCredentials.swift
+ */
 import Foundation
 
 /// Borrows Codex's local session without refreshing or changing its credentials.
@@ -8,7 +17,7 @@ enum CodexCredentials {
     }
 
     static var authURL: URL {
-        URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".codex/auth.json")
+        CodexProfile.default().authURL
     }
 
     static func load(from url: URL = authURL, now: Date = Date()) throws -> Credential {
@@ -32,7 +41,7 @@ enum CodexCredentials {
         return Credential(accessToken: auth.tokens.access_token, accountID: auth.tokens.account_id)
     }
 
-    static func account(from url: URL = authURL) -> ProviderAccount? {
+    static func account(from url: URL = authURL, source: String = "Codex") -> ProviderAccount? {
         guard let data = try? Data(contentsOf: url),
               let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tokens = root["tokens"] as? [String: Any],
@@ -44,7 +53,7 @@ enum CodexCredentials {
         return ProviderAccount(
             label: claims["email"] as? String,
             plan: auth?["chatgpt_plan_type"] as? String,
-            source: "Codex",
+            source: source,
             manageURL: URL(string: "https://chatgpt.com/#settings/Account")
         )
     }

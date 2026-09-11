@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 KeychainItem.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/KeychainItem.swift
+ */
 import Foundation
 import Security
 
@@ -32,6 +41,9 @@ enum KeychainItem {
         /// this points at is the one call that can prompt; enumerating to find
         /// it, like reading `modifiedAt`, never does.
         let persistentRef: Data
+        /// The service name it was filed under — needed to reach the same item
+        /// by name when a direct read of it is refused.
+        let service: String
     }
 
     /// The most recently modified item under a service, or nil if there is
@@ -67,7 +79,8 @@ enum KeychainItem {
         items
             .compactMap { item -> Match? in
                 guard let ref = item[kSecValuePersistentRef] as? Data else { return nil }
-                return Match(modifiedAt: item[kSecAttrModificationDate] as? Date, persistentRef: ref)
+                return Match(modifiedAt: item[kSecAttrModificationDate] as? Date, persistentRef: ref,
+                             service: item[kSecAttrService] as? String ?? "")
             }
             // A duplicate with no modification date is possible in principle
             // and worth keeping rather than discarding; `.distantPast` only
@@ -95,5 +108,59 @@ enum KeychainItem {
     /// When the owning app last wrote the newest item across these services.
     static func modifiedAt(services: [String], account: String? = nil) -> Date? {
         newest(services: services, account: account)?.modifiedAt
+    }
+
+    /// Reads the data from the newest item under a service. The one call that
+    /// can trigger a keychain prompt. Items this app created itself (`store`)
+    /// do not prompt either — but only as long as the binary keeps the same
+    /// signing identity that stored them; an ad-hoc rebuild is a new identity,
+    /// which is why even own-item readers go through `CredentialCache`.
+    static func read(service: String, account: String? = nil) -> String? {
+        guard let match = newest(service: service, account: account) else { return nil }
+        var query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecValuePersistentRef: match.persistentRef,
+            kSecReturnData: true,
+            kSecMatchLimit: kSecMatchLimitOne
+        ]
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data
+        else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Stores a string under a service+account, creating or updating the item.
+    /// For items this app owns, no prompt is involved on either write or read.
+    static func store(service: String, account: String, value: String) -> Bool {
+        let data = Data(value.utf8)
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account
+        ]
+        let attributes: [CFString: Any] = [
+            kSecValueData: data,
+            kSecAttrAccessible: kSecAttrAccessibleAfterFirstUnlock
+        ]
+        let updateStatus = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        if updateStatus == errSecSuccess { return true }
+        if updateStatus == errSecItemNotFound {
+            var addQuery = query
+            addQuery.merge(attributes) { _, new in new }
+            return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
+        }
+        return false
+    }
+
+    /// Deletes the item under a service+account, if one exists.
+    @discardableResult
+    static func delete(service: String, account: String) -> Bool {
+        let query: [CFString: Any] = [
+            kSecClass: kSecClassGenericPassword,
+            kSecAttrService: service,
+            kSecAttrAccount: account
+        ]
+        return SecItemDelete(query as CFDictionary) == errSecSuccess
     }
 }

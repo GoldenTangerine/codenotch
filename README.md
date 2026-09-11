@@ -9,7 +9,7 @@
 -->
 <div align="center">
 
-# Codenotch
+![Codenotch](docs/design/codenotch-banner.png)
 
 [![Release](https://github.com/GoldenTangerine/codenotch/actions/workflows/release.yml/badge.svg)](https://github.com/GoldenTangerine/codenotch/actions/workflows/release.yml)
 ![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-black)
@@ -32,6 +32,10 @@ In **Settings → Appearance → Tooltip height**, choose **Show all** to expand
 provider details to their content, including every session and available statistic.
 The bubble scrolls only when its content exceeds the current screen's usable
 height. **Default** preserves the existing compact layout.
+
+## Download
+
+Download this fork from [Releases](https://github.com/GoldenTangerine/codenotch/releases/latest).
 
 ## Windows
 
@@ -135,13 +139,17 @@ existing request spinner without guessing which supplier a question belongs to.
 
 | Provider | Source | How |
 |---|---|---|
-| **Claude Code** | official | Claude Code's own `/usage`, asked of the installed `claude`. Falls back to the OAuth token in the login keychain, against the endpoint that command uses, when Claude Code isn't installed. |
+| **Claude Code** | official | Claude Desktop's own cached usage response, where Desktop is running and signed into the same account. Then Claude Code's own `/usage`, asked of the installed `claude`. Then the OAuth token in the login keychain, against the endpoint that command uses. |
 | **Cursor** | official | The editor's signed-in session in its local SQLite state, or the `cursor-agent` login in the keychain — no separate sign-in. |
 | **Codex** | official | ChatGPT's usage endpoint, using the local Codex sign-in. Shows the 5-hour and weekly limits when available. |
+| **DeepSeek Platform** | derived from official Platform responses | Explicit sign-in in Codenotch's own WKWebView, then the Platform account summary and API-key/model usage endpoints. Shows funded/spent balance, 30-day tokens/cost, requests and API-key count. |
 | **Antigravity** | official where licensed, otherwise a request count | Antigravity's local language server first, then Google's quota endpoint; a plain count when neither will answer for the account. |
 | **GLM** | official | Z.ai's Coding Plan monitor endpoint, with a key borrowed from whichever coding tool already holds one — Claude Code's `settings.json`, ZCode, or OpenCode. |
+| **Ollama (Local)** | local runtime | Automatically detected local models, RAM/VRAM, unload time and context. Optional response capture adds thinking and generation speed. |
+| **LM Studio** | local runtime | Loaded models from LM Studio's own listing, what each one is doing (prompt, generating, queue) from its SDK socket, and speed, context use and tokens per day from its server log. No relay needed. |
 | **Grok** | official | The Grok CLI session in `~/.grok/auth.json`, against the same credits billing endpoint `/usage` uses. |
 | **OpenCode** | official | The Go plan's official usage endpoint, with the `opencode-go` key OpenCode itself stores on sign-in. |
+| **Command Code** | official | The GOAT plan's `/alpha` billing endpoints, with the key the Command Code app writes to `~/.commandcode/auth.json`. |
 | **GitHub Copilot** | official | GitHub's Copilot quota endpoint, authenticated with the GitHub CLI session already on the Mac (`gh auth login`). |
 | **Gemini API** | local token usage | Token usage from Gemini CLI, OpenCode and Hermes, with an optional monthly token budget in Settings. |
 
@@ -218,6 +226,47 @@ updating when a provider changes its response. Saved scripts are preserved when
 templates change; selecting another query method and then the desired template
 loads its latest code.
 
+Most providers borrow a credential or session from a tool already on your Mac.
+DeepSeek is the explicit browser-login exception: it never reads a browser's
+cookies or credentials, and only makes requests after you choose **Sign in to
+DeepSeek** from Codenotch.
+Ollama Cloud accepts an API key in Settings. Switching a provider off stops its
+usage polling and forgets its readings; borrowed accounts stay signed in to
+the tools that own them.
+
+**Local Ollama is detected automatically.** Configure its address or stop monitoring in **Settings → Ollama**.
+Each loaded model gets a notch cell; reorder or hide it in **Settings → Accounts**.
+Hover for RAM/VRAM, unload time, context limit and quantization.
+
+For generation speed (**tok/s**) and live **Thinking**, enable **Measure speed and thinking**
+in Settings → Ollama, keep Codenotch open and connect through its local relay:
+
+```sh
+OLLAMA_HOST=http://127.0.0.1:11435 ollama run gemma4:e4b --think
+```
+
+Speed updates after completed native Ollama responses; thinking requires streamed
+reasoning. Direct requests to Ollama's default port (`11434`) only provide model
+detection. Monitoring never initiates inference or saves prompts, reasoning or replies.
+See [Ollama details](docs/plans/2026-09-07-local-llm-provider-plan.md).
+
+**Local LM Studio is detected automatically** on the port LM Studio's own settings name
+(1234 unless you moved it). Configure the address or stop monitoring in **Settings → LM Studio**.
+Each loaded language model gets a notch cell; embedding models are left out. The cell shows the
+last response's **tok/s** and its ring fills with how much of the loaded **context** the last
+request used. A white arc turns while the model reads a prompt or generates, and becomes a ring
+of dots when requests are queued behind it. Hover for context used, tokens and requests today,
+reasoning share, speculative-decoding acceptance, model size, quantization and context limit.
+
+Nothing has to be pointed at Codenotch: what a model is doing comes from LM Studio's SDK socket
+on the same port (the one `lms ps` uses), and speed and tokens come from `~/.lmstudio/server-logs`,
+which LM Studio writes for every request from any client. Only counts and timings are read from
+those files, never a prompt or a reply. Responses through the OpenAI-compatible endpoint carry no
+clock, so their speed is timed from the generating phase and marked `~`. If LM Studio's server is
+set to require an API token, paste one in Settings → LM Studio (or export `LM_API_TOKEN`); without
+one, requests are sent with no Authorization header at all.
+See [LM Studio details](docs/plans/2026-09-10-lm-studio-provider-plan.md).
+
 Settings lists the connected providers in the order the notch draws them, and
 you can drag one by its handle to move it. The order is remembered across
 launches. A provider you switch back on joins the end of that list rather than
@@ -235,6 +284,31 @@ Automatic → Local provider**, with its own limits and sessions.
 Available `~/.claude-<slug>` directories are discovered at launch. The initial
 list places the default first and the other profiles alphabetically; subsequent
 ordering follows your saved provider list.
+
+Codex accounts work the same way: `~/.codex` stays the **Codex** ring, and each
+used `~/.codex-<slug>` directory adds a **Codex (slug)** ring with its own limits,
+activity and Settings row. Profiles are discovered at launch, default first,
+then alphabetically. To connect a second account, sign in through Codex CLI
+using a separate home directory:
+
+```sh
+mkdir -p "$HOME/.codex-work"
+CODEX_HOME="$HOME/.codex-work" codex -c 'cli_auth_credentials_store="file"' login
+```
+
+Choose the second account during sign-in, then restart Codenotch. Run that
+account's CLI sessions with `CODEX_HOME="$HOME/.codex-work" codex` as well.
+Repeat with another name, such as `.codex-personal`, for more accounts.
+Settings shows each account's email and profile directory; each ring can be
+reordered or switched off independently. Switching one off forgets only its
+Codenotch readings and leaves the Codex login intact.
+
+Codenotch reads each profile's `auth.json`; keychain-only or API-key-only
+logins cannot provide these ChatGPT account limits. It never copies, refreshes
+or writes Codex credentials. If a login expires, use that profile's Codex CLI
+to renew it. Directories outside the `~/.codex-<slug>` convention are not
+discovered automatically, and adding a profile requires restarting Codenotch,
+just as it does for Claude.
 
 ## Session notifications
 
@@ -364,14 +438,30 @@ window. Option-drag also nudges the notch along its current edge.
 
 The notch lives on any of the four screen edges. Right and left keep a
 vertical column; top and bottom lay the readings out side by side. It pins
-itself to the *usable* edge, so a bottom notch rests on the Dock and follows
-when the Dock hides or moves. On a Mac with a hardware notch, the top
+itself to the physical screen edge, so showing or hiding the Dock does not
+move it. Hold Option and drag to move along the selected edge; each edge
+remembers its position. On a Mac with a hardware notch, the top
 placement takes its exact shape, so the two read as one rather than as a bar
 parked underneath it.
+
+Along that edge it sits wherever you put it: hold ⌥ and drag the notch to
+slide it, and each edge remembers where you left it, so moving the notch to the
+top and back does not lose the place you chose on the right. **Recentre** in
+Settings → Appearance puts the current edge back in the middle.
+
+**Size** in the same place draws the whole notch — rings, text, tooltip and all
+— smaller or larger. Medium is the size it was designed at.
 
 At rest it is a small pill on the screen edge that unfolds when the pointer
 reaches it — configurable in Settings to always show, or to hide entirely.
 Settings live in an orb below the notch: an arc at rest, a gear on hover.
+
+Clicking the notch while it is open keeps it open, so it stays put while you
+read it; clicking it again lets it fold away as usual. That click has to land
+on the body itself, since a ring takes its own click to refetch that provider
+and the orb takes one to open Settings. Right-clicking offers the same thing as
+a menu item, **Keep open**, ticked while the notch is being held open, which is
+the surer way to release one that was kept open by accident. The item follows the same persistent visibility setting as Settings → Appearance.
 
 In Settings → Appearance → Reset time, choose **Time remaining** for countdowns
 like "Resets in 3 Days 3h". **Reset date** keeps the reset date and time, with
@@ -411,6 +501,31 @@ the maintainer to cut an official release. See
 and publishes a release only when a version tag such as `v1.6.2` is pushed.
 Branch pushes and pull requests do not trigger a separate CI workflow.
 
+A Debug build is ad-hoc signed, which means it has no stable code identity, so
+macOS cannot match it to a saved keychain "Always Allow" — the prompt to read a
+tool's token returns on every launch. To make the grant stick during local
+development, sign the built app with a stable self-signed identity:
+
+```sh
+Scripts/sign-local.sh   # signs /Applications/Codenotch.app (pass a path to override)
+```
+
+It creates a reusable `Codenotch Local Signing` certificate in your login
+keychain (no Apple Developer account needed) and re-signs the app. Grant the
+keychain prompt once more after signing; it will not ask again.
+
+Each successful stable tag release includes `Codenotch.dmg` and a real
+Sparkle-signed update in `appcast.xml`. GitHub Actions requires only the
+`SPARKLE_EDDSA_KEY` secret for the default ad-hoc build; no Apple Developer ID
+or notarization is required. First launch may require approval in macOS
+Privacy & Security. Apple signing remains optional via `RELEASE_SIGNING=true`.
+See [Sparkle key setup](CONTRIBUTING.md#sparkle-key-setup) for configuration.
+Before publication, CI verifies the DMG signature against the app's embedded
+public key. Feed metadata is checked again from the published attachment before
+promoting the highest stable version to Latest. Older tags cannot move it
+backwards. Settings → Check now can install a newer compatible release through
+Sparkle; existing installations must trust the same update key.
+
 Run with `CODENOTCH_DEMO=1` to see fixed sample data instead of live readings.
 
 ## Architecture
@@ -439,6 +554,24 @@ an internal endpoint, a local database, a language server's own RPC — and
 those can change without notice. Every adapter's response shape is pinned by
 tests, and every failure degrades to a visible status (`stale`, `needsAuth`,
 `error`) rather than an invented number.
+
+**Claude Desktop's cache:** Claude Desktop is a Chromium app, so the usage
+response its own panel draws is written to an HTTP cache file under
+`~/Library/Application Support/Claude`. Reading it is how the ring stays right
+for people who work in Desktop rather than in the terminal — the two Claude
+Code paths below both go dark when `claude "/usage"` stops printing the windows
+and the keychain token has not been re-minted since Claude Code last ran, which
+is an ordinary state for a Desktop user. It is strictly read-only, and narrow:
+only entries whose cached URL is *this account's* `/api/organizations/<id>/usage`
+are opened at all, matched on the organization Claude Code records for the
+profile, so one account's numbers can never land on another's ring. No token, no
+cookie, no credential and no request to Anthropic are involved. A snapshot older
+than 30 minutes is not shown as live — it drops through to the paths below, and
+the last good reading ages and dims as any other would. Chromium's cache format
+is private and may change; if it does, the source goes quiet and the existing
+ones take over. Bodies are `content-encoding: zstd` and macOS ships no decoder,
+so a decode-only build of Zstandard is vendored under
+[`Sources/Vendor/zstd`](Sources/Vendor/zstd) (BSD-3-Clause).
 
 **Keychain:** Claude's readings do not use it where Claude Code is installed.
 Claude Code files a *new* keychain item on every token rotation, and the new

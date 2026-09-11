@@ -30,8 +30,8 @@ enum HookInstaller {
         case invalidConfig, missingHelper
         var errorDescription: String? {
             switch self {
-            case .invalidConfig: return String(localized: "Hook configuration is invalid; the file was not changed")
-            case .missingHelper: return String(localized: "Hook helper is missing; reinstall Codenotch")
+            case .invalidConfig: return L10n.t("Hook configuration is invalid; the file was not changed")
+            case .missingHelper: return L10n.t("Hook helper is missing; reinstall Codenotch")
             }
         }
     }
@@ -160,7 +160,7 @@ final class HookSettings: ObservableObject {
             do {
                 if try HookInstaller.hasEntries(target) { present.insert(target.id) }
                 if try HookInstaller.isInstalled(target, helper: helper) { installed.insert(target.id) }
-            } catch { errors[target.id] = String(localized: "Hook configuration could not be read") }
+            } catch { errors[target.id] = L10n.t("Hook configuration could not be read") }
         }
     }
 
@@ -170,7 +170,7 @@ final class HookSettings: ObservableObject {
             monitor.setEnabled(installing, tool: target.tool, directory: target.directory.path)
             if installing { monitor.start() }
             refresh()
-        } catch { errors[target.id] = (error as? HookInstaller.Failure)?.errorDescription ?? String(localized: "Hook configuration could not be saved") }
+        } catch { errors[target.id] = (error as? HookInstaller.Failure)?.errorDescription ?? L10n.t("Hook configuration could not be saved") }
     }
 
     func addDirectory(tool: String) {

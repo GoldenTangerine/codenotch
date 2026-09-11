@@ -1,75 +1,89 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 AppLanguageTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/AppLanguageTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
-@MainActor
+/// In-app language is a stored override, not the Mac's language. Follow
+/// System still hits the XCTest English pin when nothing is stored.
 final class AppLanguageTests: XCTestCase {
-    /// A scratch suite is its own domain: reading `AppleLanguages` straight
-    /// off it would fall through to the *global* domain and find the Mac's
-    /// system languages, so every check here goes through the suite's own
-    /// persistent domain instead.
-    private func makeDefaults() -> (name: String, defaults: UserDefaults) {
-        let name = "AppLanguageTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        addTeardownBlock { defaults.removePersistentDomain(forName: name) }
-        return (name, defaults)
+    private var suiteName = ""
+    private var previousDefaults: UserDefaults?
+    private var previousTestLocale: Locale?
+
+    /// A scratch suite, not `.standard`. The test host *is* the app, so
+    /// `.standard` is the preferences of the copy of Codenotch installed on
+    /// this Mac: reading it would let a language chosen in Settings decide
+    /// what these assert, and writing it would leave a language behind in the
+    /// real app when a test failed before its restore.
+    override func setUp() {
+        super.setUp()
+        suiteName = "AppLanguageTests.\(UUID().uuidString)"
+        let scratch = UserDefaults(suiteName: suiteName)!
+        scratch.removePersistentDomain(forName: suiteName)
+        previousDefaults = L10n.defaults
+        previousTestLocale = L10n.testLocale
+        L10n.defaults = scratch
+        L10n.testLocale = nil
+        L10n.apply(.system)
     }
 
-    private func ownOverride(in suite: String, _ defaults: UserDefaults) -> [String]? {
-        defaults.persistentDomain(forName: suite)?["AppleLanguages"] as? [String]
+    override func tearDown() {
+        L10n.testLocale = previousTestLocale
+        L10n.defaults.removePersistentDomain(forName: suiteName)
+        if let previousDefaults { L10n.defaults = previousDefaults }
+        super.tearDown()
     }
 
-    func testDefaultFollowsTheSystemWithNoOverride() {
-        let (name, defaults) = makeDefaults()
-
-        let preferences = Preferences(defaults: defaults, domainName: name)
-
-        XCTAssertEqual(preferences.language, .system)
-        XCTAssertEqual(preferences.appliedLanguage, .system)
-        XCTAssertNil(ownOverride(in: name, defaults))
+    func testFollowSystemUsesTheEnglishPinWhenNothingIsStored() {
+        L10n.apply(.system)
+        L10n.testLocale = nil
+        XCTAssertTrue(
+            L10n.locale.identifier.hasPrefix("en"),
+            "XCTest pin should return English when appLanguage is unset, got \(L10n.locale.identifier)"
+        )
     }
 
-    func testChoosingChineseWritesTheOverrideForTheNextLaunch() {
-        let (name, defaults) = makeDefaults()
-        let preferences = Preferences(defaults: defaults, domainName: name)
-
-        preferences.language = .chinese
-
-        XCTAssertEqual(ownOverride(in: name, defaults), ["zh-Hans"])
-        // The running process is unaffected — it launched as .system.
-        XCTAssertEqual(preferences.appliedLanguage, .system)
+    /// A forced English must actually be English. The catalog files its
+    /// source strings under `en`, so the region-qualified `en_US` this used
+    /// to store matched nothing and fell through to the next localization the
+    /// bundle offered — Chinese, on a build that ships one.
+    func testApplyEnglishServesEnglishCopy() {
+        L10n.apply(.english)
+        L10n.testLocale = nil
+        XCTAssertEqual(L10n.t("Always show"), "Always show")
     }
 
-    func testChoosingSystemAgainRemovesTheOverride() {
-        let (name, defaults) = makeDefaults()
-        let preferences = Preferences(defaults: defaults, domainName: name)
-
-        preferences.language = .english
-        preferences.language = .system
-
-        XCTAssertNil(ownOverride(in: name, defaults))
-        XCTAssertEqual(preferences.language, .system)
+    /// `apply(.simplifiedChinese)` stores `zh-Hans`, and `L10n.locale`
+    /// honours that even under XCTest, so the default `t()` lookup is
+    /// Chinese without setting `testLocale`.
+    func testApplySimplifiedChineseServesChineseCopy() {
+        L10n.apply(.simplifiedChinese)
+        L10n.testLocale = nil
+        XCTAssertEqual(L10n.t("Always show"), "始终显示")
     }
 
-    func testAStoredChoiceSurvivesRelaunch() {
-        let (name, defaults) = makeDefaults()
-        Preferences(defaults: defaults, domainName: name).language = .chinese
-
-        let preferences = Preferences(defaults: defaults, domainName: name)
-
-        XCTAssertEqual(preferences.language, .chinese)
-        XCTAssertEqual(preferences.appliedLanguage, .chinese)
+    /// Japanese is offered in the picker under the identifier the catalog
+    /// files its translations under. Deliberately no assertion on the copy
+    /// `ja` serves: the catalog carries no Japanese yet, so today it falls
+    /// back to English, and pinning that would turn into a failing test the
+    /// moment a translation lands — which is the point of the branch.
+    func testJapaneseIsOfferedAndMapsToJa() {
+        XCTAssertTrue(AppLanguage.allCases.contains(.japanese))
+        XCTAssertEqual(AppLanguage.japanese.title, "日本語")
     }
 
-    /// System Settings writes the very same key for a per-app language, so a
-    /// choice made there is simply what the picker shows — nothing to
-    /// reconcile, no second source to disagree.
-    func testAnOverrideWrittenOutsideTheAppIsWhatThePickerShows() {
-        let (name, defaults) = makeDefaults()
-        defaults.set(["zh-Hans"], forKey: "AppleLanguages")
-
-        let preferences = Preferences(defaults: defaults, domainName: name)
-
-        XCTAssertEqual(preferences.language, .chinese)
-        XCTAssertEqual(preferences.appliedLanguage, .chinese)
+    /// The override round-trips through the store like any other language,
+    /// even while the catalog has nothing to serve for it.
+    func testApplyJapaneseStoresTheOverride() {
+        L10n.apply(.japanese)
+        L10n.testLocale = nil
+        XCTAssertEqual(L10n.locale.identifier, "ja")
     }
 }

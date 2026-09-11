@@ -59,6 +59,38 @@ final class QueryConfigurationTests: XCTestCase {
         XCTAssertEqual(try secrets.load(second.credentialReference), b)
     }
 
+    func testUpstreamSourcesAreAddedOnceWithoutRestoringDeletedProviders() throws {
+        let defaults = defaults()
+        let secrets = MemoryQuerySecrets()
+        let original = QueryCatalog(providers: [QueryProbe(id: "claude")],
+            disconnected: [], defaults: defaults, secrets: secrets)
+        try original.delete("claude")
+        let next = [QueryProbe(id: "claude"), QueryProbe(id: "deepseek"), QueryProbe(id: "ollama-local")]
+        let migrated = QueryCatalog(providers: next, disconnected: ["ollama-local"],
+            defaults: defaults, secrets: secrets)
+        XCTAssertEqual(migrated.entries.map(\.id), ["deepseek", "ollama-local"])
+        XCTAssertFalse(migrated.entries[1].enabled)
+        try migrated.delete("deepseek")
+        let reopened = QueryCatalog(providers: next, disconnected: [], defaults: defaults, secrets: secrets)
+        XCTAssertEqual(reopened.entries.map(\.id), ["ollama-local"])
+    }
+
+    func testConfiguredProviderKeepsWeeklyWindowAndAccountPlan() {
+        var entry = QueryEntry()
+        entry.mode = .automatic
+        entry.nativeID = "codex"
+        let provider = ConfiguredUsageProvider(entry: entry, automatic: nil, secrets: MemoryQuerySecrets())
+        let snapshot = ProviderSnapshot(id: "codex", displayName: "Codex", glyph: .third,
+            fidelity: .official, status: .ok,
+            windows: [LimitWindow(id: "primary", label: "Session", usedFraction: 0.2),
+                      LimitWindow(id: "secondary", label: "Week", usedFraction: 0.8)],
+            headlineID: "primary", weeklyID: "secondary", plan: "Pro")
+        let result = provider.decorate(snapshot)
+        XCTAssertEqual(result.weeklyFraction, 0.8)
+        XCTAssertEqual(result.plan, "Pro")
+        XCTAssertEqual(result.headlineID, "primary")
+    }
+
     func testDragReorderPersistsWithoutReplacingOtherEntries() {
         let defaults = defaults()
         let providers = [QueryProbe(id: "a"), QueryProbe(id: "b"), QueryProbe(id: "c")]

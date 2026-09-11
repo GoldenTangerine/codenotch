@@ -148,7 +148,7 @@ struct CursorCredentials {
             return .openApp(bundleID: bundleID, name: "Cursor")
         }
         return .guidance(
-            String(localized: "Run `cursor-agent login` once — the notch reads that session. The Cursor editor works the same way, if you have it.")
+            L10n.t("Run `cursor-agent login` once — the notch reads that session. The Cursor editor works the same way, if you have it.")
         )
     }
 

@@ -33,9 +33,16 @@ final class NotchViewModel: ObservableObject {
         }
         let standard = NotchLayout.cardHeight(
             windowCount: snapshot.windows.count,
+            groupCount: snapshot.windowGroupCount,
+            moneyWindowCount: snapshot.windows.filter { $0.money != nil }.count,
+            usageDetailGroupCount: snapshot.usageDetail?.visibleGroups.count ?? 0,
             sessionCount: activity(for: snapshot.id)?.sessions.count ?? 0,
             sessionCap: sessionCap, statusMessage: snapshot.statusMessage,
-            blockMessage: snapshot.block?.summary(now: now), linked: snapshot.linked != nil)
+            blockMessage: snapshot.block?.summary(now: now), linked: snapshot.linked != nil,
+            hasTokenUsage: snapshot.tokenUsage != nil, hasPlan: snapshot.plan != nil,
+            hasResetCredits: snapshot.resetCredits != nil, localModelName: snapshot.localModel?.name,
+            showsLocalPerformance: snapshot.showsLocalPerformance,
+            localLedgerRows: snapshot.localLedgerRowCount, compactRowCount: snapshot.compactRowCount)
         guard tooltipHeightMode == .full else { return standard }
         return TooltipSizing.height(natural: standard, limit: fullTooltipHeightLimit)
     }
@@ -49,6 +56,66 @@ final class NotchViewModel: ObservableObject {
         hoveredIndex = hoveredID.flatMap { id in next.firstIndex { $0.id == id } }
         scrollStart = visibleStart
     }
+    /// Per runtime, so Ollama's relay switching off clears its own readings
+    /// and nobody else's.
+    private var performances: [String: [String: LocalModelPerformance]] = [:]
+    private var ledger = LocalTokenLedger()
+    private var localMetricsEnabled = false
+
+    /// The Ollama relay's own id; its readings are keyed by model name.
+    static let ollamaSource = "ollama-local"
+
+    func setLocalMetricsEnabled(_ enabled: Bool) {
+        localMetricsEnabled = enabled
+        if !enabled { performances[Self.ollamaSource] = nil; thinkingModels = [:] }
+        snapshots = snapshots.map(decorated)
+    }
+
+    func updateSnapshots(_ providerSnapshots: [ProviderSnapshot]) {
+        let hoveredID = hoveredSnapshot?.id
+        let next = ProviderOrder.cells(from: providerSnapshots, keeping: snapshots).map(decorated)
+        let nextHoveredIndex = hoveredID.flatMap { id in next.firstIndex { $0.id == id } }
+        if hoveredIndex != nextHoveredIndex { hoveredIndex = nextHoveredIndex }
+        replaceSnapshots(next)
+    }
+
+    func updatePerformances(_ measurements: [String: LocalModelPerformance],
+                            source: String = NotchViewModel.ollamaSource) {
+        performances[source] = measurements
+        snapshots = snapshots.map(decorated)
+    }
+
+    /// Logged tokens per cell, read against `now` as it is drawn so "today"
+    /// rolls over at midnight without a new line being written.
+    func updateLedger(_ ledger: LocalTokenLedger) {
+        self.ledger = ledger
+        snapshots = snapshots.map(decorated)
+    }
+
+    private func decorated(_ snapshot: ProviderSnapshot) -> ProviderSnapshot {
+        guard let model = snapshot.localModel else { return snapshot }
+        var snapshot = snapshot
+        let shows = localMetricsEnabled || snapshot.localRuntimeMeasuresSpeed
+        snapshot.showsLocalPerformance = shows
+        snapshot.localPerformance = shows
+            ? performances[snapshot.providerID]?[Self.performanceKey(for: snapshot, model: model)] : nil
+        snapshot.localLedger = ledger.summary(for: snapshot.id, now: now)
+        snapshot.localContextFraction = snapshot.localLedger?.contextFraction(contextLength: model.contextLength)
+        return snapshot
+    }
+
+    /// Ollama's relay knows a model by the name a client used, with Ollama's
+    /// implicit `:latest`; everything else reports by notch cell id.
+    static func performanceKey(for snapshot: ProviderSnapshot, model: LocalRuntimeReading.Model) -> String {
+        snapshot.providerID == ollamaSource ? OllamaThinkingStream.modelKey(model.name) : snapshot.id
+    }
+
+    @Published var thinkingModels: [String: Date] = [:]
+    /// What each local model instance is doing, keyed by cell id. Ollama's
+    /// thinking relay reports through `thinkingModels`; LM Studio's state
+    /// poll reports here, phase and queue included.
+    @Published var localActivities: [String: LocalModelActivity] = [:]
+
     /// Live agent sessions, keyed by the provider they belong to. They surface
     /// inside that provider's own ring rather than as a cell of their own — one
     /// ring per provider, so nothing in the notch looks like a ring without
@@ -58,7 +125,7 @@ final class NotchViewModel: ObservableObject {
     @Published var scrollStart = 0
 
     func visibleCount(_ count: Int) -> Int {
-        let available = edge.isVertical ? screenUsableSize.height : screenUsableSize.width
+        let available = (edge.isVertical ? screenUsableSize.height : screenUsableSize.width) / sizeScale
         guard available > 0 else { return count }
         let slack = NotchLayout.slack(for: edge, maxCardHeight: NotchLayout.maxCardHeight(sessionCap: 0))
         let room = available - 2 * slack - 2 * flare
@@ -103,8 +170,51 @@ final class NotchViewModel: ObservableObject {
     var staysOpen: Bool { isPinned || isAlwaysOn }
     /// Providers with a fetch in flight, driven by the store.
     @Published var refreshing: Set<String> = []
+    /// Bumped each time the settings orb is clicked, by either route.
+    ///
+    /// A count rather than a flag: the gear turns to `spins * 360`, so a
+    /// second click while the first turn is still running carries on round
+    /// instead of restarting from wherever it had got to.
+    @Published var settingsSpins = 0
+
+    @Published private(set) var refreshingCells: Set<String> = []
+
+    func isRefreshing(_ snapshot: ProviderSnapshot) -> Bool {
+        snapshot.localModel == nil
+            ? refreshing.contains(snapshot.providerID)
+            : refreshingCells.contains(snapshot.id)
+    }
+
+    func refresh(_ snapshot: ProviderSnapshot, using refreshProvider: (String) async -> Void) async {
+        guard snapshot.localModel != nil else {
+            await refreshProvider(snapshot.providerID)
+            return
+        }
+        guard refreshingCells.insert(snapshot.id).inserted else { return }
+        defer { refreshingCells.remove(snapshot.id) }
+        // A shared inventory fetch is not activity in every loaded model.
+        // Only the clicked cell presses in, even when it joins an existing poll.
+        async let feedback: Void = Task.sleep(nanoseconds: 380_000_000)
+        await refreshProvider(snapshot.providerID)
+        _ = try? await feedback
+    }
     /// The settings handle is under the cursor.
     @Published var isHoveringSettings = false
+    /// The move handle is under the cursor.
+    @Published var isHoveringMove = false
+    /// Bumped each time the move handle is pressed, on the same counter
+    /// pattern `settingsSpins` uses and for the same reason.
+    @Published var moveSpins = 0
+    /// The notch is in hand: the move handle has been held past its threshold
+    /// and the drop zones are up, waiting for a release.
+    @Published var isMoving = false
+    /// Which edge a release would land on. Nil before the pointer has moved
+    /// far enough for a target to be meaningful.
+    @Published var moveTarget: NotchEdge?
+    /// A move finished on `edge`. The controller owns persisting it, for the
+    /// same reason it owns `onReposition`: this type knows the geometry, not
+    /// where preferences live.
+    var onMove: ((NotchEdge) -> Void)?
     /// A direct SwiftUI tap on the settings orb, independent of the panel's
     /// own AppKit-level click routing (`NotchPanel.mouseDown` →
     /// `NotchWindowController.handleClick`). That path relies on the panel's
@@ -125,9 +235,26 @@ final class NotchViewModel: ObservableObject {
     /// the new edge whenever `edge` changes; this type does not own that
     /// persistence, only the live value.
     @Published var alongOffset: CGFloat = 0
+    /// What every measured distance is multiplied by before it reaches the
+    /// screen — the Appearance size choice, as a number.
+    ///
+    /// Everything in this type stays in **unscaled** points, the size the
+    /// design frame is drawn at, and so does `NotchLayout`. Scaling at the
+    /// source would mean threading a factor through forty constants and
+    /// leaving each one no longer comparable to the frame it is quoted from.
+    /// The multiplication happens once, at the two places that touch the
+    /// screen: the panel's frame and the drawn content.
+    @Published var sizeScale: CGFloat = 1
     /// Mirrors the persisted Appearance choice so the separate notch window
     /// redraws immediately when Settings changes it.
     @Published var accentColor: AccentColorChoice = .system
+    /// Whether a provider's weekly limit gets a ring of its own, and where.
+    /// Mirrored here for the same reason `accentColor` is: the notch is a
+    /// separate window, and it has to redraw the moment Settings changes this.
+    @Published var weeklyRing: WeeklyRing = .off
+    /// Mirrors the persisted Appearance choice so the separate notch window
+    /// redraws immediately when Settings changes it.
+    @Published var surfaceStyle: NotchSurfaceStyle = .glass
     /// The display's own notch, when this edge has to share the bezel with one.
     ///
     /// Set by the window controller from the screen the panel is on, because
@@ -141,13 +268,22 @@ final class NotchViewModel: ObservableObject {
     /// list before the panel holding it would run off the display. Zero until
     /// the controller says otherwise, which reads as "no screen known yet".
     @Published var screenSize: CGSize = .zero
-
-    /// The same screen minus the menu bar and the Dock.
-    ///
-    /// A horizontal notch starts at the *usable* edge and grows inward from
-    /// there, so those two are room it never had. A side notch is centred on
-    /// the whole screen and floats over both, so for that one they are not.
     @Published var screenUsableSize: CGSize = .zero
+
+    /// Visible slice of the panel along its edge, in local stack coordinates.
+    @Published var visibleAlongRange: ClosedRange<CGFloat>?
+
+    private var cancellables = Set<AnyCancellable>()
+
+    init() {
+        // Language change leaves snapshots untouched; tick `now` so copy
+        // already on screen is redrawn against the new catalog.
+        NotificationCenter.default.publisher(for: L10n.didChange)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated { self?.now = Date() }
+            }
+            .store(in: &cancellables)
+    }
 
     /// Take the notch geometry of whichever screen the panel is on.
     func adopt(screen: ScreenDescribing, joinsHardware: Bool = true) {
@@ -254,6 +390,28 @@ final class NotchViewModel: ObservableObject {
         return cornerCentreAlong + NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
     }
 
+    /// Reserve the full hit area even while only the resting arc is visible,
+    /// so revealing the settings button cannot put it beyond the screen.
+    var trailingExtent: CGFloat {
+        max(0, orbAlong - shapeLength + NotchLayout.orbHotZone / 2).rounded(.up)
+    }
+
+    /// Where the move handle sits: the settings orb's position mirrored to the
+    /// near end of the stack. Measured back from zero the same distance the
+    /// orb sits past `shapeLength`, so the pair stay symmetric about the notch
+    /// at every size and on every edge.
+    var moveAlong: CGFloat {
+        guard orbHugsCorner else { return 0 }
+        return cornerCentreAlong - shapeLength
+            + NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
+    }
+
+    /// The mirror of `trailingExtent` at the near end — the room the move
+    /// handle needs before the notch's own start.
+    var leadingExtent: CGFloat {
+        max(0, -moveAlong + NotchLayout.orbHotZone / 2).rounded(.up)
+    }
+
     /// Where the bar's far corner actually turns, along the stack.
     ///
     /// Inset from the bar's end by the *flare* as well as by the corner's own
@@ -285,6 +443,16 @@ final class NotchViewModel: ObservableObject {
         let back = -NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
         return CGSize(width: back * (edge.alongDirection.x + inward.x),
                       height: back * (edge.alongDirection.y + inward.y))
+    }
+
+    /// `orbArcOffset` mirrored: the move handle hangs off the near corner, so
+    /// its arc tucks back *forward* along the stack rather than backward.
+    var moveArcOffset: CGSize {
+        guard orbHugsCorner else { return .zero }
+        let inward = CGPoint(x: -edge.outward.x, y: -edge.outward.y)
+        let forward = NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
+        return CGSize(width: forward * (edge.alongDirection.x - inward.x),
+                      height: forward * (edge.alongDirection.y - inward.y))
     }
 
     /// The points the settings handle answers around: the button you are
@@ -320,28 +488,94 @@ final class NotchViewModel: ObservableObject {
         }
     }
 
+    /// The move handle's own points, mirroring `orbHandlePoints` at the near
+    /// end of the stack.
+    var moveHandlePoints: [CGPoint] {
+        let button = CGPoint(x: moveAlong, y: orbInset)
+        guard orbHugsCorner else { return [button] }
+
+        let arcCentre = CGPoint(x: moveAlong + moveArcOffset.width,
+                                y: orbInset + moveArcOffset.height)
+        let reach = hypot(button.x - arcCentre.x, button.y - arcCentre.y)
+        guard reach > 0 else { return [button] }
+        let arcMid = CGPoint(
+            x: arcCentre.x + orbArcRadius * (button.x - arcCentre.x) / reach,
+            y: arcCentre.y + orbArcRadius * (button.y - arcCentre.y) / reach
+        )
+        return [button, arcMid]
+    }
+
+    func isOnMoveHandle(along: CGFloat, across: CGFloat) -> Bool {
+        let radius = NotchLayout.orbHotZone / 2
+        return moveHandlePoints.contains {
+            hypot(along - $0.x, across - $0.y) <= radius
+        }
+    }
+
 
     /// Where the tooltip's tail tip sits, measured in from the bezel: just off
     /// the inner face of a shape that the extension has made deeper.
     var tooltipInset: CGFloat {
-        contentInset + NotchLayout.bodyDepth(for: edge) + NotchLayout.tailGap
+        notchDrawnDepth + NotchLayout.tailGap
+    }
+
+    /// How deep the notch body reaches on screen — the design-frame depth at
+    /// the size it is actually drawn.
+    ///
+    /// Where the notch ends is where the tooltip begins, and the tooltip is not
+    /// drawn at that size, so this is the seam between the two spaces rather
+    /// than a measurement either of them owns.
+    var notchDrawnDepth: CGFloat {
+        (contentInset + NotchLayout.bodyDepth(for: edge)) * sizeScale
     }
 
     /// The straight part of the shape, flares excluded.
     var bodyLength: CGFloat {
         NotchLayout.bodyLength(
-            cellCount: visibleCount(snapshots.count), edge: edge
+            cellCount: visibleCount(snapshots.count), edge: edge, spacing: cellSpacing
         ) + 2 * endSpread
     }
 
     /// Distance along the stack to cell `index`'s ring centre, widening
     /// included so the readings stay in the middle of the bar.
     func ringCenter(index: Int) -> CGFloat {
-        NotchLayout.ringCenter(index: index - visibleStart, edge: edge, flare: flare) + endSpread
+        NotchLayout.ringCenter(index: index - visibleStart, edge: edge, flare: flare,
+                              spacing: cellSpacing) + endSpread
+    }
+
+    var cellSpacing: CGFloat { cellSpacing(cellCount: snapshots.count) }
+    var cellPitch: CGFloat { NotchLayout.cellAlong(for: edge) + cellSpacing }
+
+    private func cellSpacing(cellCount: Int) -> CGFloat {
+        guard edge.isVertical, screenSize.height > 0, cellCount > 1 else {
+            return NotchLayout.cellSpacing
+        }
+        // Extra model cells spend the gaps first. Reserve the cards actually
+        // present; assuming four quota windows for every local model overflows laptops.
+        let slack = NotchLayout.slack(for: edge,
+            maxCardHeight: snapshots.isEmpty ? NotchLayout.maxCardHeight(sessionCap: 0)
+                : contentCardHeight(sessionCap: 0),
+            notchScale: sizeScale)
+        let packed = NotchLayout.shapeLength(cellCount: cellCount, edge: edge,
+                                             flare: flare, spacing: 0)
+        return min(NotchLayout.cellSpacing,
+                   max(0, ((screenSize.height - 2 * slack) / sizeScale - packed) / CGFloat(cellCount - 1)))
     }
 
     /// A provider with no activity source gets none, rather than borrowing
     /// somebody else's.
+    func activity(for snapshot: ProviderSnapshot) -> ActivitySummary? {
+        guard let model = snapshot.localModel else { return activity(for: snapshot.providerID) }
+        if let local = localActivities[snapshot.id] {
+            return ActivitySummary(sessions: [AgentSession(id: snapshot.id, name: local.label,
+                detail: snapshot.displayName, state: .busy, waitingFor: nil, since: local.since)],
+                queued: local.queued, note: local.note)
+        }
+        guard let since = thinkingModels[OllamaThinkingStream.modelKey(model.name)] else { return nil }
+        return ActivitySummary(sessions: [AgentSession(id: snapshot.id, name: L10n.t("Thinking"),
+            detail: snapshot.displayName, state: .busy, waitingFor: nil, since: since)])
+    }
+
     func activity(for providerID: String) -> ActivitySummary? {
         if let live = sessions[providerID], !live.isEmpty {
             let summary = ActivitySummary(sessions: live)
@@ -377,8 +611,8 @@ final class NotchViewModel: ObservableObject {
     var slack: CGFloat { positionedLeading ?? slack(cellCount: snapshots.count) }
 
     func tooltipAlong(index: Int, length: CGFloat) -> CGFloat {
-        let wanted = slack + ringCenter(index: index)
-        guard let bounds = tooltipAlongBounds else { return wanted }
+        let wanted = slack + ringCenter(index: index) * sizeScale
+        guard let bounds = tooltipAlongBounds ?? visibleAlongRange else { return wanted }
         let lower = bounds.lowerBound + length / 2
         let upper = bounds.upperBound - length / 2
         return min(max(lower, upper), max(lower, wanted))
@@ -390,28 +624,69 @@ final class NotchViewModel: ObservableObject {
 
     func tooltipTailOffset(index: Int, snapshot: ProviderSnapshot) -> CGFloat {
         let length = tooltipAlongLength(for: snapshot)
-        let offset = slack + ringCenter(index: index) - tooltipAlong(index: index, length: length)
+        let offset = slack + ringCenter(index: index) * sizeScale - tooltipAlong(index: index, length: length)
         let limit = max(0, length / 2 - NotchLayout.cardCorner - NotchLayout.tailHeight / 2)
         return min(limit, max(-limit, offset))
     }
 
     func slack(cellCount: Int) -> CGFloat {
-        NotchLayout.slack(for: edge, maxCardHeight: maxCardHeight(cellCount: cellCount))
+        NotchLayout.slack(for: edge,
+                          maxCardHeight: maxCardHeight(cellCount: cellCount),
+                          notchScale: sizeScale)
     }
 
     /// How many sessions a tooltip may list here before it has to summarise
     /// the rest — as many as this screen has room for.
     var sessionCap: Int { sessionCap(cellCount: snapshots.count) }
 
+    private var hasTokenUsage: Bool {
+        snapshots.contains { $0.tokenUsage != nil }
+    }
+
+    private var hasPlan: Bool {
+        snapshots.contains { $0.plan != nil }
+    }
+
+    private var hasResetCredits: Bool {
+        snapshots.contains { $0.resetCredits != nil }
+    }
+
     func sessionCap(cellCount: Int) -> Int {
         guard screenSize != .zero else { return NotchLayout.defaultSessionCap }
         return NotchLayout.sessionsFitting(cardBudget: cardBudget(cellCount: cellCount),
-                                           windowCount: NotchLayout.maxWindowCount)
+                                           windowCount: NotchLayout.maxWindowCount,
+                                           hasTokenUsage: hasTokenUsage,
+                                           hasPlan: hasPlan,
+                                           hasResetCredits: hasResetCredits)
+    }
+
+    private func contentCardHeight(sessionCap: Int) -> CGFloat {
+        snapshots.map { snapshot in
+            NotchLayout.cardHeight(windowCount: snapshot.windows.count,
+                groupCount: Set(snapshot.windows.compactMap(\.group)).count,
+                moneyWindowCount: snapshot.windows.filter { $0.money != nil }.count,
+                usageDetailGroupCount: snapshot.usageDetail?.visibleGroups.count ?? 0,
+                sessionCount: snapshot.localModel == nil ? sessionCap + 1 : 0,
+                sessionCap: sessionCap,
+                statusMessage: snapshot.statusMessage,
+                blockMessage: snapshot.block?.summary(now: now),
+                hasTokenUsage: snapshot.tokenUsage != nil,
+                hasPlan: snapshot.plan != nil,
+                hasResetCredits: snapshot.resetCredits != nil,
+                localModelName: snapshot.localModel?.name,
+                showsLocalPerformance: snapshot.showsLocalPerformance,
+                localLedgerRows: snapshot.localLedgerRowCount,
+                compactRowCount: snapshot.compactRowCount)
+        }.max() ?? 0
     }
 
     func maxCardHeight(cellCount: Int) -> CGFloat {
-        tooltipHeightMode == .full ? fullTooltipHeightLimit
-            : NotchLayout.maxCardHeight(sessionCap: sessionCap(cellCount: cellCount))
+        if tooltipHeightMode == .full { return fullTooltipHeightLimit }
+        let cap = sessionCap(cellCount: cellCount)
+        return snapshots.isEmpty
+            ? NotchLayout.maxCardHeight(sessionCap: cap, hasTokenUsage: hasTokenUsage, hasPlan: hasPlan,
+                                        hasResetCredits: hasResetCredits)
+            : contentCardHeight(sessionCap: cap)
     }
 
     /// How tall the tallest card may be before the panel runs off the screen.
@@ -421,13 +696,18 @@ final class NotchViewModel: ObservableObject {
     /// stack, half of it past each end, so the stack itself takes its share
     /// first. Along a horizontal edge the card hangs *inward* instead, and what
     /// it competes with is the depth already spent on the notch body and tail.
+    /// The screen is measured in real points, and everything it is compared
+    /// against here is unscaled. Dividing brings the screen into the same space
+    /// rather than scaling the four constants below it: at `large` a card sized
+    /// against the raw height would be drawn a quarter taller than it was
+    /// budgeted for, and run off the bottom of a small display.
     private func cardBudget(cellCount: Int) -> CGFloat {
         if edge.isVertical {
-            return (screenUsableSize.height > 0 ? screenUsableSize.height : screenSize.height)
+            return (screenUsableSize.height > 0 ? screenUsableSize.height : screenSize.height) / sizeScale
                 - shapeLength(cellCount: cellCount)
                 - 2 * NotchLayout.cardCorner
         }
-        return screenUsableSize.height
+        return screenSize.height / sizeScale
             - contentInset
             - NotchLayout.bodyDepth(for: edge)
             - NotchLayout.tailLength
@@ -458,6 +738,21 @@ final class NotchViewModel: ObservableObject {
     var restingLength: CGFloat { hardwareNotch?.width ?? NotchLayout.pillHeight }
     var restingDepth: CGFloat { hardwareNotch?.height ?? NotchLayout.pillWidth }
 
+    /// What wakes the folded notch, in panel points: the resting shape and a
+    /// band around it, or the resting shape alone.
+    ///
+    /// The band is for the pill. A 10pt sliver on a screen edge is a fiddly
+    /// target, and the only cost of surrounding it is that it opens a little
+    /// eagerly. Joined to the hardware notch the band is a different matter:
+    /// the notch is already a generous target, and a band around it reached
+    /// 34pt *below* the menu bar — across the title bar of a window tiled
+    /// against the centre of the screen, whose close, minimise and zoom
+    /// buttons then opened the notch on approach and disappeared under it.
+    /// Flush with the hardware, what wakes the notch is the notch.
+    var wakeLength: CGFloat { max(restingLength * sizeScale, wakeBand) }
+    var wakeDepth: CGFloat { restingDepth * sizeScale + wakeBand }
+    private var wakeBand: CGFloat { isFlushWithHardware ? 0 : NotchLayout.pillHotZone }
+
     /// The drawn size of the notch body, in panel axes.
     var notchSize: CGSize {
         NotchPlacement.panelSize(edge: edge, length: notchLength, depth: notchDepth)
@@ -477,31 +772,44 @@ final class NotchViewModel: ObservableObject {
     /// the panel is sized for the list that caused the change.
     func shapeLength(cellCount: Int) -> CGFloat {
         NotchLayout.shapeLength(cellCount: visibleCount(cellCount),
-                                edge: edge, flare: flare)
+                                edge: edge, flare: flare,
+                                spacing: cellSpacing(cellCount: cellCount))
             + 2 * endSpread(cellCount: cellCount)
     }
 
+    /// The panel as it lands on screen, size choice included.
+    ///
+    /// Two spaces, added rather than multiplied together: the notch is drawn at
+    /// `sizeScale`, and the tooltip is drawn at one size whatever the notch is
+    /// set to — its text has a legible size of its own, and shrinking the
+    /// reading you opened the notch to read is the opposite of the point.
+    ///
+    /// So the notch's share scales and the card's share does not. Scaling the
+    /// whole panel instead left the card cropped at the small end, where the
+    /// panel had shrunk around a card that had not.
     func panelSize(cellCount: Int) -> CGSize {
         if tooltipHeightMode == .full, edge.isVertical, screenUsableSize.height > 0 {
-            return CGSize(width: contentInset + NotchLayout.bodyDepth(for: edge)
+            return CGSize(width: (contentInset + NotchLayout.bodyDepth(for: edge)) * sizeScale
                           + NotchLayout.tooltipDepth(for: edge), height: screenUsableSize.height)
         }
         let card = maxCardHeight(cellCount: cellCount)
         return NotchPlacement.panelSize(
             edge: edge,
-            length: shapeLength(cellCount: cellCount)
-                + 2 * NotchLayout.slack(for: edge, maxCardHeight: card),
-            depth: contentInset
+            length: shapeLength(cellCount: cellCount) * sizeScale
+                + 2 * NotchLayout.slack(for: edge, maxCardHeight: card, notchScale: sizeScale),
+            depth: (contentInset + NotchLayout.bodyDepth(for: edge)) * sizeScale
                 + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card)
-                + NotchLayout.bodyDepth(for: edge)
         )
     }
 
     func standardPanelSize(cellCount: Int) -> CGSize {
-        let card = NotchLayout.maxCardHeight(sessionCap: sessionCap(cellCount: cellCount))
+        let cap = sessionCap(cellCount: cellCount)
+        let card = snapshots.isEmpty ? NotchLayout.maxCardHeight(sessionCap: cap)
+            : contentCardHeight(sessionCap: cap)
         return NotchPlacement.panelSize(edge: edge,
-            length: shapeLength(cellCount: cellCount) + 2 * NotchLayout.slack(for: edge, maxCardHeight: card),
-            depth: contentInset + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card)
-                + NotchLayout.bodyDepth(for: edge))
+            length: shapeLength(cellCount: cellCount) * sizeScale
+                + 2 * NotchLayout.slack(for: edge, maxCardHeight: card, notchScale: sizeScale),
+            depth: (contentInset + NotchLayout.bodyDepth(for: edge)) * sizeScale
+                + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card))
     }
 }

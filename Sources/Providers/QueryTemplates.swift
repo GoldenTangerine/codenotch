@@ -16,9 +16,9 @@ enum QueryTemplate: String, Codable, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .native: return String(localized: "Built-in query")
-        case .custom: return String(localized: "Custom JavaScript")
-        case .general: return String(localized: "General balance")
+        case .native: return L10n.t("Built-in query")
+        case .custom: return L10n.t("Custom JavaScript")
+        case .general: return L10n.t("General balance")
         case .newapi: return "NewAPI"
         case .sub2api: return "Sub2API"
         case .deepseek: return "DeepSeek"
@@ -26,9 +26,9 @@ enum QueryTemplate: String, Codable, CaseIterable, Identifiable {
         case .siliconflow: return "SiliconFlow"
         case .openrouter: return "OpenRouter"
         case .novita: return "Novita AI"
-        case .glm: return String(localized: "GLM Token Plan")
-        case .kimi: return String(localized: "Kimi Token Plan")
-        case .minimax: return String(localized: "MiniMax Token Plan")
+        case .glm: return L10n.t("GLM Token Plan")
+        case .kimi: return L10n.t("Kimi Token Plan")
+        case .minimax: return L10n.t("MiniMax Token Plan")
         }
     }
 

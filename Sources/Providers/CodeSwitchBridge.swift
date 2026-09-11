@@ -123,11 +123,11 @@ struct CodeSwitchQuota: Codable, Equatable {
 
     var title: String {
         switch key {
-        case "five_hour": return String(localized: "5 hours")
-        case "daily": return String(localized: "Daily")
-        case "weekly": return String(localized: "Weekly")
-        case "monthly": return String(localized: "Monthly")
-        case "total": return String(localized: "Total")
+        case "five_hour": return L10n.t("5 hours")
+        case "daily": return L10n.t("Daily")
+        case "weekly": return L10n.t("Weekly")
+        case "monthly": return L10n.t("Monthly")
+        case "total": return L10n.t("Total")
         default: return label?.isEmpty == false ? label! : key
         }
     }
@@ -189,12 +189,12 @@ struct CodeSwitchDetails: Equatable {
     let provider: CodeSwitchProvider
 
     var activityText: String {
-        if provider.status == "session" { return String(localized: "Session provider") }
-        if provider.quotaAutoDisabled == true { return String(localized: "Automatically disabled by quota") }
-        if provider.status == "enabled" { return String(localized: "Enabled provider") }
+        if provider.status == "session" { return L10n.t("Session provider") }
+        if provider.quotaAutoDisabled == true { return L10n.t("Automatically disabled by quota") }
+        if provider.status == "enabled" { return L10n.t("Enabled provider") }
         return provider.status == "active"
-            ? String(localized: "Calling · \(provider.activeRequests)")
-            : String(localized: "Default provider")
+            ? L10n.t("Calling · \(provider.activeRequests)")
+            : L10n.t("Default provider")
     }
 }
 

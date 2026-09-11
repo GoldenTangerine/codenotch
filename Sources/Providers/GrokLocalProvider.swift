@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 GrokLocalProvider.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/GrokLocalProvider.swift
+ */
 import Foundation
 import os
 
@@ -21,7 +30,7 @@ actor GrokLocalProvider: UsageProvider {
     }
 
     nonisolated var signInRoute: SignInRoute {
-        .guidance(String(localized: "Run grok login — it signs in and refreshes the token this reads."))
+        .guidance(L10n.t("Run grok login — it signs in and refreshes the token this reads."))
     }
 
     nonisolated func account() -> ProviderAccount? { GrokCredentials.account() }

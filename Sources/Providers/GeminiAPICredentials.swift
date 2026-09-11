@@ -52,10 +52,10 @@ enum GeminiAPICredentials {
         guard !tools.isEmpty else { return nil }
         let isGoogleAccount = authType == "oauth-personal"
         return ProviderAccount(
-            label: isGoogleAccount ? String(localized: "Google account") : String(localized: "API key"),
+            label: isGoogleAccount ? L10n.t("Google account") : L10n.t("API key"),
             // "metered" rather than a plan name: a bare key is not on a plan,
             // it is charged per token at a price that changes under the app.
-            plan: isGoogleAccount ? nil : String(localized: "metered"),
+            plan: isGoogleAccount ? nil : L10n.t("metered"),
             // The tools that wrote the numbers, which is the honest answer to
             // "whose reading is this" when no credential was borrowed at all.
             source: tools.joined(separator: ", "),

@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 CursorUsageTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/CursorUsageTests.swift
+ */
 import SQLite3
 import XCTest
 @testable import Codenotch
@@ -29,7 +38,26 @@ final class CursorUsageTests: XCTestCase {
         XCTAssertEqual(w[0].id, "auto")
         XCTAssertEqual(w[0].label, CursorUsage.modelsLabel)
         XCTAssertEqual(w[0].usedFraction ?? -1, 0, accuracy: 0.0001)
+        XCTAssertEqual(w[0].duration, 31 * 86400)
         XCTAssertEqual(CursorUsage.headlineID(in: w), "auto")
+    }
+
+    func testMonthlyPaceUsesActualBillingDates() throws {
+        for days in [28, 29, 30, 31] {
+            let start = Date(timeIntervalSince1970: 1_800_000_000)
+            let end = start.addingTimeInterval(Double(days) * 86400)
+            let iso = ISO8601DateFormatter()
+            let result = try windows("""
+            {"billingCycleStart":"\(iso.string(from: start))",
+             "billingCycleEnd":"\(iso.string(from: end))",
+             "individualUsage":{"plan":{"autoPercentUsed":80}}}
+            """)
+            let window = try XCTUnwrap(result.first)
+            let halfway = start.addingTimeInterval(Double(days) * 43200)
+            XCTAssertEqual(window.duration, Double(days) * 86400)
+            XCTAssertEqual(try XCTUnwrap(window.usagePace(now: halfway)).percentagePoints, 30,
+                           accuracy: 0.00001)
+        }
     }
 
     func testApiUsageIsReportedSeparately() throws {

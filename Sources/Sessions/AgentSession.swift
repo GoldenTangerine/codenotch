@@ -21,6 +21,7 @@ struct AgentSession: Identifiable, Equatable {
     enum State: Equatable {
         case busy
         case waiting
+        case success
         case idle
     }
 

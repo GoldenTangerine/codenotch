@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 GLMUsageTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/GLMUsageTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -26,6 +35,7 @@ final class GLMQuotaResponseTests: XCTestCase {
 
     func testDecodesTheLiveShape() throws {
         let payload = try parse(live)
+        XCTAssertEqual(payload.windows.map(\.duration), [18000, 604800, nil])
         XCTAssertEqual(payload.level, "pro")
         XCTAssertEqual(payload.windows.map(\.id), ["session", "weekly", "mcp"])
         XCTAssertEqual(payload.windows[0].label, "Current session")

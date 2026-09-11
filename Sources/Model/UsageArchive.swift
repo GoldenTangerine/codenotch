@@ -27,6 +27,13 @@ struct UsageArchive {
         let headlineID: String?
         var icon: ProviderIcon?
         var manualQuery: Bool?
+        /// Optional for the same reason: an archive written before the weekly
+        /// ring existed has no second window to name, and must still open.
+        let weeklyID: String?
+        /// Optional so archives written before Codex token activity existed
+        /// continue to open and show their last quota reading.
+        let tokenUsage: CodexTokenUsage?
+        let usageDetail: ProviderUsageDetail?
     }
 
     private let defaults: UserDefaults
@@ -87,12 +94,15 @@ struct UsageArchive {
             let snapshot = ProviderSnapshot(
                 id: entry.id,
                 displayName: entry.displayName,
-                glyph: entry.glyph,
+                glyph: entry.id == "devin" && entry.glyph == .third ? .devin : entry.glyph,
                 fidelity: entry.fidelity,
                 status: .stale(since: entry.fetchedAt),
                 windows: entry.windows,
                 headlineID: entry.headlineID,
-                icon: entry.icon, manualQuery: entry.manualQuery ?? false
+                weeklyID: entry.weeklyID,
+                icon: entry.icon, manualQuery: entry.manualQuery ?? false,
+                tokenUsage: entry.tokenUsage,
+                usageDetail: entry.usageDetail
             )
             result[entry.id] = (snapshot, entry.fetchedAt)
         }
@@ -109,7 +119,10 @@ struct UsageArchive {
                 windows: $0.snapshot.windows,
                 fetchedAt: $0.fetchedAt,
                 headlineID: $0.snapshot.headlineID,
-                icon: $0.snapshot.icon, manualQuery: $0.snapshot.manualQuery
+                icon: $0.snapshot.icon, manualQuery: $0.snapshot.manualQuery,
+                weeklyID: $0.snapshot.weeklyID,
+                tokenUsage: $0.snapshot.tokenUsage,
+                usageDetail: $0.snapshot.usageDetail
             )
         }
         guard let data = try? JSONEncoder().encode(entries) else { return }

@@ -17,17 +17,17 @@ enum ResetTimeFormat: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .automatic: return String(localized: "Reset date")
-        case .remaining: return String(localized: "Time remaining")
+        case .automatic: return L10n.t("Reset date")
+        case .remaining: return L10n.t("Time remaining")
         }
     }
 
     var explanation: String {
         switch self {
         case .automatic:
-            return String(localized: "Minutes under an hour; otherwise the reset date and time.")
+            return L10n.t("Minutes under an hour; otherwise the reset date and time.")
         case .remaining:
-            return String(localized: "Time until usage resets, such as 3 Days 3h or 3h 20m.")
+            return L10n.t("Time until usage resets, such as 3 Days 3h or 3h 20m.")
         }
     }
 }
@@ -36,9 +36,9 @@ enum ResetTimeFormat: String, CaseIterable, Identifiable {
 /// "Resets Sep 28" beyond it.
 enum ResetCopy {
     static func text(for resetsAt: Date, now: Date = Date(), calendar: Calendar = .current,
-                     format: ResetTimeFormat = .automatic) -> String {
+                     format: ResetTimeFormat = .automatic, locale: Locale = L10n.locale) -> String {
         let seconds = resetsAt.timeIntervalSince(now)
-        guard seconds > 0 else { return String(localized: "Resetting…") }
+        guard seconds > 0 else { return L10n.t("Resetting…", locale: locale) }
 
         if format == .remaining {
             let minutes = max(1, Int((seconds / 60).rounded()))
@@ -46,13 +46,13 @@ enum ResetCopy {
             let days = hours / 24
             if days > 0 {
                 return days == 1
-                    ? String(localized: "Resets in \(days) Day \(hours % 24)h")
-                    : String(localized: "Resets in \(days) Days \(hours % 24)h")
+                    ? L10n.t("Resets in \(days) Day \(hours % 24)h", locale: locale)
+                    : L10n.t("Resets in \(days) Days \(hours % 24)h", locale: locale)
             }
             if hours > 0 {
-                return String(localized: "Resets in \(hours)h \(minutes % 60)m")
+                return L10n.t("Resets in \(hours)h \(minutes % 60)m", locale: locale)
             }
-            return String(localized: "Resets in \(minutes) min")
+            return L10n.t("Resets in \(minutes) min", locale: locale)
         }
 
         // Rounding, not truncation, so 50m40s reads as 51 rather than 50. A
@@ -60,10 +60,11 @@ enum ResetCopy {
         // "Resets in 60 min" never appears.
         let minutes = Int((seconds / 60).rounded())
         if minutes < 60 {
-            return String(localized: "Resets in \(max(1, minutes)) min")
+            return L10n.t("Resets in \(max(1, minutes)) min", locale: locale)
         }
 
         let formatter = formatter(for: calendar)
+        formatter.locale = locale
 
         // A weekday only identifies a day inside the coming week. Codex's
         // monthly window resets 26 days out, and "Resets Mon 3:55 PM" read as
@@ -73,28 +74,18 @@ enum ResetCopy {
             // Day and month only, matching how the vendors write it. A time
             // that far out is noise: nobody plans around 3:55 PM in four weeks.
             formatter.setLocalizedDateFormatFromTemplate("MMM d")
-            return String(localized: "Resets \(formatter.string(from: resetsAt))")
+            return L10n.t("Resets \(formatter.string(from: resetsAt))", locale: locale)
         }
 
-        // A weekday-and-clock, formatted to the locale — see applyClockFormat.
-        applyClockFormat(to: formatter, weekday: true)
-        return String(localized: "Resets \(formatter.string(from: resetsAt))")
-    }
-
-    /// Weekday-and-clock formatting for reset times.
-    ///
-    /// The literal patterns pin the colon and the English word order — the
-    /// template form yields "4.50 PM" in some regions, and both the design
-    /// frame and Claude's own usage panel write "4:50 PM". Under a Chinese
-    /// locale that same literal order reads backwards ("周日 4:50 下午"), so
-    /// Chinese takes the locale's own ordering ("周日下午4:50") instead.
-    static func applyClockFormat(to formatter: DateFormatter, weekday: Bool) {
-        let isChinese = formatter.locale.language.languageCode?.identifier.hasPrefix("zh") ?? false
-        if isChinese {
-            formatter.setLocalizedDateFormatFromTemplate(weekday ? "Ehmm" : "hmm")
-        } else {
-            formatter.dateFormat = weekday ? "E h:mm a" : "h:mm a"
-        }
+        // `j`, not `h`: a literal hour symbol in a template pins the clock to
+        // twelve hours whatever the region, so everywhere that writes 00:00
+        // rather than 12:00 AM — most of Europe, Asia and Latin America — read
+        // "Resets mer. 12:00 AM" here while every other clock on the Mac said
+        // 00:00. `j` asks the locale, which also carries the "24-Hour Time"
+        // switch in System Settings. Regions that write AM/PM keep it, so
+        // English is still "Thu 12:00 AM".
+        formatter.setLocalizedDateFormatFromTemplate("E j:mm")
+        return L10n.t("Resets \(formatter.string(from: resetsAt))", locale: locale)
     }
 
     /// A formatter that renders in the given calendar's own zone.
@@ -108,7 +99,7 @@ enum ResetCopy {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.timeZone = calendar.timeZone
-        formatter.locale = calendar.locale ?? .current
+        formatter.locale = calendar.locale ?? L10n.locale
         return formatter
     }
 

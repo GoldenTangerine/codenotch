@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 NotchVisibility.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Settings/NotchVisibility.swift
+ */
 import Foundation
 
 /// How much of itself the notch shows when you are not using it.
@@ -18,26 +27,23 @@ enum NotchVisibility: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .alwaysShow: return String(localized: "Always show")
-        case .onHover:    return String(localized: "Show on hover")
-        case .hidden:     return String(localized: "Hide")
+        case .alwaysShow: return L10n.t("Always show")
+        case .onHover:    return L10n.t("Show on hover")
+        case .hidden:     return L10n.t("Hide")
         }
     }
 
     var explanation: String {
         switch self {
         case .alwaysShow:
-            return String(localized: "The notch stays open with every reading visible.")
+            return L10n.t("The notch stays open with every reading visible.")
         case .onHover:
-            return String(localized: "A small pill at the screen edge that opens when you reach it.")
+            return L10n.t("A small pill at the screen edge that opens when you reach it.")
         case .hidden:
-            // Said here because a hidden notch is also a hidden way back in.
-            // One long literal: wrapping with + would take the non-localising
-            // overload and never reach the catalog.
             // Names the menu bar route: with the notch off screen the readings
             // live in the menu bar menu instead, so Hide plus App icon "Menu
             // bar" is a working setup rather than a one-way door.
-            return String(localized: "Nothing on screen. The readings stay in the menu bar menu when App icon is Menu bar. Otherwise, open Codenotch again from Applications to bring these settings back.")
+            return L10n.t("Nothing on screen. The readings stay in the menu bar menu when App icon is Menu bar. Otherwise, open Codenotch again from Applications to bring these settings back.")
         }
     }
 }

@@ -14,11 +14,11 @@ enum CodeSwitchDisplayMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .tray: return String(localized: "Follow tray popup")
-        case .enabled: return String(localized: "All eligible providers")
-        case .available: return String(localized: "Not exhausted")
-        case .exhausted: return String(localized: "Exhausted only")
-        case .active: return String(localized: "Active requests only")
+        case .tray: return L10n.t("Follow tray popup")
+        case .enabled: return L10n.t("All eligible providers")
+        case .available: return L10n.t("Not exhausted")
+        case .exhausted: return L10n.t("Exhausted only")
+        case .active: return L10n.t("Active requests only")
         }
     }
 
@@ -61,15 +61,15 @@ enum CodeSwitchConnection: Equatable {
     case disabled, waiting, connected, loading, legacy, limited, failed, subscriptionFailed, partial
     var title: String {
         switch self {
-        case .disabled: return String(localized: "Integration is off")
-        case .waiting: return String(localized: "Waiting for Code Switch R")
-        case .connected: return String(localized: "Connected to Code Switch R")
-        case .loading: return String(localized: "Waiting for enabled providers…")
-        case .legacy: return String(localized: "Update Code Switch R to show all enabled providers. Following tray for now.")
-        case .failed: return String(localized: "Could not read providers. Retrying automatically…")
-        case .subscriptionFailed: return String(localized: "Could not request enabled providers. Check cache folder access.")
-        case .partial: return String(localized: "Some platforms could not be read. Retrying automatically…")
-        case .limited: return String(localized: "Update Code Switch R to include quota-disabled providers and platforms without proxy hosting.")
+        case .disabled: return L10n.t("Integration is off")
+        case .waiting: return L10n.t("Waiting for Code Switch R")
+        case .connected: return L10n.t("Connected to Code Switch R")
+        case .loading: return L10n.t("Waiting for enabled providers…")
+        case .legacy: return L10n.t("Update Code Switch R to show all enabled providers. Following tray for now.")
+        case .failed: return L10n.t("Could not read providers. Retrying automatically…")
+        case .subscriptionFailed: return L10n.t("Could not request enabled providers. Check cache folder access.")
+        case .partial: return L10n.t("Some platforms could not be read. Retrying automatically…")
+        case .limited: return L10n.t("Update Code Switch R to include quota-disabled providers and platforms without proxy hosting.")
         }
     }
 }

@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 GrokUsageTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/GrokUsageTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -24,6 +33,7 @@ final class GrokUsageTests: XCTestCase {
 
     func testTheRingIsTheCreditsPercentage() throws {
         let credits = try XCTUnwrap(windows().first { $0.id == "credits" })
+        XCTAssertEqual(credits.duration, 7 * 86400)
         XCTAssertEqual(credits.label, "Grok Build")
         XCTAssertEqual(credits.usedFraction ?? -1, 0.08, accuracy: 0.0001)
     }
@@ -58,6 +68,7 @@ final class GrokUsageTests: XCTestCase {
         """
         let w = try GrokUsage.windows(creditsJSON: productOnly)
         let credits = try XCTUnwrap(w.first { $0.id == "credits" })
+        XCTAssertNil(credits.duration)
         XCTAssertEqual(credits.label, "Grok Build")
         XCTAssertEqual(credits.usedFraction ?? -1, 0.33, accuracy: 0.0001)
         let snap = ProviderSnapshot(
@@ -66,6 +77,29 @@ final class GrokUsageTests: XCTestCase {
         )
         XCTAssertEqual(snap.headline?.id, "credits")
         XCTAssertEqual(snap.usedFraction ?? -1, 0.33, accuracy: 0.0001)
+    }
+
+    /// An X Premium+ / SuperGrok weekly pool states its window in
+    /// `currentPeriod` but carries no `creditUsagePercent` or `productUsage`
+    /// until usage lands. Grok's own `/usage` draws a "Weekly limit" bar at 0%
+    /// here, so this is a zero reading, not an absent one.
+    func testWeeklyPoolWithoutAPercentIsAZeroRing() throws {
+        let weeklyOnly = """
+        {"config":{"currentPeriod":{"type":"USAGE_PERIOD_TYPE_WEEKLY",\
+        "start":"2026-09-07T20:59:12+00:00",\
+        "end":"2026-09-14T20:59:12+00:00"},\
+        "onDemandCap":{"val":0},"onDemandUsed":{"val":0},\
+        "isUnifiedBillingUser":true,"prepaidBalance":{"val":0}}}
+        """
+        let w = try GrokUsage.windows(creditsJSON: weeklyOnly)
+        let credits = try XCTUnwrap(w.first { $0.id == "credits" })
+        XCTAssertEqual(credits.label, "Weekly limit")
+        XCTAssertEqual(credits.usedFraction ?? -1, 0, accuracy: 0.0001)
+        let reset = try XCTUnwrap(credits.resetsAt)
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(identifier: "UTC")!
+        XCTAssertEqual(utc.component(.month, from: reset), 9)
+        XCTAssertEqual(utc.component(.day, from: reset), 14)
     }
 
     func testGarbageIsABadResponseRatherThanAGuess() {

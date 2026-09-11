@@ -1,3 +1,10 @@
+# @name: 项目构建与文档
+# @Descripttion: 维护 Cargo.toml 的项目实现与上游兼容。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-11 15:51:14
+# @LastEditTime: 2026-09-11 15:51:14
+# @FilePath: windows/codenotch/Cargo.toml
 [package]
 name = "codenotch"
 version = "0.3.0"
@@ -33,6 +40,8 @@ windows = { version = "0.58", features = [
   "Win32_Graphics_Gdi",
   "Win32_UI_Input_KeyboardAndMouse",
   "Win32_System_Threading",
+  "Win32_System_JobObjects",
+  "Win32_System_Pipes",
   "Win32_Globalization",
   "Win32_System_Console",
 ] }

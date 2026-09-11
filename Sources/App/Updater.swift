@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 Updater.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/App/Updater.swift
+ */
 import Foundation
 import Sparkle
 
@@ -32,13 +41,13 @@ final class Updater: NSObject, ObservableObject, SPUUpdaterDelegate {
         var message: String? {
             switch self {
             case .idle:          return nil
-            case .checking:      return String(localized: "Checking…")
-            case .upToDate:      return String(localized: "Codenotch is up to date.")
-            case .found(let v):  return String(localized: "Version \(v) is available and will install shortly.")
+            case .checking:      return L10n.t("Checking…")
+            case .upToDate:      return L10n.t("Codenotch is up to date.")
+            case .found(let v):  return L10n.t("Version \(v) is available and will install shortly.")
             case .unreachable:
                 // The one people actually hit, and the one Sparkle's wording
                 // hides: nothing is wrong with the app or the machine.
-                return String(localized: "Couldn't reach the update server. Codenotch will try again on its own — nothing is wrong with this copy.")
+                return L10n.t("Couldn't reach the update server. Codenotch will try again on its own — nothing is wrong with this copy.")
             case .failed(let why): return why
             }
         }

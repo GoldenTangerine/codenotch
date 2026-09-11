@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 GLMUsage.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/GLMUsage.swift
+ */
 import Foundation
 
 /// Parses the answer from Z.ai's own usage monitor,
@@ -105,7 +114,14 @@ enum GLMUsage {
             id: Self.id(for: limit),
             label: Self.label(for: limit),
             usedFraction: percentage / 100,
-            resetsAt: limit.nextResetTime.map { Date(timeIntervalSince1970: $0 / 1000) }
+            resetsAt: limit.nextResetTime.map { Date(timeIntervalSince1970: $0 / 1000) },
+            duration: limit.number.flatMap { number in
+                switch limit.unit {
+                case 3: return Double(number) * 3600
+                case 6: return Double(number) * 7 * 86400
+                default: return nil
+                }
+            }
         )
     }
 
@@ -136,16 +152,16 @@ enum GLMUsage {
     /// The frame's wording, for the windows it knows.
     static func label(for limit: Response.Limit) -> String {
         switch id(for: limit) {
-        case "session": return String(localized: "Current session")
-        case "weekly":  return String(localized: "Weekly")
-        case "mcp":     return String(localized: "MCP (1 month)")
+        case "session": return L10n.t("Current session")
+        case "weekly":  return L10n.t("Weekly")
+        case "mcp":     return L10n.t("MCP (1 month)")
         case let id     where id.hasPrefix("window-"):
             switch (limit.unit, limit.number) {
-            case (3?, .some(let number)): return String(localized: "Usage (\(number) h)")
-            case (6?, .some(let number)): return String(localized: "Usage (\(number) wk)")
-            default:                      return String(localized: "Usage")
+            case (3?, .some(let number)): return L10n.t("Usage (\(number) h)")
+            case (6?, .some(let number)): return L10n.t("Usage (\(number) wk)")
+            default:                      return L10n.t("Usage")
             }
-        default:        return String(localized: "Usage")
+        default:        return L10n.t("Usage")
         }
     }
 

@@ -62,7 +62,7 @@ struct HookSessionState: Equatable {
                          detail: event.tool == "claude" ? "Claude Code · CLI" : "Codex · CLI",
                          state: state,
                          waitingFor: waiting.isEmpty ? nil : (waiting.values.contains("question")
-                            ? String(localized: "Needs your answer") : String(localized: "Needs your approval")),
+                            ? L10n.t("Needs your answer") : L10n.t("Needs your approval")),
                          since: Date(timeIntervalSince1970: since), processID: event.pid,
                          processStartedAt: event.processStartedAt.map(Date.init(timeIntervalSince1970:)),
                          hookSessionKey: event.sessionKey,
@@ -394,7 +394,7 @@ final class HookSessionMonitor: ObservableObject {
             self.timer = timer
             RunLoop.main.add(timer, forMode: .common)
         } catch {
-            self.error = String(localized: "Could not start hook listener")
+            self.error = L10n.t("Could not start hook listener")
         }
     }
 

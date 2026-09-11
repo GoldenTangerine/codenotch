@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 ElapsedCopy.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Model/ElapsedCopy.swift
+ */
 import Foundation
 
 /// "how long has it been like this" — the second half of answering "is Claude
@@ -31,21 +40,21 @@ enum ElapsedCopy {
     /// Each bucket is a whole template rather than `"…" + " ago"`: the words
     /// go in a different order in different languages ("5 min ago" reads
     /// "5 分钟前" in Chinese), and only the translator sees both ends at once.
-    static func ago(since: Date, now: Date = Date()) -> String {
+    static func ago(since: Date, now: Date = Date(), locale: Locale = L10n.locale) -> String {
         switch span(since: since, now: now) {
-        case .justNow:                          return String(localized: "just now")
-        case .minutes(let m):                   return String(localized: "\(m) min ago")
-        case .hours(let h):                     return String(localized: "\(h) hr ago")
-        case .hoursMinutes(let h, let m):       return String(localized: "\(h) hr \(m) min ago")
+        case .justNow:                          return L10n.t("just now", locale: locale)
+        case .minutes(let m):                   return L10n.t("\(m) min ago", locale: locale)
+        case .hours(let h):                     return L10n.t("\(h) hr ago", locale: locale)
+        case .hoursMinutes(let h, let m):       return L10n.t("\(h) hr \(m) min ago", locale: locale)
         }
     }
 
-    static func text(since: Date, now: Date = Date()) -> String {
+    static func text(since: Date, now: Date = Date(), locale: Locale = L10n.locale) -> String {
         switch span(since: since, now: now) {
-        case .justNow:                          return String(localized: "just now")
-        case .minutes(let m):                   return String(localized: "\(m) min")
-        case .hours(let h):                     return String(localized: "\(h) hr")
-        case .hoursMinutes(let h, let m):       return String(localized: "\(h) hr \(m) min")
+        case .justNow:                          return L10n.t("just now", locale: locale)
+        case .minutes(let m):                   return L10n.t("\(m) min", locale: locale)
+        case .hours(let h):                     return L10n.t("\(h) hr", locale: locale)
+        case .hoursMinutes(let h, let m):       return L10n.t("\(h) hr \(m) min", locale: locale)
         }
     }
 }

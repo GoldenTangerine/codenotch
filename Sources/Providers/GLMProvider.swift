@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 GLMProvider.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/GLMProvider.swift
+ */
 import Foundation
 import os
 
@@ -34,7 +43,7 @@ actor GLMProvider: UsageProvider {
     }
 
     nonisolated var signInRoute: SignInRoute {
-        .guidance(String(localized: "Usage rides on a Z.ai GLM Coding Plan key held by a coding tool — Claude Code's settings.json, ZCode or OpenCode. Set one up there and the notch reads it."))
+        .guidance(L10n.t("Usage rides on a Z.ai GLM Coding Plan key held by a coding tool — Claude Code's settings.json, ZCode or OpenCode. Set one up there and the notch reads it."))
     }
 
     nonisolated func forgetCachedCredential() {
@@ -84,7 +93,9 @@ actor GLMProvider: UsageProvider {
                 fidelity: .official,
                 status: .ok,
                 windows: payload.windows,
-                headlineID: "session"
+                headlineID: "session",
+                weeklyID: "weekly",
+                plan: payload.level?.nonEmptyPlan
             )
         } catch UsageProviderError.rateLimited(let retryAfter) {
             // Bookkeeping where the answer was, not down in `fetch`: the wait

@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 OpenCodeUsage.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/OpenCodeUsage.swift
+ */
 import Foundation
 
 /// Parses `GET https://opencode.ai/zen/go/v1/usage`.
@@ -20,13 +29,13 @@ enum OpenCodeUsage {
 
     /// Window ids in headline order. The ring means the rolling window — the
     /// current one, the same subject Claude's session and Codex's primary are.
-    /// Labels resolve once at first use; the language is fixed for the life of
-    /// the process, so a lazy constant can never go stale.
-    private static let windows: [(id: String, label: String)] = [
-        ("rolling", String(localized: "5h limit")),
-        ("weekly", String(localized: "Weekly limit")),
-        ("monthly", String(localized: "Monthly limit")),
-    ]
+    private static var windows: [(id: String, label: String)] {
+        [
+            ("rolling", L10n.t("5h limit")),
+            ("weekly", L10n.t("Weekly limit")),
+            ("monthly", L10n.t("Monthly limit")),
+        ]
+    }
 
     static func windows(fromJSON json: String, now: Date = Date()) throws -> [LimitWindow] {
         guard let data = json.data(using: .utf8),
@@ -38,11 +47,13 @@ enum OpenCodeUsage {
             guard let entry = usage[id] as? [String: Any],
                   let percent = (entry["percent"] as? NSNumber)?.doubleValue
             else { return nil }
+            let resetsAt = (entry["resetsAt"] as? String).flatMap(date(from:))
             return LimitWindow(
                 id: id,
                 label: label,
                 usedFraction: percent / 100,
-                resetsAt: (entry["resetsAt"] as? String).flatMap(date(from:))
+                resetsAt: resetsAt,
+                duration: duration(for: id, endingAt: resetsAt)
             )
         }
         guard !out.isEmpty else { throw UsageProviderError.badResponse(status: 0) }
@@ -54,5 +65,15 @@ enum OpenCodeUsage {
         fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         if let date = fractional.date(from: stamp) { return date }
         return ISO8601DateFormatter().date(from: stamp)
+    }
+
+    private static func duration(for id: String, endingAt reset: Date?) -> TimeInterval? {
+        if id == "rolling" { return 5 * 3600 }
+        if id == "weekly" { return 7 * 86400 }
+        guard id == "monthly", let reset else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar.date(byAdding: .month, value: -1, to: reset)
+            .map { reset.timeIntervalSince($0) }
     }
 }

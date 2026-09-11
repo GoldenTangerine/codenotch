@@ -65,7 +65,7 @@ actor GeminiAPIProvider: UsageProvider {
     }
 
     nonisolated var signInRoute: SignInRoute {
-        .guidance(String(localized: "There is nothing to sign in to: the count is added up from what Gemini CLI, OpenCode and Hermes recorded about their own calls. Your API key is never read."))
+        .guidance(L10n.t("There is nothing to sign in to: the count is added up from what Gemini CLI, OpenCode and Hermes recorded about their own calls. Your API key is never read."))
     }
 
     nonisolated func account() -> ProviderAccount? {
@@ -82,7 +82,7 @@ actor GeminiAPIProvider: UsageProvider {
         // ever run here, so there is genuinely nothing being metered.
         guard !sources.isEmpty else {
             throw UsageProviderError.nothingMetered(
-                String(localized: "No Gemini CLI, OpenCode or Hermes sessions found"))
+                L10n.t("No Gemini CLI, OpenCode or Hermes sessions found"))
         }
         lastTools = sources.map(\.name)
         return Self.snapshot(sources: sources, budget: budget(), now: now)
@@ -116,26 +116,28 @@ actor GeminiAPIProvider: UsageProvider {
         let budget = budget.flatMap { $0 > 0 ? $0 : nil }
         let total = sources.reduce(GeminiTokenUsage.zero) { $0.adding($1.usage) }
         let calendar = GeminiTokenUsage.calendar
+        let month = calendar.dateInterval(of: .month, for: now)
 
         var windows = [
             LimitWindow(
                 id: "month",
-                label: budget.map { String(localized: "Tokens this month · budget \(LimitWindow.compact($0))") }
-                    ?? String(localized: "Tokens this month · billed per token, no limit"),
+                label: budget.map { L10n.t("Tokens this month · budget \(LimitWindow.compact($0))") }
+                    ?? L10n.t("Tokens this month · billed per token, no limit"),
                 usedFraction: budget.map { Double(total.tokensThisMonth) / Double($0) },
                 used: total.tokensThisMonth,
-                resetsAt: calendar.dateInterval(of: .month, for: now)?.end
+                resetsAt: month?.end,
+                duration: month?.duration
             ),
             LimitWindow(
                 id: "today",
-                label: String(localized: "Tokens today"),
+                label: L10n.t("Tokens today"),
                 used: total.tokensToday,
                 resetsAt: calendar.dateInterval(of: .day, for: now)?.end
             )
         ]
         // The rows that make the headline checkable: which tool spent what.
         windows += sources.map {
-            LimitWindow(id: $0.id, label: String(localized: "\($0.name) · this month"), used: $0.usage.tokensThisMonth)
+            LimitWindow(id: $0.id, label: L10n.t("\($0.name) · this month"), used: $0.usage.tokensThisMonth)
         }
 
         return ProviderSnapshot(

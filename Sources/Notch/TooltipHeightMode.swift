@@ -15,8 +15,8 @@ enum TooltipHeightMode: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .standard: return String(localized: "Default")
-        case .full: return String(localized: "Show all")
+        case .standard: return L10n.t("Default")
+        case .full: return L10n.t("Show all")
         }
     }
 }

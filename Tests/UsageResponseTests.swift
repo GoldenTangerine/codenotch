@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 UsageResponseTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/UsageResponseTests.swift
+ */
 import SQLite3
 import XCTest
 @testable import Codenotch
@@ -44,6 +53,7 @@ final class UsageResponseTests: XCTestCase {
     func testDecodesTheLiveShape() throws {
         let windows = try decode(live).limitWindows()
         XCTAssertEqual(windows.count, 2)
+        XCTAssertEqual(windows.map(\.duration), [18000, 604800])
         XCTAssertEqual(windows[0].id, "session")
         XCTAssertEqual(windows[0].label, "Current session")
         XCTAssertEqual(windows[0].usedFraction ?? -1, 0.52, accuracy: 0.0001)
@@ -216,6 +226,28 @@ final class UsageArchiveTests: XCTestCase {
         XCTAssertEqual(restored?.snapshot.windows.first?.usedFraction, 0.68)
         XCTAssertEqual(restored?.snapshot.displayName, "Claude")
         XCTAssertEqual(restored?.fetchedAt, taken)
+    }
+
+    func testCodexDailyUsageRoundTripsWithTheQuotaReading() {
+        let defaults = makeDefaults()
+        let usage = CodexTokenUsage(
+            summary: .init(lifetimeTokens: 90, peakDailyTokens: 90,
+                            longestRunningTurnSeconds: 3600,
+                            currentStreakDays: 1, longestStreakDays: 3),
+            dailyUsageBuckets: [.init(
+                startDate: "2026-09-08", tokens: 90
+            )]
+        )
+        let snapshot = ProviderSnapshot(
+            id: "codex", displayName: "Codex", glyph: .openai,
+            fidelity: .official, status: .ok,
+            windows: [LimitWindow(id: "primary", label: "5h limit", usedFraction: 0.2)],
+            tokenUsage: usage
+        )
+        UsageArchive(defaults: defaults).save(["codex": (snapshot, Date())])
+
+        let restored = UsageArchive(defaults: defaults).load()["codex"]?.snapshot
+        XCTAssertEqual(restored?.tokenUsage, usage)
     }
 
     /// A restored reading is never presented as live.
@@ -397,6 +429,51 @@ final class ResetWindowTests: XCTestCase {
         XCTAssertNil(snapshot.headline)
         XCTAssertEqual(snapshot.headlineText, "—")
         XCTAssertEqual(snapshot.windows.count, 1, "the weekly is still listed in the tooltip")
+    }
+
+    /// The second ring resolves the same way the headline does: by the id the
+    /// provider declared, not by position.
+    func testTheWeeklyRingResolvesTheDeclaredWindow() {
+        let snapshot = ProviderSnapshot(
+            id: "claude", displayName: "Claude", glyph: .claude,
+            fidelity: .official, status: .ok,
+            windows: [
+                LimitWindow(id: "session", label: "Session", usedFraction: 0.12),
+                LimitWindow(id: "weekly_all", label: "All models", usedFraction: 0.91)
+            ],
+            headlineID: "session", weeklyID: "weekly_all"
+        )
+        XCTAssertEqual(snapshot.weeklyWindow?.id, "weekly_all")
+        XCTAssertEqual(snapshot.weeklyFraction, 0.91)
+        XCTAssertEqual(snapshot.usedFraction, 0.12, "the headline is untouched")
+    }
+
+    /// A provider that picks its headline by whichever limit is tightest —
+    /// Antigravity does — will sometimes land on the weekly one. Two rings
+    /// reporting the same number is worse than one: it reads as a second fact
+    /// that happens to agree rather than as the same fact drawn twice.
+    func testNoSecondRingWhenTheHeadlineIsAlreadyTheWeekly() {
+        let snapshot = ProviderSnapshot(
+            id: "gemini", displayName: "Antigravity", glyph: .antigravity,
+            fidelity: .official, status: .ok,
+            windows: [LimitWindow(id: "gemini-weekly", label: "Weekly", usedFraction: 0.8)],
+            headlineID: "gemini-weekly", weeklyID: "gemini-weekly"
+        )
+        XCTAssertNil(snapshot.weeklyWindow)
+        XCTAssertNil(snapshot.weeklyFraction)
+        XCTAssertEqual(snapshot.headline?.id, "gemini-weekly", "the headline still draws it")
+    }
+
+    /// Declared but absent is not an error — the provider simply did not return
+    /// that window this time, and one ring is the honest answer.
+    func testAMissingWeeklyWindowDrawsNoSecondRing() {
+        let snapshot = ProviderSnapshot(
+            id: "claude", displayName: "Claude", glyph: .claude,
+            fidelity: .official, status: .ok,
+            windows: [LimitWindow(id: "session", label: "Session", usedFraction: 0.2)],
+            headlineID: "session", weeklyID: "weekly_all"
+        )
+        XCTAssertNil(snapshot.weeklyFraction)
     }
 
     /// A provider that declares no headline keeps the old positional rule.

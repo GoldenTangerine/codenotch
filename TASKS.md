@@ -1,3 +1,12 @@
+<!--
+@name: 项目构建与文档
+@Descripttion: 维护 TASKS.md 的项目实现与上游兼容。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-11 15:51:14
+@LastEditTime: 2026-09-11 15:51:14
+@FilePath: TASKS.md
+-->
 # Codenotch — Tasks
 
 Full detail in [`docs/plans/2026-08-28-usage-notch-plan.md`](docs/plans/2026-08-28-usage-notch-plan.md).
@@ -65,6 +74,9 @@ Design spec in [`docs/specs/2026-08-28-usage-notch-design.md`](docs/specs/2026-0
       reports neither
 - [x] **`WebSessionProvider`** — the browser plumbing written once; `Sites`
       carries the per-site origin, script and parser
+- [x] **DeepSeek Platform** — explicit WebView login, account funded/spent
+      summary, aggregate tokens/cost/requests/API-key metrics, and 30-day
+      daily token/cost charts from the Platform usage endpoints
 - [x] **Cursor** via the same route, pinned by `CursorUsageTests`
 - [x] Cursor's glyph, flattened from its own SVG rather than traced from the
       design frame — exact at any size. See "Flattening an SVG" below
@@ -164,8 +176,9 @@ means work is happening. `CodexActivityMonitor` errs short: the ring stops eight
 seconds after the last write rather than claiming activity it cannot see. If
 Codex grows a real status field, that should replace this.
 
-Perplexity's adapter is kept but unregistered. `WebSessionProvider` is the
-working pattern for a site behind bot management, and re-registering is one line.
+Perplexity's adapter is kept but unregistered. DeepSeek is the first registered
+Platform-login site using `WebSessionProvider`; its login remains explicit and
+its account data stays in the provider's own WebView session.
 
 ### Cursor
 
@@ -330,6 +343,21 @@ is signed with a stable Developer ID identity (`project.yml`) — an unsigned or
 ad-hoc build gets a new identity every rebuild and the prompt would come back
 after every `make run`. Click **Always Allow** once and it sticks. A refusal
 backs the provider off for five minutes so a denied prompt cannot spam.
+
+### Own items prompt too after an ad-hoc rebuild
+
+Items this app stores itself (`lmstudio-api-token`, `ollama-api-key`) are
+ACL-bound to the signing identity just like a borrowed one — an ad-hoc Debug
+build is a new identity every time, so the app goes back to being a stranger
+to its own item. `LMStudioCredentials`/`OllamaCredentials` were reading it
+uncached from the 1 s local-runtime timer, the 2 s `LMStudioLink` reconnect
+loop, and twice per render of `LMStudioSettingsRow.isPresent` — one prompt
+turned into one every few seconds. Both now sit behind `CredentialCache` +
+`KeychainItem.modifiedAt`, `isPresent` is an attribute probe rather than a
+data read, and `store`/`delete`/`forgetCachedCredential()` call
+`forgetCached()`. A free `Apple Development` certificate makes the `Makefile`
+sign Debug builds with a stable identity, so "Always Allow" survives rebuilds
+the same way it does for Claude/Cursor/Antigravity.
 
 ## M4b — Is it working? (agent activity)
 
@@ -790,7 +818,7 @@ hundredths of a point wide; that is a fact about arcs, not a bug.
 - [ ] Threshold notifications (80% / 100%), per-provider mute
 - [ ] Auto-hide: never / on fullscreen / on overlap
 - [ ] Multi-display follow + unplug handling
-- [ ] Reduced-motion / reduced-transparency
+- [ ] Reduced-motion / reduced-transparency — reduced transparency is now the system's on the glass surface; see "The glass surface"
 - [ ] App icon, final name, README screenshots
 
 ## Managing accounts from Settings
@@ -828,8 +856,7 @@ credential, which is the same control under an honest name.
 - [x] `WebSessionProvider.signOut()` clears its own cookies — the one true
       logout in the app, because that session is the only one Codenotch created.
       Scoped to the site's host: the data store is shared, so emptying it would
-      sign the user out of every other web provider too. Nothing ships on this
-      path today, but the button would silently lie without it.
+      sign the user out of every other web provider too.
 - [x] Each row shows the account it reads (address and plan), with **Open** going
       to that vendor's own usage page.
 - [x] Every row states what signing out does *not* reach
@@ -1125,12 +1152,25 @@ it and then notice when the answer changes.
 - [x] Counts are compacted for the ring (`651k`, `1.1M`). A 44 pt ring cannot
       hold seven digits, and below 10 000 the digits are printed verbatim so no
       existing request or credit count changes.
-- [x] Busy detection watches **Gemini CLI only**, by modification date. The
-      session file holds no pid, so `ProcessLiveness` has nothing to verify, but
-      the CLI patches `lastUpdated` on every message — the same mtime substitute
-      Antigravity and Cursor use. OpenCode's and Hermes's databases are written
-      for reasons that have nothing to do with a Gemini call, so their mtimes
-      would report work that is not this provider's.
+- [x] Busy detection watches **Gemini CLI**, by modification date: the session
+      file holds no pid, so `ProcessLiveness` has nothing to verify, but the CLI
+      patches `lastUpdated` on every message — the same mtime substitute
+      Antigravity and Cursor use. The ring now merges three readers under
+      `gemini-api`, in tooltip order (Gemini CLI, OpenCode, Hermes), because
+      OpenCode's and Hermes's databases do carry a per-call marker that is
+      unambiguously a Gemini call, even though their mtimes alone would report
+      work that is not this provider's. OpenCode's marker is the newest
+      assistant message in a recently updated session with `providerID =
+      google` and no `time.completed`; sub-agent sessions fold into their
+      parent via `parent_id`, and the query is restricted to
+      `session.time_updated` within 45 s because `message` has no time index.
+      Hermes's marker is an open (`ended_at IS NULL`) session with
+      `billing_provider = gemini` whose `last_activity_at` is within 45 s, or an
+      unexpired row in `session_turn_leases`. None of the three tools persists
+      a "waiting for the user" state on disk — OpenCode exposes one only on its
+      password-protected local server's SSE stream — so the provider reports
+      busy or nothing, like Cursor and Antigravity, not Claude's busy/waiting/
+      idle.
 - [x] **Two departures from the provider template**, both deliberate. The
       protocol extension's default `signInRoute` offers to sign in, and here
       there is nothing to sign into, so this provider overrides it with a
@@ -1540,6 +1580,83 @@ Not an icon problem at all: the app had no Dock tile for an icon to sit on.
       window they had just opened.
 - [x] Clicking the Dock icon opens settings, via the `applicationShouldHandle
       Reopen` hook added for the Hide option. The notch stays where it is.
+
+## The glass surface
+
+### One glass, nothing underneath
+
+The expanded notch body, the tooltip and the settings orb are all painted, in
+the glass style, with `.glassEffect(.regular)` and nothing else — no tint, no
+colour underneath. That is deliberate: a wash of our own would sit under the
+glass and override the Clear/Tinted choice, light/dark mode and Reduce
+Transparency that the Mac's Appearance settings already control, so leaving
+the layer empty is what lets those settings reach the notch untouched. The
+tooltip is one shape, `TooltipSilhouette`, covering the card and the tail
+together rather than two separate glass shapes — two shapes each get their
+own rim highlight and show a seam where the tail meets the card.
+`testTheSilhouetteIsOneShapeCoveringCardAndTail`
+in `Tests/TooltipRenderTests.swift` pins it.
+
+### Solid stays the frame's
+
+`NotchSurfaceStyle.solid` — the non-default choice — forces `darkAqua` on the
+panel, so every hex the frame specifies still applies exactly as it did before
+glass existed. `Palette` gained light-appearance variants purely so the default
+glass style can follow the Mac into light mode: `textPrimary` `#000000`,
+`textSecondary` `#6B6B6B`, `ample` `#00A356` and `watch` `#B08800`, plus
+`ringTrack` at alpha 0.16 and `barTrack` at alpha 0.15 on black, all chosen for
+at least 3:1 contrast against white rather than sampled from anything.
+`PaletteAppearanceTests` (`Tests/UsageBandTests.swift`) pins both appearances,
+and `testTheSolidStyleForcesTheDarkAppearance` (`PanelSizingIntegrityTests`,
+`Tests/NotchRenderTests.swift`) pins the forced panel appearance.
+
+### What the tests can see
+
+`ImageRenderer` has no desktop behind it to refract, so almost every pixel test
+that renders the notch renders it in the solid style — glass with nothing
+behind it to sample is not what glass looks like on screen. The one glass
+exception is the hardware's band, below, which is painted the same opaque
+black regardless of style and so needs no desktop to read correctly. The other
+thing the glass style still has to prove headlessly is that the folded pill
+stays opaque black whatever the surface style is; `testTheFoldedPillIsOpaqueInTheGlassStyle`
+pins that rest state.
+
+### The hardware's band stays black
+
+A MacBook check showed the physical cutout, in the glass style, as a black
+rectangle set into a sheet of glass — the band at the hardware's height read
+as glass over nothing rather than as the hole in the screen it actually is.
+The fix keeps that band opaque black in both surface styles: it is a topmost
+layer in `NotchRootView.notch(_:)`, sized to `model.contentInset`, so the
+cutout and the drawn shape read as one wide notch again, and the glass begins
+only below it, where the readings begin. `testTheHardwaresBandStaysBlackInTheGlassStyle`
+pins it next to the solid-style band test.
+
+Upstream 1.7.0 draws the whole notch two points past the bezel
+(`NotchRootView.bezelBleed`, applied after `.scaleEffect`), so a band exactly
+`contentInset` deep ended two points short of the cutout's bottom and left a
+strip of glass inside the hole. The band is now `contentInset + bezelBleed /
+sizeScale` deep, which after scaling and the unscaled offset covers exactly
+`contentInset × sizeScale` on screen — the same region the readings are kept
+out of. It only showed in the full run: rendered alone, `ImageRenderer` draws
+glass transparent and the probe skips it; after earlier tests have exercised
+the effect it draws a light material, and
+`testTheHardwaresBandStaysBlackInTheGlassStyle` caught the strip.
+
+### Below macOS 26, and with Reduce transparency on
+
+Codenotch 1.7.0 targets macOS 15, where `glassEffect` does not exist yet. A
+material in the notch panel would have nothing behind it to blur, so below
+macOS 26 the glass style resolves to solid and the Surface setting is not
+offered at all — there is nothing to choose between. Reduce transparency
+resolves to solid too, following the same precedence the Settings window
+already uses for its own translucent chrome: Reduce transparency wins over
+glass. `testReduceTransparencyForcesTheDarkAppearance` and
+`testReduceTransparencyPaintsTheGlassStyleSolid` pin both cases. The window
+learns about a live accessibility change from
+`NSWorkspace.accessibilityDisplayOptionsDidChangeNotification` and re-applies
+the panel's appearance from that subscription, rather than only checking once
+at launch.
 
 ## Decisions needed
 - [ ] Final app name (`Codenotch` is a placeholder)

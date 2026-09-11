@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 AppPresence.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Settings/AppPresence.swift
+ */
 import AppKit
 
 /// Where Codenotch shows itself, apart from the notch.
@@ -18,22 +27,22 @@ enum AppPresence: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .dock:    return String(localized: "Dock")
-        case .menuBar: return String(localized: "Menu bar")
-        case .hidden:  return String(localized: "Neither")
+        case .dock:    return L10n.t("Dock")
+        case .menuBar: return L10n.t("Menu bar")
+        case .hidden:  return L10n.t("Neither")
         }
     }
 
     var explanation: String {
         switch self {
         case .dock:
-            return String(localized: "A normal app icon in the Dock while Codenotch is running.")
+            return L10n.t("A normal app icon in the Dock while Codenotch is running.")
         case .menuBar:
-            return String(localized: "A small icon in the menu bar instead, and nothing in the Dock.")
+            return L10n.t("A small icon in the menu bar instead, and nothing in the Dock.")
         case .hidden:
             // Said here because choosing this removes every visible way back to
             // these settings, and finding that out afterwards is too late.
-            return String(localized: "No icon anywhere. Open Codenotch again from Applications to bring these settings back.")
+            return L10n.t("No icon anywhere. Open Codenotch again from Applications to bring these settings back.")
         }
     }
 

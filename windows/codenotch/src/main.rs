@@ -1,4 +1,13 @@
 #![cfg_attr(all(not(debug_assertions), windows), windows_subsystem = "windows")]
+/**
+ @name: 项目构建与文档
+ @Descripttion: 维护 main.rs 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: windows/codenotch/src/main.rs
+ */
 
 mod autostart;
 mod config;
@@ -13,7 +22,9 @@ mod usage;
 mod codex;
 mod cursor;
 mod antigravity;
+mod agy_cli;
 mod glyphs;
+mod trayicon;
 mod activity;
 mod diag;
 mod watcher;
@@ -47,6 +58,13 @@ fn resolved_lang(raw: &str) -> String {
     } else {
         raw.to_string()
     }
+}
+
+/// The size multiplier chosen with the slider, clamped to what the config allows.
+pub fn ui_scale(app: &AppHandle) -> f64 {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    c.scale.clamp(config::SCALE_MIN, config::SCALE_MAX)
 }
 
 pub fn broadcast(app: &AppHandle) {
@@ -203,11 +221,9 @@ pub fn apply_lang(app: &AppHandle, lang: &str) {
         c.lang = lang.to_string();
         config::save(&c);
     }
-    if let Some(tray) = app.tray_by_id("main") {
-        if let Ok(menu) = tray::build_menu(app, lang) {
-            let _ = tray.set_menu(Some(menu));
-        }
-    }
+    // Through refresh_menu, which makes sure the swap happens on the main thread: doing it from the
+    // settings window's thread left the tray with a menu that would never open again.
+    tray::refresh_menu(app);
     broadcast(app);
 }
 
@@ -328,15 +344,36 @@ fn open_provider_page(provider: String) {
     let _ = cmd.spawn();
 }
 
-/// Card expansion state: Some(hot rectangles, in **physical pixels** relative to the window's
-/// top-left as x,y,w,h) = expanded; None = collapsed. The page converts the rectangles with its
-/// own devicePixelRatio before reporting them, so no scale conversion happens on this side —
-/// WebView2's DPR and the window's scale_factor can disagree (see report_dpr).
-static HOT: Mutex<Option<Vec<[f64; 4]>>> = Mutex::new(None);
+/// Hot rectangles in **physical pixels**, window-relative, as x,y,w,h: the pill, plus the card
+/// while it is open. The page converts by its own devicePixelRatio before reporting, so no scale
+/// conversion happens here — WebView2's DPR and the window's scale_factor can disagree (see
+/// report_dpr).
+///
+/// Empty means click-through: before the page has reported, one lost click on the notch beats
+/// eating every click aimed at the window behind it.
+static HOT: Mutex<Vec<[f64; 4]>> = Mutex::new(Vec::new());
+
+/// Read only by the collapse timer — the click gate goes by the rectangles, since the pill is
+/// clickable whether or not the card is up.
+static EXPANDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[tauri::command]
-fn set_expanded(on: bool, rects: Option<Vec<[f64; 4]>>) {
-    *HOT.lock().unwrap() = if on { Some(rects.unwrap_or_default()) } else { None };
+fn set_hot(rects: Vec<[f64; 4]>, expanded: bool) {
+    *HOT.lock().unwrap() = rects;
+    EXPANDED.store(expanded, std::sync::atomic::Ordering::Relaxed);
+    if expanded {
+        antigravity::request_hover_refresh();
+    }
+}
+
+/// Setting `WS_EX_TRANSPARENT` by hand instead looks like it should work, and does not: it applies
+/// to the notch window, but WebView2 keeps child HWNDs that hit-testing descends into and they
+/// never get the bit. `WS_EX_LAYERED` is what makes the window answer as one surface, so the helper
+/// that sets both is the only route. Clearing it again is safe — the notch is not otherwise layered
+/// (its transparency is DWM composition), so the window returns to the styles it had.
+fn set_click_through(app: &AppHandle, on: bool) {
+    let Some(w) = app.get_webview_window("notch") else { return };
+    let _ = w.set_ignore_cursor_events(on);
 }
 
 /// The WebView zoom currently applied (1.0 = uncorrected)
@@ -388,46 +425,86 @@ fn report_dpr(app: AppHandle, dpr: f64, w: f64, h: f64) {
     }
 }
 
+/// Slack around every hot rectangle: this is sampled on a timer, so a cursor arriving at the pill
+/// has to count as arrived slightly early, or a quick click lands between two polls while the
+/// window is still click-through and goes to whatever is behind it.
+const HOT_PAD: f64 = 10.0;
+
+/// Is the cursor on something the window is there for? `window` is the outer size in physical
+/// pixels, or None when it could not be read.
+fn cursor_in_hot(rects: &[[f64; 4]], lx: f64, ly: f64, window: Option<(f64, f64)>) -> bool {
+    if rects.is_empty() {
+        return false;
+    }
+    let in_window = window
+        .map(|(w, h)| lx >= 0.0 && ly >= 0.0 && lx < w && ly < h)
+        .unwrap_or(true);
+    if !in_window {
+        return false;
+    }
+    if rects.iter().any(|r| {
+        lx >= r[0] - HOT_PAD
+            && ly >= r[1] - HOT_PAD
+            && lx < r[0] + r[2] + HOT_PAD
+            && ly < r[1] + r[3] + HOT_PAD
+    }) {
+        return true;
+    }
+    // The gap between hot rectangles (pill and card) counts as inside: use the bounding box of all of them
+    if rects.len() > 1 {
+        let x0 = rects.iter().map(|r| r[0]).fold(f64::MAX, f64::min);
+        let y0 = rects.iter().map(|r| r[1]).fold(f64::MAX, f64::min);
+        let x1 = rects.iter().map(|r| r[0] + r[2]).fold(f64::MIN, f64::max);
+        let y1 = rects.iter().map(|r| r[1] + r[3]).fold(f64::MIN, f64::max);
+        return lx >= x0 && ly >= y0 && lx < x1 && ly < y1;
+    }
+    false
+}
+
+/// Was 150 ms, when this only decided whether the card stayed up. It now also gates whether a click
+/// reaches the notch, and at 150 ms a click arriving in the wrong sample went to the window behind.
+const WATCHDOG_MS: u64 = 50;
+/// Kept at the original 300 ms rather than falling out of the faster poll, which would make the
+/// card twitchy.
+const LEAVE_MS: u64 = 300;
+
 /// WebView2's mouseleave is unreliable inside a NOACTIVATE transparent window — a cursor that
 /// leaves quickly often produces no WM_MOUSELEAVE, and the card stays up. Rather than trust DOM
-/// events, the Rust side watches the system cursor while the card is expanded and emits
-/// pointer_left once the cursor is outside; the page collapses after its 250 ms grace period.
-/// "Outside the window" is not the test, though: the window has a 340×460 transparent area, so
-/// the cursor is compared against the hot rectangles the page reports (pill, card, and the gap
-/// between them), and two consecutive misses (300 ms) count as leaving.
+/// events, the Rust side watches the system cursor and emits pointer_left once it is outside; the
+/// page collapses after its 250 ms grace period. "Outside the window" is not the test, though: the
+/// window is mostly transparent, so the cursor is compared against the hot rectangles the page
+/// reports (pill, card, and the gap between them).
+///
+/// It also gates click-through (#106), which is why it runs whether or not the card is open. That
+/// ordering is load-bearing: the window ignores the cursor while it is click-through, so the page
+/// gets no mousemove out there and cannot see the pointer arriving. This loop does, and hands the
+/// window its input back in time for the page to open the card.
 fn start_pointer_watchdog(app: AppHandle) {
     std::thread::spawn(move || {
+        let need = (LEAVE_MS / WATCHDOG_MS).max(1) as u8;
         let mut miss = 0u8;
+        // Last value pushed: this changes only when the cursor crosses an edge
+        let mut click_through: Option<bool> = None;
         loop {
-            std::thread::sleep(std::time::Duration::from_millis(150));
-            let rects = match HOT.lock().unwrap().clone() {
-                Some(r) => r,
-                None => {
-                    miss = 0;
-                    continue;
-                }
-            };
+            std::thread::sleep(std::time::Duration::from_millis(WATCHDOG_MS));
             let Some(w) = app.get_webview_window("notch") else { continue };
             let (Ok(pos), Ok(cur)) = (w.outer_position(), app.cursor_position()) else { continue };
+            let rects = HOT.lock().unwrap().clone();
             // Cursor position relative to the window's top-left, in physical pixels; the hot rectangles are physical too, so no scale conversion
             let lx = cur.x - pos.x as f64;
             let ly = cur.y - pos.y as f64;
-            const PAD: f64 = 10.0;
-            let in_window = w
-                .outer_size()
-                .map(|s| lx >= 0.0 && ly >= 0.0 && lx < s.width as f64 && ly < s.height as f64)
-                .unwrap_or(true);
-            let mut inside = in_window && rects.iter().any(|r| {
-                lx >= r[0] - PAD && ly >= r[1] - PAD && lx < r[0] + r[2] + PAD && ly < r[1] + r[3] + PAD
-            });
-            // The gap between hot rectangles (pill and card) counts as inside: use the bounding box of all of them
-            if !inside && in_window && rects.len() > 1 {
-                let x0 = rects.iter().map(|r| r[0]).fold(f64::MAX, f64::min);
-                let y0 = rects.iter().map(|r| r[1]).fold(f64::MAX, f64::min);
-                let x1 = rects.iter().map(|r| r[0] + r[2]).fold(f64::MIN, f64::max);
-                let y1 = rects.iter().map(|r| r[1] + r[3]).fold(f64::MIN, f64::max);
-                inside = lx >= x0 && ly >= y0 && lx < x1 && ly < y1;
+            let size = w.outer_size().ok().map(|s| (s.width as f64, s.height as f64));
+            let inside = cursor_in_hot(&rects, lx, ly, size);
+
+            if click_through != Some(!inside) {
+                set_click_through(&app, !inside);
+                click_through = Some(!inside);
+                applog(&format!(
+                    "click-through {} at cursor_rel=({lx:.0},{ly:.0}) rects={rects:?}",
+                    if inside { "off (cursor on the notch)" } else { "on (cursor elsewhere)" }
+                ));
             }
+
             static LOGGED: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
             if LOGGED.fetch_add(1, std::sync::atomic::Ordering::Relaxed) < 12 {
                 applog(&format!(
@@ -435,13 +512,18 @@ fn start_pointer_watchdog(app: AppHandle) {
                     pos.x, pos.y
                 ));
             }
+
+            if !EXPANDED.load(std::sync::atomic::Ordering::Relaxed) {
+                miss = 0;
+                continue;
+            }
             if inside {
                 miss = 0;
             } else {
                 miss += 1;
-                if miss >= 2 {
+                if miss >= need {
                     miss = 0;
-                    *HOT.lock().unwrap() = None;
+                    EXPANDED.store(false, std::sync::atomic::Ordering::Relaxed);
                     let _ = app.emit("pointer_left", ());
                 }
             }
@@ -493,6 +575,385 @@ fn dismiss_session(app: AppHandle, id: String) {
 #[tauri::command]
 fn set_lang(app: AppHandle, lang: String) {
     apply_lang(&app, &lang);
+}
+
+// ---------------- notch size ----------------
+
+#[tauri::command]
+fn get_scale(app: AppHandle) -> f64 {
+    ui_scale(&app)
+}
+
+/// Called by the slider on every move. Only the value is stored here: the page scales the pill
+/// itself with a CSS zoom, so the window is never resized and the hover card holding the slider
+/// keeps its size — otherwise the slider would shrink away from under the cursor mid-drag.
+#[tauri::command]
+fn set_scale(app: AppHandle, scale: f64) {
+    let value = {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        c.scale = scale.clamp(config::SCALE_MIN, config::SCALE_MAX);
+        config::save(&c);
+        c.scale
+    };
+    // The notch draws its own size, so it has to be told. Without this the slider in the settings
+    // window saved the value but nothing changed on screen until the app was restarted.
+    let _ = app.emit("scale", value);
+}
+
+// ---------------- tray icon readings ----------------
+
+/// The headline percentage of a reading: its fullest window, as a whole number 0-100.
+///
+/// Deliberately the same rule as `headlineOf` in ui/notch.html, so the tray icon and the ring can
+/// never disagree: consider only metered windows — a `count` window (Antigravity's requests today,
+/// say) has no published denominator, so its `used` is not a share of anything and averaging or
+/// maximising over it would invent a number.
+fn headline_pct(s: &usage::UsageSnapshot) -> Option<u32> {
+    let top = s
+        .windows
+        .iter()
+        .filter(|w| w.count.is_none())
+        .map(|w| w.used)
+        .fold(f64::NAN, f64::max);
+    if top.is_nan() {
+        return None;
+    }
+    Some((top * 100.0).round().clamp(0.0, 100.0) as u32)
+}
+
+/// Ids match the ones the page uses, so the tray, the settings window and the notch all agree.
+fn snapshot_of(app: &AppHandle, id: &str) -> usage::UsageSnapshot {
+    let st = app.state::<AppState>();
+    match id {
+        "codex" => st.codex.lock().unwrap().clone(),
+        "cursor" => st.cursor.lock().unwrap().clone(),
+        "gemini" => st.antigravity.lock().unwrap().clone(),
+        _ => st.usage.lock().unwrap().clone(),
+    }
+}
+
+/// What one half of the icon should show. An empty (or "top") window id means "whichever of this
+/// provider's windows is fullest", which is the notch's own rule and the only choice that survives
+/// a provider adding or renaming its windows.
+fn reading_for_slot(app: &AppHandle, slot: &config::TraySlot) -> Option<u32> {
+    let snap = snapshot_of(app, &slot.provider);
+    if snap.status == "absent" {
+        return None;
+    }
+    if slot.window.is_empty() || slot.window == "top" {
+        return headline_pct(&snap);
+    }
+    // A pinned window missing from this snapshot falls back to the fullest one, which is what the
+    // notch does in the same situation. Without this a provider that renamed or dropped a window
+    // would leave the icon showing a dash while the notch still showed a number.
+    snap.windows
+        .iter()
+        .find(|w| w.id == slot.window && w.count.is_none())
+        .map(|w| (w.used * 100.0).round().clamp(0.0, 100.0) as u32)
+        .or_else(|| headline_pct(&snap))
+}
+
+/// One provider and the windows it currently reports, for the settings window's pickers. Built
+/// from live readings rather than a hard-coded table, so a provider that gains a window shows it.
+#[derive(serde::Serialize)]
+struct TrayOption {
+    id: String,
+    label: String,
+    status: String,
+    windows: Vec<TrayWindowOption>,
+}
+
+#[derive(serde::Serialize)]
+struct TrayWindowOption {
+    id: String,
+    label: String,
+    used: Option<u32>,
+}
+
+#[tauri::command]
+fn get_tray_options(app: AppHandle) -> Vec<TrayOption> {
+    TRAY_PROVIDER_IDS
+        .iter()
+        .map(|id| {
+            let snap = snapshot_of(&app, id);
+            TrayOption {
+                id: (*id).to_string(),
+                label: provider_label(id).to_string(),
+                status: snap.status.clone(),
+                windows: snap
+                    .windows
+                    .iter()
+                    .filter(|w| w.count.is_none()) // a count window has no percentage to draw
+                    .map(|w| TrayWindowOption {
+                        id: w.id.clone(),
+                        label: w.label.clone(),
+                        used: Some((w.used * 100.0).round().clamp(0.0, 100.0) as u32),
+                    })
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct TrayConfig {
+    mode: String,
+    slots: Vec<config::TraySlot>,
+}
+
+#[tauri::command]
+fn get_tray_config(app: AppHandle) -> TrayConfig {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    TrayConfig { mode: c.tray_mode.clone(), slots: c.tray_slots.clone() }
+}
+
+#[tauri::command]
+fn set_tray_config(app: AppHandle, cfg: TrayConfig) {
+    {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        c.tray_mode = cfg.mode;
+        c.tray_slots = cfg.slots;
+        // Kept in step so an older build reading this file still shows something sensible
+        c.tray_providers = c.tray_slots.iter().map(|s| s.provider.clone()).collect();
+        config::save(&c);
+    }
+    repaint_tray(&app);
+    tray::refresh_menu(&app);
+}
+
+/// The real icon, as a picture, for the settings preview — so what is being edited cannot drift
+/// from what the taskbar actually draws.
+#[tauri::command]
+fn get_tray_preview(app: AppHandle, cfg: TrayConfig) -> Option<String> {
+    let values: Vec<Option<u32>> = cfg.slots.iter().map(|s| reading_for_slot(&app, s)).collect();
+    let rgba = match cfg.mode.as_str() {
+        "bars" if !values.is_empty() => trayicon::bars_rgba(&values),
+        "numbers" if !values.is_empty() => trayicon::numbers_rgba(&values),
+        _ => return None, // "off" shows the app's own mark, which the page draws itself
+    };
+    trayicon::to_data_url(&rgba)
+}
+
+/// What each ring on the notch shows: the provider, and which of its windows. An empty list means
+/// every provider, each showing whichever window is fullest — the original behaviour.
+#[tauri::command]
+fn get_notch_slots(app: AppHandle) -> Vec<config::TraySlot> {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    c.notch_slots.clone()
+}
+
+#[tauri::command]
+fn set_notch_slots(app: AppHandle, slots: Vec<config::TraySlot>) {
+    let list = {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        c.notch_slots = slots;
+        // Kept in step so an older build reading this file still shows the right providers
+        c.notch_providers = c.notch_slots.iter().map(|s| s.provider.clone()).collect();
+        config::save(&c);
+        c.notch_slots.clone()
+    };
+    // The notch is a separate window and draws its own cells, so it has to be told.
+    let _ = app.emit("notch_slots", list);
+}
+
+/// The application's own icon, so the settings window shows what the taskbar shows.
+#[tauri::command]
+fn get_app_icon() -> Option<String> {
+    trayicon::app_mark_data_url()
+}
+
+// ---------------- what is on screen at all ----------------
+
+#[derive(serde::Serialize)]
+struct UiFlags {
+    notch_visible: bool,
+    tray_visible: bool,
+}
+
+#[tauri::command]
+fn get_ui_flags(app: AppHandle) -> UiFlags {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    UiFlags { notch_visible: c.notch_visible, tray_visible: c.tray_visible }
+}
+
+/// Hiding both would leave the app running with nothing to click, so the tray icon is kept
+/// whenever the notch is off. The answer says what was actually stored, so the settings window can
+/// show the corrected state rather than a lie.
+#[tauri::command]
+fn set_ui_flags(app: AppHandle, notch_visible: bool, tray_visible: bool) -> UiFlags {
+    let flags = {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        c.notch_visible = notch_visible;
+        c.tray_visible = if notch_visible { tray_visible } else { true };
+        config::save(&c);
+        UiFlags { notch_visible: c.notch_visible, tray_visible: c.tray_visible }
+    };
+    apply_visibility(&app);
+    flags
+}
+
+/// Puts the two switches into effect.
+pub fn apply_visibility(app: &AppHandle) {
+    let (notch, tray_on) = {
+        let st = app.state::<AppState>();
+        let c = st.cfg.lock().unwrap();
+        (c.notch_visible, c.tray_visible)
+    };
+    if let Some(w) = app.get_webview_window("notch") {
+        if notch {
+            let _ = w.show();
+            place_notch(app);
+        } else {
+            let _ = w.hide();
+        }
+    }
+    if let Some(t) = app.tray_by_id("main") {
+        let _ = t.set_visible(tray_on);
+    }
+}
+
+// ---------------- settings that used to live in the tray menu ----------------
+
+#[tauri::command]
+fn get_lang(app: AppHandle) -> String {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    c.lang.clone()
+}
+
+#[tauri::command]
+fn get_autostart() -> bool {
+    autostart::is_enabled()
+}
+
+#[tauri::command]
+fn set_autostart(on: bool) -> Result<String, String> {
+    if on {
+        autostart::enable()
+    } else {
+        autostart::disable()
+    }
+}
+
+#[tauri::command]
+fn get_hooks_installed() -> bool {
+    hooks_install::is_installed()
+}
+
+#[tauri::command]
+fn set_hooks_installed(on: bool) -> Result<String, String> {
+    if on {
+        hooks_install::install()
+    } else {
+        hooks_install::uninstall()
+    }
+}
+
+#[tauri::command]
+fn reset_notch_position(app: AppHandle) {
+    reset_bar(&app);
+}
+
+#[tauri::command]
+fn open_settings(app: AppHandle) {
+    if let Some(w) = app.get_webview_window("settings") {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+    }
+}
+
+pub fn provider_label(id: &str) -> &'static str {
+    match id {
+        "codex" => "Codex",
+        "cursor" => "Cursor",
+        "gemini" => "Antigravity",
+        _ => "Claude",
+    }
+}
+
+/// Every provider the tray menu can offer, in the order the notch shows them.
+pub const TRAY_PROVIDER_IDS: [&str; 4] = ["claude", "codex", "cursor", "gemini"];
+
+/// Draws the icon and writes the tooltip. Shared by the polling thread and by the settings window,
+/// so a change made in settings shows up at once rather than on the next poll.
+fn paint_tray(app: &AppHandle, mode: &str, slots: &[config::TraySlot], values: &[Option<u32>]) {
+    let Some(tray) = app.tray_by_id("main") else {
+        applog("tray: no tray with id 'main' — icon not updated");
+        return;
+    };
+    let outcome = match mode {
+        "numbers" if !values.is_empty() => tray.set_icon(Some(trayicon::numbers(values))),
+        "bars" if !values.is_empty() => tray.set_icon(Some(trayicon::bars(values))),
+        // "Plain icon": the application's own icon
+        _ => match trayicon::app_mark() {
+            Some(img) => tray.set_icon(Some(img)),
+            None => Ok(()), // leave whatever icon is there rather than clearing it to nothing
+        },
+    };
+    if let Err(e) = outcome {
+        applog(&format!("tray: set_icon FAILED mode={mode} values={values:?}: {e}"));
+    }
+    // The tooltip lists every slot, including any the digit layout could not fit, so nothing is
+    // silently dropped.
+    let parts: Vec<String> = slots
+        .iter()
+        .zip(values.iter())
+        .map(|(slot, v)| {
+            format!(
+                "{} {}",
+                provider_label(&slot.provider),
+                v.map(|p| format!("{p}%")).unwrap_or_else(|| "—".into())
+            )
+        })
+        .collect();
+    let tip = if parts.is_empty() {
+        concat!("Codenotch v", env!("CARGO_PKG_VERSION")).to_string()
+    } else {
+        format!("Codenotch — {}", parts.join(" · "))
+    };
+    let _ = tray.set_tooltip(Some(&tip));
+}
+
+/// Reads the current settings and readings, and repaints immediately.
+pub fn repaint_tray(app: &AppHandle) {
+    let (mode, slots) = {
+        let st = app.state::<AppState>();
+        let c = st.cfg.lock().unwrap();
+        (c.tray_mode.clone(), c.tray_slots.clone())
+    };
+    let values: Vec<Option<u32>> = slots.iter().map(|s| reading_for_slot(app, s)).collect();
+    paint_tray(app, &mode, &slots, &values);
+}
+
+/// Repaints when a reading changes. Every 2 seconds, but it only touches the icon when something
+/// actually moved, so it costs nothing while idle.
+fn start_tray_updater(app: AppHandle) {
+    std::thread::spawn(move || {
+        let mut last: Option<(String, Vec<config::TraySlot>, Vec<Option<u32>>)> = None;
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let (mode, slots) = {
+                let st = app.state::<AppState>();
+                let c = st.cfg.lock().unwrap();
+                (c.tray_mode.clone(), c.tray_slots.clone())
+            };
+            let values: Vec<Option<u32>> = slots.iter().map(|s| reading_for_slot(&app, s)).collect();
+            let key = (mode.clone(), slots.clone(), values.clone());
+            if last.as_ref() == Some(&key) {
+                continue;
+            }
+            last = Some(key);
+            paint_tray(&app, &mode, &slots, &values);
+        }
+    });
 }
 
 /// Seen-clears-it: looking at a session acknowledges it (engine behaviour, unchanged)
@@ -616,12 +1077,30 @@ fn main() {
             open_provider_page,
             refresh_usage,
             open_usage_page,
-            set_expanded,
+            set_hot,
             report_dpr,
             log_js,
             focus_session,
             dismiss_session,
-            set_lang
+            set_lang,
+            get_scale,
+            set_scale,
+            get_tray_options,
+            get_tray_config,
+            set_tray_config,
+            get_tray_preview,
+            get_notch_slots,
+            set_notch_slots,
+            get_app_icon,
+            get_ui_flags,
+            set_ui_flags,
+            get_lang,
+            get_autostart,
+            set_autostart,
+            get_hooks_installed,
+            set_hooks_installed,
+            reset_notch_position,
+            open_settings
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -631,6 +1110,20 @@ fn main() {
                 let _ = w.show();
             }
             tray::setup(&handle)?;
+            // Closing a Tauri window destroys it by default, and a destroyed window cannot be shown
+            // again — which is why Settings opened once and then never again. Hide it instead.
+            if let Some(w) = handle.get_webview_window("settings") {
+                let hide_me = w.clone();
+                w.on_window_event(move |e| {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = e {
+                        api.prevent_close();
+                        let _ = hide_me.hide();
+                    }
+                });
+            }
+            start_tray_updater(handle.clone());
+            // Honours the saved switches: a notch hidden last time stays hidden.
+            apply_visibility(&handle);
             server::start(handle.clone(), port);
             watcher::start(handle.clone());
             usage::start(handle.clone());
@@ -676,4 +1169,78 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("Codenotch failed to start");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{cursor_in_hot, HOT_PAD};
+
+    /// Real values from the run.log in #106: a 2560×1600 display at 150 %.
+    const PILL: [f64; 4] = [405.0, 183.5, 105.0, 323.0];
+    const CARD: [f64; 4] = [21.0, 142.5, 369.0, 262.0];
+    const WINDOW: Option<(f64, f64)> = Some((510.0, 690.0));
+
+    #[test]
+    fn nothing_is_hot_before_the_page_reports() {
+        assert!(!cursor_in_hot(&[], 450.0, 300.0, WINDOW));
+    }
+
+    #[test]
+    fn the_pill_is_hot() {
+        assert!(cursor_in_hot(&[PILL], 450.0, 300.0, WINDOW));
+    }
+
+    #[test]
+    fn the_transparent_area_beside_the_pill_is_not() {
+        assert!(!cursor_in_hot(&[PILL], 0.0, 297.0, WINDOW));
+        assert!(!cursor_in_hot(&[PILL], 100.0, 400.0, WINDOW));
+    }
+
+    #[test]
+    fn the_card_is_hot_while_it_is_open() {
+        assert!(!cursor_in_hot(&[PILL], 100.0, 250.0, WINDOW));
+        assert!(cursor_in_hot(&[PILL, CARD], 100.0, 250.0, WINDOW));
+    }
+
+    #[test]
+    fn the_shipped_pill_and_card_have_no_cold_strip_between_them() {
+        // The 15 px gap is narrower than the 20 px the two pads bring, so the pads already bridge
+        // it and the bounding box never fires for the shipped layout. Pinned: if that stops being
+        // true the crossing starts depending on the bounding box, and the card blinks out mid-travel.
+        let x = (CARD[0] + CARD[2] + PILL[0]) / 2.0;
+        assert!(cursor_in_hot(&[PILL, CARD], x, 250.0, WINDOW));
+        const { assert!(PILL[0] - (CARD[0] + CARD[2]) < 2.0 * HOT_PAD) };
+    }
+
+    /// Far enough apart that the pads do not meet — the case the bounding box exists for.
+    const FAR_A: [f64; 4] = [0.0, 0.0, 50.0, 50.0];
+    const FAR_B: [f64; 4] = [200.0, 0.0, 50.0, 50.0];
+
+    #[test]
+    fn a_wide_gap_is_bridged_by_the_bounding_box() {
+        assert!(cursor_in_hot(&[FAR_A, FAR_B], 125.0, 25.0, None));
+    }
+
+    #[test]
+    fn the_bounding_box_needs_two_rectangles_to_bridge_anything() {
+        assert!(!cursor_in_hot(&[FAR_A], 125.0, 25.0, None));
+    }
+
+    #[test]
+    fn the_pad_reaches_slightly_past_the_pill() {
+        assert!(cursor_in_hot(&[PILL], PILL[0] - HOT_PAD + 1.0, 300.0, WINDOW));
+        assert!(!cursor_in_hot(&[PILL], PILL[0] - HOT_PAD - 1.0, 300.0, WINDOW));
+    }
+
+    #[test]
+    fn a_cursor_off_the_window_is_never_hot() {
+        assert!(!cursor_in_hot(&[PILL], 515.0, 300.0, WINDOW));
+        assert!(!cursor_in_hot(&[PILL], 450.0, -5.0, WINDOW));
+    }
+
+    #[test]
+    fn an_unreadable_window_size_falls_back_to_the_rectangles() {
+        assert!(cursor_in_hot(&[PILL], 450.0, 300.0, None));
+        assert!(!cursor_in_hot(&[PILL], 100.0, 300.0, None));
+    }
 }

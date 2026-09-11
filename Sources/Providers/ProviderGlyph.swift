@@ -1,8 +1,18 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 ProviderGlyph.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/ProviderGlyph.swift
+ */
 import SwiftUI
 
 /// Which mark a provider cell draws.
 enum ProviderGlyph: String, Codable, Equatable {
     case claude
+    case devin
     case openai
     case third
     case cursor
@@ -18,13 +28,22 @@ enum ProviderGlyph: String, Codable, Equatable {
     /// sparkle gets a key of its own instead.
     case geminiSpark = "gemini-spark"
     case glm
+    case qwen
+    case gemma
+    case meta
+    case deepseek
+    case mistral
     case grok
     case opencode
+    case commandcode
     case copilot
+    case ollama
+    case ollamaLocal = "ollama-local"
+    case lmstudio
 
     /// If an asset with this name is in the bundle it wins over the traced
     /// outline — drop a PDF/SVG export from Figma in and it is picked up.
-    var assetName: String { "glyph-\(rawValue)" }
+    var assetName: String { self == .ollamaLocal ? "glyph-ollama" : "glyph-\(rawValue)" }
 
     /// How much to scale this mark so it reads the same size as the others.
     ///
@@ -47,8 +66,13 @@ enum ProviderGlyph: String, Codable, Equatable {
         case .glm:    return 0.95
         case .grok:   return 1.0
         case .opencode: return 0.95
+        case .commandcode: return 0.96
         case .copilot: return 0.96
+        case .ollama: return 0.95
         case .third:  return 1.0
+        case .ollamaLocal: return 0.98
+        case .lmstudio: return 0.96
+        case .devin, .qwen, .gemma, .meta, .deepseek, .mistral: return 1.0
         }
     }
 
@@ -61,9 +85,12 @@ enum ProviderGlyph: String, Codable, Equatable {
         case .antigravity: return GlyphOutline.antigravity
         case .geminiSpark: return GlyphOutline.gemini
         case .glm:    return GlyphOutline.glm
+        case .devin, .qwen, .gemma, .meta, .deepseek, .mistral, .lmstudio: return []
         case .grok:   return GlyphOutline.grok
         case .opencode: return GlyphOutline.opencode
+        case .commandcode: return GlyphOutline.commandcode
         case .copilot: return GlyphOutline.copilot
+        case .ollama, .ollamaLocal: return GlyphOutline.ollama
         }
     }
 }

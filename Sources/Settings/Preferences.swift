@@ -39,8 +39,25 @@ final class Preferences: ObservableObject {
     ///
     /// Switching one off is not merely hiding it: the store stops fetching it,
     /// so its credential is never read at all.
+    static let showUsagePaceKey = "showUsagePace"
+
+    /// Disabled model IDs hide cells without stopping their shared runtime.
     @Published var disconnectedProviders: Set<String> {
         didSet { defaults.set(Array(disconnectedProviders), forKey: Keys.disconnected) }
+    }
+
+    @Published var ollamaMetricsEnabled: Bool {
+        didSet { defaults.set(ollamaMetricsEnabled, forKey: Keys.ollamaMetricsEnabled) }
+    }
+
+    @Published var ollamaEndpoint: String {
+        didSet { defaults.set(ollamaEndpoint, forKey: Keys.ollamaEndpoint) }
+    }
+
+    /// Where LM Studio's server answers. Defaults to the port LM Studio's own
+    /// settings name, so a server moved off 1234 is found without typing.
+    @Published var lmstudioEndpoint: String {
+        didSet { defaults.set(lmstudioEndpoint, forKey: Keys.lmstudioEndpoint) }
     }
 
     /// Providers whose threshold alerts are muted. Stored as the muted set so
@@ -96,6 +113,43 @@ final class Preferences: ObservableObject {
         }
     }
 
+    /// How large the notch is drawn, as one of three named sizes.
+    ///
+    /// Ignored while `usesCustomNotchScale` is on — the two are kept apart
+    /// rather than collapsed into one number so that switching back to the
+    /// presets returns to the preset you last chose, instead of to whichever
+    /// preset happens to sit nearest the slider.
+    @Published var notchSize: NotchSize {
+        didSet { defaults.set(notchSize.rawValue, forKey: Keys.size) }
+    }
+
+    /// Whether the slider decides the size rather than the three presets.
+    @Published var usesCustomNotchScale: Bool {
+        didSet { defaults.set(usesCustomNotchScale, forKey: Keys.usesCustomSize) }
+    }
+
+    /// The slider's own multiplier, honoured only when the slider is in
+    /// charge. Clamped on the way in: a value typed straight into `defaults`
+    /// could otherwise shrink the notch to nothing or blow it off the screen.
+    @Published var customNotchScale: Double {
+        didSet {
+            let clamped = min(max(customNotchScale, Self.customScaleRange.lowerBound),
+                              Self.customScaleRange.upperBound)
+            if clamped != customNotchScale { customNotchScale = clamped; return }
+            defaults.set(customNotchScale, forKey: Keys.customSize)
+        }
+    }
+
+    /// Where the slider may go. Wider than the presets at both ends, but not
+    /// unbounded: below about three quarters the percentage under each ring
+    /// stops being readable, which is the one thing the notch exists for.
+    static let customScaleRange: ClosedRange<Double> = 0.75...1.5
+
+    /// What the notch is actually drawn at, whichever control is in charge.
+    var notchScale: CGFloat {
+        usesCustomNotchScale ? CGFloat(customNotchScale) : notchSize.scale
+    }
+
     /// The display the notch stays on, or the original focus-following behaviour.
     ///
     /// Only meaningful in `NotchScreenScope.main` — pinning a display and
@@ -118,6 +172,16 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(notchScope.rawValue, forKey: Keys.scope) }
     }
 
+    /// The preferred limit window to show for Antigravity provider (automatic, 5h, or weekly).
+    @Published var antigravityHeadlineLimit: AntigravityHeadlineLimit {
+        didSet { defaults.set(antigravityHeadlineLimit.rawValue, forKey: Keys.antigravityHeadlineLimit) }
+    }
+
+    /// The preferred model group to show for Antigravity provider (Gemini or Claude and GPT models).
+    @Published var antigravityHeadlineModel: AntigravityHeadlineModel {
+        didSet { defaults.set(antigravityHeadlineModel.rawValue, forKey: Keys.antigravityHeadlineModel) }
+    }
+
     /// Where along that edge the notch sits, nudged from the centred default
     /// by ⌥-dragging the pill. One value per edge — moving it on the right
     /// should not silently relocate it on the top too — so this is read and
@@ -137,6 +201,16 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(resetTimeFormat.rawValue, forKey: Keys.resetTimeFormat) }
     }
 
+    @Published var showUsagePace: Bool {
+        didSet { defaults.set(showUsagePace, forKey: Self.showUsagePaceKey) }
+    }
+
+    /// Whether the weekly limit gets a ring of its own, and where it sits.
+    @Published var weeklyRing: WeeklyRing {
+        didSet { defaults.set(weeklyRing.rawValue, forKey: Keys.weeklyRing) }
+    }
+
+    /// The colour used for positive usage and active-work indicators.
     @Published var accentColor: AccentColorChoice {
         didSet { defaults.set(accentColor.rawValue, forKey: Keys.accentColor) }
     }
@@ -145,6 +219,23 @@ final class Preferences: ObservableObject {
     @Published var notchAccentColor: AccentColorChoice {
         didSet { defaults.set(notchAccentColor.rawValue, forKey: Keys.notchAccentColor) }
     }
+    /// The material the expanded notch, tooltip and settings orb are painted with.
+    @Published var notchSurfaceStyle: NotchSurfaceStyle {
+        didSet { defaults.set(notchSurfaceStyle.rawValue, forKey: Keys.notchSurfaceStyle) }
+    }
+
+    /// The language the app itself speaks.
+    ///
+    /// `.system` follows the Mac. Written through `L10n.apply` so the store
+    /// and the change notification stay a single write.
+    @Published var language: AppLanguage {
+        didSet {
+            language.apply(to: defaults)
+            defaults.set(language.rawValue, forKey: L10n.languageDefaultsKey)
+            if defaults === UserDefaults.standard { L10n.apply(language) }
+        }
+    }
+
     /// Where the app itself shows up: Dock, menu bar, or nowhere.
     @Published var appPresence: AppPresence {
         didSet { defaults.set(appPresence.rawValue, forKey: Keys.presence) }
@@ -156,13 +247,6 @@ final class Preferences: ObservableObject {
     /// defaults domain rather than by a key of our own: System Settings writes
     /// the same key for a per-app language, so a choice made there is what the
     /// picker shows, and there is no second source to drift out of sync.
-    var language: AppLanguage {
-        get { AppLanguage.ownOverride(in: defaults, domainName: domainName) ?? .system }
-        set {
-            objectWillChange.send()
-            newValue.apply(to: defaults)
-        }
-    }
 
     /// The language choice as it stood when this process launched — what the
     /// running UI is actually speaking. `language` writes take effect on the
@@ -281,17 +365,29 @@ final class Preferences: ObservableObject {
     private enum Keys {
         /// The old name. Kept so existing choices survive the rename.
         static let disconnected = "hiddenProviders"
+        static let ollamaEndpoint = "ollamaEndpoint"
+        static let lmstudioEndpoint = "lmstudioEndpoint"
+        static let introducedOllama = "introducedOllama"
+        static let migratedOllamaID = "migratedOllamaLocalID"
+        static let ollamaMetricsEnabled = "ollamaMetricsEnabled"
         static let mutedAlerts = "mutedAlertProviders"
         static let hasLaunched = "hasLaunchedBefore"
         static let visibility = "notchVisibility"
         static let triggerHeight = "notchTriggerHeight"
         static let presence = "appPresence"
         static let edge = "notchEdge"
+        // A new key, so there is nothing under the old app name to migrate.
+        static let size = "notchSize"
+        static let usesCustomSize = "usesCustomNotchScale"
+        static let customSize = "customNotchScale"
         static let display = "notchDisplay"
         static let resetTimeFormat = "resetTimeFormat"
         static let scope = "notchScope"
         static let accentColor = "accentColor"
         static let notchAccentColor = "notchAccentColor"
+        // A new key, so there is nothing under the old app name to migrate.
+        static let weeklyRing = "weeklyRing"
+        static let notchSurfaceStyle = "notchSurfaceStyle"
         static let lastSeenVersion = "lastSeenVersion"
         static let order = "providerOrder"
         static let announceSessionEnd = "announceSessionEnd"
@@ -306,6 +402,8 @@ final class Preferences: ObservableObject {
         static let sessionBlockedSoundName = "sessionBlockedSoundName"
         /// A new key, so there is nothing under the old app name to migrate.
         static let geminiAPIMonthlyTokenBudget = "geminiAPIMonthlyTokenBudget"
+        static let antigravityHeadlineLimit = "antigravityHeadlineLimit"
+        static let antigravityHeadlineModel = "antigravityHeadlineModel"
     }
 
     /// The budget read straight from disk, off the main actor.
@@ -320,6 +418,24 @@ final class Preferences: ObservableObject {
               budget > 0
         else { return nil }
         return budget
+    }
+
+    nonisolated static func storedAntigravityHeadlineLimit(
+        defaults: UserDefaults = .standard
+    ) -> AntigravityHeadlineLimit {
+        guard let value = defaults.string(forKey: Keys.antigravityHeadlineLimit),
+              let limit = AntigravityHeadlineLimit(rawValue: value)
+        else { return .automatic }
+        return limit
+    }
+
+    nonisolated static func storedAntigravityHeadlineModel(
+        defaults: UserDefaults = .standard
+    ) -> AntigravityHeadlineModel {
+        guard let value = defaults.string(forKey: Keys.antigravityHeadlineModel),
+              let model = AntigravityHeadlineModel(rawValue: value)
+        else { return .gemini }
+        return model
     }
 
     /// True the very first time this copy runs, and never again.
@@ -369,7 +485,37 @@ final class Preferences: ObservableObject {
         self.domainName = domainName ?? (defaults === UserDefaults.standard ? Bundle.main.bundleIdentifier : nil)
         self.isFirstLaunch = !defaults.bool(forKey: Keys.hasLaunched)
         defaults.set(true, forKey: Keys.hasLaunched)
-        self.disconnectedProviders = Set(defaults.stringArray(forKey: Keys.disconnected) ?? [])
+        // Only the earlier local integration used this sentinel. Keep unrelated
+        // provider IDs untouched when upgrading from upstream.
+        if defaults.bool(forKey: Keys.introducedOllama),
+           !defaults.bool(forKey: Keys.migratedOllamaID) {
+            for key in [Keys.disconnected, Keys.order, Keys.mutedAlerts] {
+                var seen = Set<String>()
+                let migrated = (defaults.stringArray(forKey: key) ?? []).map { id in
+                    if id == "ollama" { return "ollama-local" }
+                    if id.hasPrefix("ollama:model:") {
+                        return "ollama-local:model:" + id.dropFirst("ollama:model:".count)
+                    }
+                    return id
+                }.filter { seen.insert($0).inserted }
+                defaults.set(migrated, forKey: key)
+            }
+            defaults.set(true, forKey: Keys.migratedOllamaID)
+        }
+        let disconnected = Set(defaults.stringArray(forKey: Keys.disconnected) ?? [])
+        self.disconnectedProviders = disconnected
+        self.ollamaMetricsEnabled = defaults.object(forKey: Keys.ollamaMetricsEnabled) as? Bool
+            ?? (defaults.bool(forKey: Keys.introducedOllama)
+                && !disconnected.contains("ollama-local"))
+        self.ollamaEndpoint = (try? OllamaEndpoint.parse(
+            defaults.string(forKey: Keys.ollamaEndpoint) ?? OllamaEndpoint.defaultAddress
+        ).absoluteString) ?? OllamaEndpoint.defaultAddress
+        // A stored choice wins; otherwise LM Studio's own configuration file
+        // says where it listens, and 1234 is what it ships with.
+        self.lmstudioEndpoint = (try? LMStudioEndpoint.parse(
+            defaults.string(forKey: Keys.lmstudioEndpoint)
+                ?? LMStudioEndpoint.configuredAddress() ?? LMStudioEndpoint.defaultAddress
+        ).absoluteString) ?? LMStudioEndpoint.defaultAddress
         self.mutedAlertProviders = Set(defaults.stringArray(forKey: Keys.mutedAlerts) ?? [])
         // Absent means never chosen, which is the hover behaviour the app was
         // designed around — not hidden, which would make a fresh install look
@@ -387,21 +533,41 @@ final class Preferences: ObservableObject {
         // side of a Mac that no system chrome claims by default.
         self.notchEdge = defaults.string(forKey: Keys.edge)
             .flatMap(NotchEdge.init(rawValue:)) ?? .right
+        // Medium is the design frame at 1:1, so an install that predates this
+        // choice keeps exactly the notch it already had.
+        self.notchSize = defaults.string(forKey: Keys.size)
+            .flatMap(NotchSize.init(rawValue:)) ?? .medium
+        // Absent means never chosen, and the presets are what every earlier
+        // version had — so the slider is opt-in rather than the default.
+        self.usesCustomNotchScale = defaults.bool(forKey: Keys.usesCustomSize)
+        let stored = defaults.object(forKey: Keys.customSize) as? Double
+        self.customNotchScale = stored.map {
+            min(max($0, Self.customScaleRange.lowerBound), Self.customScaleRange.upperBound)
+        } ?? 1
         // What this launch is running in: the override as it stood before the
         // picker can touch it.
-        self.appliedLanguage = AppLanguage.ownOverride(in: defaults, domainName: domainName) ?? .system
+        self.appliedLanguage = AppLanguage.ownOverride(in: defaults, domainName: self.domainName) ?? .system
         let savedDisplay = defaults.data(forKey: "notchPosition")
             .flatMap { try? JSONDecoder().decode(NotchPosition.self, from: $0) }?.displayID
         self.displayPreference = (defaults.string(forKey: Keys.display) ?? savedDisplay)
             .map(DisplayPreference.display) ?? .followActiveWindow
         self.resetTimeFormat = defaults.string(forKey: Keys.resetTimeFormat)
             .flatMap(ResetTimeFormat.init(rawValue:)) ?? .automatic
+        self.showUsagePace = defaults.bool(forKey: Self.showUsagePaceKey)
         // Absent means never chosen. Main display only, because that is what a
         // single-panel setup always did — all-displays on a fresh install
         // would put notches where none were expected.
         self.notchScope = defaults.string(forKey: Keys.scope)
             .flatMap(NotchScreenScope.init(rawValue:)) ?? .mainDisplay
+        self.antigravityHeadlineLimit = defaults.string(forKey: Keys.antigravityHeadlineLimit)
+            .flatMap(AntigravityHeadlineLimit.init(rawValue:)) ?? .automatic
+        self.antigravityHeadlineModel = defaults.string(forKey: Keys.antigravityHeadlineModel)
+            .flatMap(AntigravityHeadlineModel.init(rawValue:)) ?? .gemini
         // Follow the Mac unless the user explicitly chooses a Codenotch colour.
+        // Off by default: an extra arc in a 44pt circle is a change to how
+        // every reading looks, and nobody asked for it on their behalf.
+        self.weeklyRing = defaults.string(forKey: Keys.weeklyRing)
+            .flatMap(WeeklyRing.init(rawValue:)) ?? .off
         self.accentColor = defaults.string(forKey: Keys.accentColor)
             .flatMap(AccentColorChoice.init(rawValue:)) ?? .system
         // Snapshot the shared choice once, before either picker can change it.
@@ -416,6 +582,15 @@ final class Preferences: ObservableObject {
                 .flatMap(AccentColorChoice.init(rawValue:)) ?? .system
         }
         self.notchAccentColor = notchAccentColor
+        self.notchSurfaceStyle = defaults.string(forKey: Keys.notchSurfaceStyle)
+            .flatMap(NotchSurfaceStyle.init(rawValue:)) ?? .glass
+        // Absent means never chosen, which is follow-the-Mac.
+        let language = defaults.string(forKey: L10n.languageDefaultsKey)
+            .flatMap(AppLanguage.init(rawValue:)) ?? self.appliedLanguage
+        self.language = language
+        if defaults.string(forKey: L10n.languageDefaultsKey) == nil, language != .system {
+            defaults.set(language.rawValue, forKey: L10n.languageDefaultsKey)
+        }
         // Absent means nothing has been shown yet, which is true of a fresh
         // install — so the current release reads as new to it.
         self.lastSeenVersion = defaults.string(forKey: Keys.lastSeenVersion)
@@ -555,7 +730,7 @@ final class Preferences: ObservableObject {
             // Commonly refused for an app running from a build directory rather
             // than /Applications, which is worth saying plainly.
             Log.usage.error("launch at login failed: \(error.localizedDescription, privacy: .public)")
-            launchAtLoginProblem = String(localized: "macOS refused this — try moving Codenotch to /Applications.")
+            launchAtLoginProblem = L10n.t("macOS refused this — try moving Codenotch to /Applications.")
             launchAtLogin = Self.isRegisteredForLogin
         }
     }

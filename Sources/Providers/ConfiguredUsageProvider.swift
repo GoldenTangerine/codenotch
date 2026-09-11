@@ -11,9 +11,11 @@ import Foundation
 
 final class ConfiguredUsageProvider: UsageProvider {
     let entry: QueryEntry
-    private let automatic: UsageProvider?
+    let automatic: UsageProvider?
     private let secrets: QuerySecretStorage
     var id: String { entry.id }
+    var kind: ProviderKind { entry.usesLocalAccount ? automatic?.kind ?? .usage : .usage }
+    var isVisibleWhenAbsent: Bool { entry.usesLocalAccount ? automatic?.isVisibleWhenAbsent ?? true : true }
     var displayName: String { entry.name }
     var glyph: ProviderGlyph { ProviderGlyph(rawValue: entry.icon.value) ?? .third }
 
@@ -24,13 +26,14 @@ final class ConfiguredUsageProvider: UsageProvider {
     }
 
     var signInRoute: SignInRoute {
-        entry.usesLocalAccount ? automatic?.signInRoute ?? .guidance(String(localized: "Configure a local provider."))
-            : .guidance(String(localized: "Update this provider's credentials in Settings."))
+        entry.usesLocalAccount ? automatic?.signInRoute ?? .guidance(L10n.t("Configure a local provider."))
+            : .guidance(L10n.t("Update this provider's credentials in Settings."))
     }
 
     func account() -> ProviderAccount? { entry.usesLocalAccount ? automatic?.account() : nil }
     func signOut() async { if entry.usesLocalAccount { await automatic?.signOut() } }
     func presentSignIn() { if entry.usesLocalAccount { automatic?.presentSignIn() } }
+    func presentAccountSwitch() { if entry.usesLocalAccount { automatic?.presentAccountSwitch() } }
     func forgetCachedCredential() { if entry.usesLocalAccount { automatic?.forgetCachedCredential() } }
 
     func decorate(_ snapshot: ProviderSnapshot) -> ProviderSnapshot {
@@ -38,11 +41,20 @@ final class ConfiguredUsageProvider: UsageProvider {
                               "grok": "credits", "opencode": "rolling"][ManualNativeQuery.kind(entry.nativeID)]
         let defaultHeadline = entry.usesLocalAccount ? snapshot.headlineID ?? nativeHeadline ?? snapshot.windows.first?.id
             : entry.template == .native ? nativeHeadline ?? snapshot.windows.first?.id : snapshot.windows.first?.id
-        return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph, fidelity: snapshot.fidelity,
+        var result = ProviderSnapshot(id: id, displayName: displayName, glyph: glyph, fidelity: snapshot.fidelity,
             status: snapshot.status, windows: snapshot.windows,
-            headlineID: entry.headlineID ?? defaultHeadline,
+            headlineID: entry.headlineID ?? defaultHeadline, weeklyID: snapshot.weeklyID,
             block: snapshot.block, icon: entry.icon, manualQuery: !entry.usesLocalAccount,
-            queryFailure: snapshot.queryFailure, queryRetryAfter: snapshot.queryRetryAfter)
+            queryFailure: snapshot.queryFailure, queryRetryAfter: snapshot.queryRetryAfter,
+            linked: snapshot.linked, kind: snapshot.kind, localRuntime: snapshot.localRuntime,
+            localModel: snapshot.localModel, localPerformance: snapshot.localPerformance,
+            showsLocalPerformance: snapshot.showsLocalPerformance,
+            localContextFraction: snapshot.localContextFraction, localLedger: snapshot.localLedger,
+            localRuntimeMeasuresSpeed: snapshot.localRuntimeMeasuresSpeed,
+            sourceProviderID: snapshot.sourceProviderID, tokenUsage: snapshot.tokenUsage,
+            plan: snapshot.plan, resetCredits: snapshot.resetCredits, usageDetail: snapshot.usageDetail)
+        if entry.usesLocalAccount && snapshot.kind == .localRuntime { result.icon = nil }
+        return result
     }
 
     func fetchSnapshot() async throws -> ProviderSnapshot {

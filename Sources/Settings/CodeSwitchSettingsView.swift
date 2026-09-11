@@ -28,8 +28,8 @@ struct CodeSwitchSettingsRow: Identifiable {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         let items: [Self] = Set(live.keys).union(hidden).map { id -> Self in
             let snapshot = live[id]
-            return Self(id: id, name: snapshot?.displayName ?? names[id] ?? String(localized: "Unavailable provider"),
-                        platform: snapshot?.linked?.platform ?? String(localized: "Not currently synced"), snapshot: snapshot,
+            return Self(id: id, name: snapshot?.displayName ?? names[id] ?? L10n.t("Unavailable provider"),
+                        platform: snapshot?.linked?.platform ?? L10n.t("Not currently synced"), snapshot: snapshot,
                         reference: snapshot?.linked?.provider.providerId ?? providerReference(id),
                         isCurrent: currentIDs.contains(id))
         }.filter { row in
@@ -110,8 +110,8 @@ struct CodeSwitchSettingsView: View {
                     Section {
                         if rows.isEmpty {
                             Text(search.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                 ? String(localized: "Providers appear here when received from Code Switch R.")
-                                 : String(localized: "No matching providers"))
+                                 ? L10n.t("Providers appear here when received from Code Switch R.")
+                                 : L10n.t("No matching providers"))
                                 .font(.caption).foregroundStyle(.secondary).padding(.vertical, 24)
                         }
                         ForEach(rows) { row in
@@ -286,7 +286,7 @@ struct CodeSwitchSettingsProviderRow: View {
                         drag.update(session.phase, items: session.draggedItemIDs(for: String.self))
                     }
                     .pointerStyle(canReorder ? .grabIdle : nil)
-                    .help(canReorder ? String(localized: "Drag to reorder") : String(localized: "Clear search to reorder"))
+                    .help(canReorder ? L10n.t("Drag to reorder") : L10n.t("Clear search to reorder"))
                 Toggle(row.savedName, isOn: Binding(get: { !preferences.hiddenCodeSwitchProviders.contains(row.id) }, set: { visible in
                     if visible {
                         preferences.hiddenCodeSwitchProviders.remove(row.id)
@@ -329,8 +329,8 @@ struct CodeSwitchSettingsProviderRow: View {
                 Image(systemName: expanded ? "chevron.down" : "chevron.right")
                     .frame(width: 20, height: 32).contentShape(Rectangle())
             }.buttonStyle(.plain).foregroundStyle(.secondary)
-                .accessibilityLabel(expanded ? String(localized: "Hide details") : String(localized: "Show details"))
-                .help(expanded ? String(localized: "Hide details") : String(localized: "Show details"))
+                .accessibilityLabel(expanded ? L10n.t("Hide details") : L10n.t("Show details"))
+                .help(expanded ? L10n.t("Hide details") : L10n.t("Show details"))
         }
     }
 
@@ -419,7 +419,7 @@ struct CodeSwitchTableQuotaCell: View {
                         .accessibilityLabel(item.quota.title)
                 } else {
                     Text(item.quota.title).foregroundStyle(.secondary)
-                    Text(window.quantity?.summary ?? String(localized: "No reading"))
+                    Text(window.quantity?.summary ?? L10n.t("No reading"))
                 }
                 if showsReset, let reset = window.resetsAt {
                     TimelineView(.periodic(from: .now, by: 60)) { context in

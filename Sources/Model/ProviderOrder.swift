@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 ProviderOrder.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Model/ProviderOrder.swift
+ */
 import Foundation
 
 /// The rule that turns a remembered order into a real one.
@@ -7,6 +16,17 @@ import Foundation
 /// so an id can appear on a Mac that has never seen it and vanish from one that
 /// has. A stored order is a preference to reconcile, never an authority.
 enum ProviderOrder {
+    /// A runtime's inventory can arrive alphabetically on every poll. Keep its
+    /// existing cells in place and append newly loaded models.
+    static func cells(from snapshots: [ProviderSnapshot],
+                      keeping previous: [ProviderSnapshot]) -> [ProviderSnapshot] {
+        snapshots.flatMap { snapshot in
+            let cells = snapshot.notchSnapshots
+            return snapshot.kind == .localRuntime
+                ? arrange(cells, by: previous.map(\.id), id: \.id) : cells
+        }
+    }
+
     /// `items` in the user's order, then everything the order has never seen, in
     /// the order it arrived in.
     ///

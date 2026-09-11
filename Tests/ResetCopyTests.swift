@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 ResetCopyTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/ResetCopyTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -55,6 +64,33 @@ final class ResetCopyTests: XCTestCase {
         XCTAssertTrue(text.contains(":"), "expected a colon in \(text)")
         let hasPeriodBetweenDigits = text.range(of: #"\d+\.\d+"#, options: .regularExpression) != nil
         XCTAssertFalse(hasPeriodBetweenDigits, "expected no full stop between time digits in \(text)")
+    }
+
+    /// Most of the world keeps a 24-hour clock, and this line was the one
+    /// place it slipped into "12:00 AM": a literal `h` and `a` in the template
+    /// pin the clock to twelve hours instead of asking the locale. Regions
+    /// that do write AM/PM keep it, so the frame's English copy is unchanged.
+    func testFollowsTheLocalesHourCycle() {
+        let twentyFourHour = ["fr_FR", "de_DE", "es_ES", "it_IT", "pt_BR", "ru_RU",
+                              "tr_TR", "ja_JP", "zh_CN", "en_GB"]
+        let twelveHour = ["en_US", "en_AU", "en_CA", "en_IN", "ko_KR"]
+        for id in twentyFourHour + twelveHour {
+            let locale = Locale(identifier: id)
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.locale = locale
+            let text = ResetCopy.text(for: now.addingTimeInterval(6 * 60 * 60), now: now,
+                                      calendar: calendar, locale: locale)
+            // The locale's own day-period words rather than "AM": Japanese
+            // writes 午前, Korean 오전, Australia am.
+            let symbols = DateFormatter()
+            symbols.locale = locale
+            let hasDayPeriod = text.contains(symbols.amSymbol) || text.contains(symbols.pmSymbol)
+            if twelveHour.contains(id) {
+                XCTAssertTrue(hasDayPeriod, "\(id) lost its AM/PM: \(text)")
+            } else {
+                XCTAssertFalse(hasDayPeriod, "\(id) got a 12-hour clock: \(text)")
+            }
+        }
     }
 
     func testPastResetsReadAsResetting() {

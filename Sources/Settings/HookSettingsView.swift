@@ -19,18 +19,18 @@ struct HookSettingsView: View {
                     HStack {
                         Text(target.title).fontWeight(.medium)
                         Spacer()
-                        Text(hooks.installed.contains(target.id) ? String(localized: "Installed") : String(localized: "Not installed"))
+                        Text(hooks.installed.contains(target.id) ? L10n.t("Installed") : L10n.t("Not installed"))
                             .foregroundStyle(.secondary)
                     }
                     Text(target.file.path).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
-                    Text(target.cliDetected ? String(localized: "CLI detected") : String(localized: "CLI not found in standard locations"))
+                    Text(target.cliDetected ? L10n.t("CLI detected") : L10n.t("CLI not found in standard locations"))
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         if let date = hooks.lastEvents[target.id] {
                             Text("Last event: \(date.formatted(date: .omitted, time: .standard))")
                         } else { Text("No events received yet") }
                         Spacer()
-                        Button(hooks.present.contains(target.id) ? String(localized: "Repair hooks") : String(localized: "Install hooks")) {
+                        Button(hooks.present.contains(target.id) ? L10n.t("Repair hooks") : L10n.t("Install hooks")) {
                             hooks.change(target, installing: true)
                         }
                         if hooks.present.contains(target.id) {

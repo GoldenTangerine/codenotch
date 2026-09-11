@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 PerplexityUsage.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/PerplexityUsage.swift
+ */
 import Foundation
 
 /// Parses `GET /rest/rate-limit/all` on perplexity.ai.
@@ -22,14 +31,15 @@ import Foundation
 /// of connector quotas unrelated to model usage, and is ignored.
 enum PerplexityUsage {
     /// The quotas worth a line, in the order they are shown. The first is the
-    /// headline, so it is the one people actually run out of. Labels resolve
-    /// once at first use — the language is fixed for the life of the process.
-    private static let counters: [(key: String, label: String)] = [
-        ("remaining_pro", String(localized: "Pro searches")),
-        ("remaining_research", String(localized: "Research")),
-        ("remaining_agentic_research", String(localized: "Agentic research")),
-        ("remaining_labs", String(localized: "Labs"))
-    ]
+    /// headline, so it is the one people actually run out of.
+    private static var counters: [(key: String, label: String)] {
+        [
+            ("remaining_pro", L10n.t("Pro searches")),
+            ("remaining_research", L10n.t("Research")),
+            ("remaining_agentic_research", L10n.t("Agentic research")),
+            ("remaining_labs", L10n.t("Labs"))
+        ]
+    }
 
     static func windows(fromJSON json: String) throws -> [LimitWindow] {
         guard let data = json.data(using: .utf8),
@@ -52,7 +62,7 @@ enum PerplexityUsage {
            (detail["kind"] as? String) == "exact",
            let remaining = (detail["remaining"] as? NSNumber)?.intValue {
             windows.append(
-                LimitWindow(id: "free_queries", label: String(localized: "Free queries"), remaining: remaining)
+                LimitWindow(id: "free_queries", label: L10n.t("Free queries"), remaining: remaining)
             )
         }
 

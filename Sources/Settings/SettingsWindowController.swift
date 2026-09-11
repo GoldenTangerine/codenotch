@@ -32,6 +32,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let usageStore: UsageStore?
     private let hooks: HookSettings?
     private let codeSwitch: CodeSwitchBridge?
+    private let ollamaRelay: OllamaActivityRelay?
+    private let lmstudioMetrics: LMStudioMetrics?
+    private let resetPosition: () -> Void
 
     init(preferences: Preferences,
          providers: @escaping () -> [ProviderSummary],
@@ -40,12 +43,18 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
          signIn: @escaping (String) -> Bool,
          switchAccount: @escaping (String) -> Bool,
          retry: @escaping (String) -> Void,
-         catalog: QueryCatalog? = nil, usageStore: UsageStore? = nil, hooks: HookSettings? = nil,
-         codeSwitch: CodeSwitchBridge? = nil) {
-        self.codeSwitch = codeSwitch
-        self.hooks = hooks
-        self.catalog = catalog
+         resetPosition: @escaping () -> Void = {},
+         catalog: QueryCatalog? = nil, hooks: HookSettings? = nil, codeSwitch: CodeSwitchBridge? = nil,
+         usageStore: UsageStore? = nil,
+         ollamaRelay: OllamaActivityRelay? = nil,
+         lmstudioMetrics: LMStudioMetrics? = nil) {
+        self.ollamaRelay = ollamaRelay
+        self.lmstudioMetrics = lmstudioMetrics
         self.usageStore = usageStore
+        self.resetPosition = resetPosition
+        self.catalog = catalog
+        self.hooks = hooks
+        self.codeSwitch = codeSwitch
         self.switchAccount = switchAccount
         self.retry = retry
         self.updater = updater
@@ -127,6 +136,26 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         window.setFrameAutosaveName(autosaveName)
     }
 
+    /// Put the window away if it is already in front, otherwise bring it up.
+    ///
+    /// Only the notch's own gear calls this. A menu item reading "Settings…"
+    /// and the first-launch introduction both `show()` instead, because a
+    /// command that names a destination should go there rather than toggle.
+    ///
+    /// The condition is *key*, not merely visible. Clicking the gear while the
+    /// window is open but behind something else should fetch it forward — the
+    /// intent there is plainly "show me that", and closing it would be the one
+    /// thing the click could not have meant.
+    func toggle() {
+        if let window, window.isVisible, window.isKeyWindow {
+            // `isReleasedWhenClosed` is false, so this hides it and keeps the
+            // window itself for the next `show()`.
+            window.close()
+            return
+        }
+        show()
+    }
+
     func show() {
         if let window {
             // Re-centered every time, not only at creation: a window is
@@ -155,7 +184,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         )
         // Kept for the Window menu and Mission Control; hidden from the bar
         // itself, where the sidebar already names what you are looking at.
-        window.title = String(localized: "Codenotch Settings")
+        window.title = L10n.t("Codenotch Settings")
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         // A floating rounded panel rather than a square window. The rounded
@@ -174,7 +203,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                                    signIn: signIn,
                                    switchAccount: switchAccount,
                                    retry: retry,
-                                   updater: updater, catalog: catalog, usageStore: usageStore, hooks: hooks, codeSwitch: codeSwitch)
+                                   resetPosition: resetPosition,
+                                   updater: updater,
+                                   ollamaRelay: ollamaRelay, lmstudioMetrics: lmstudioMetrics,
+                                   catalog: catalog, usageStore: usageStore, hooks: hooks, codeSwitch: codeSwitch)
         )
         Self.configureResizing(window)
         window.isReleasedWhenClosed = false

@@ -99,6 +99,9 @@ enum NotchGeometry {
     /// near a right-edge notch, and centring on the visible area would shift
     /// that notch up and down the screen every time the Dock hid itself, for no
     /// reason anyone could see.
+    /// Anchor to the physical display edge, even when the Dock or menu bar
+    /// reserves part of the desktop. Showing or hiding either must not move
+    /// a position the user chose.
     ///
     /// The rect is rounded out to whole points on purpose. AppKit rounds window
     /// frames anyway, and if it does the rounding the panel ends up a fraction
@@ -125,10 +128,12 @@ enum NotchGeometry {
         // instead — `panelSize` shrunk by this on each end — lets it travel
         // almost the full edge; the padding is free to run past the bezel,
         // since nothing is drawn there until a card actually opens.
-        slack: CGFloat = 0
+        slack: CGFloat = 0,
+        // The settings handle hangs past the body's trailing end. That part
+        // of the padding must stay on screen even when the hover card may not.
+        trailingExtent: CGFloat = 0
     ) -> CGRect {
         let full = screen.frameValue
-        let usable = screen.visibleFrameValue
         let width = panelSize.width.rounded(.up)
         let height = panelSize.height.rounded(.up)
 
@@ -136,28 +141,20 @@ enum NotchGeometry {
         switch edge {
         case .right:
             let y = clamp(full.midY - height / 2 - alongOffset,
-                          min: full.minY - slack, max: full.maxY - height + slack)
-            origin = CGPoint(x: usable.maxX - width, y: y)
+                          min: full.minY - slack + trailingExtent, max: full.maxY - height + slack)
+            origin = CGPoint(x: full.maxX - width, y: y)
         case .left:
             let y = clamp(full.midY - height / 2 - alongOffset,
-                          min: full.minY - slack, max: full.maxY - height + slack)
-            origin = CGPoint(x: usable.minX, y: y)
+                          min: full.minY - slack + trailingExtent, max: full.maxY - height + slack)
+            origin = CGPoint(x: full.minX, y: y)
         case .top:
-            // AppKit's y grows upward, so the top edge is `maxY`.
-            //
-            // On a Mac with a notch of its own, this one goes all the way up to
-            // meet it — past the menu bar — so the two read as a single shape
-            // rather than as a bar parked underneath the hardware. Where there
-            // is nothing to merge with, covering the menu bar buys nothing, so
-            // it stays below it.
-            let top = screen.hardwareNotch == nil ? usable.maxY : full.maxY
             let x = clamp(full.midX - width / 2 + alongOffset,
-                          min: full.minX - slack, max: full.maxX - width + slack)
-            origin = CGPoint(x: x, y: top - height)
+                          min: full.minX - slack, max: full.maxX - width + slack - trailingExtent)
+            origin = CGPoint(x: x, y: full.maxY - height)
         case .bottom:
             let x = clamp(full.midX - width / 2 + alongOffset,
-                          min: full.minX - slack, max: full.maxX - width + slack)
-            origin = CGPoint(x: x, y: usable.minY)
+                          min: full.minX - slack, max: full.maxX - width + slack - trailingExtent)
+            origin = CGPoint(x: x, y: full.minY)
         }
 
         return CGRect(

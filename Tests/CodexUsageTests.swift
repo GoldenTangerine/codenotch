@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 CodexUsageTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/CodexUsageTests.swift
+ */
 import SQLite3
 import XCTest
 @testable import Codenotch
@@ -17,6 +26,7 @@ final class CodexUsageTests: XCTestCase {
          "code_review_rate_limit":{"primary_window":{"used_percent":90,"limit_window_seconds":604800}},
          "credits":{"balance":"100"},"model_usage":{"spark":99}}
         """)
+        XCTAssertEqual(result.map(\.duration), [18000, 604800])
         XCTAssertEqual(result.map(\.id), ["primary", "secondary"])
         XCTAssertEqual(result.map(\.label), ["5h limit", "Weekly limit"])
         XCTAssertEqual(result.map(\.usedFraction), [0.25, 0.10])
@@ -36,8 +46,26 @@ final class CodexUsageTests: XCTestCase {
          "plan_type":"free"}
         """)
         XCTAssertEqual(result.map(\.id), ["primary"])
+        XCTAssertEqual(CodexUsage.plan(from: Data("""
+        {"rate_limit":{"primary_window":{"used_percent":16,"limit_window_seconds":2592000}},
+         "plan_type":"free"}
+        """.utf8)), "free")
         XCTAssertEqual(result.first?.label, "Monthly limit")
         XCTAssertEqual(result.first?.usedFraction ?? -1, 0.16, accuracy: 0.0001)
+    }
+
+    func testPaceUsesTheReportedCycleRegardlessOfPlanName() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        for seconds in [18000, 604800, 2592000] {
+            let result = try CodexUsage.windows(from: Data("""
+            {"rate_limit":{"primary_window":{"used_percent":80,
+            "limit_window_seconds":\(seconds),"reset_after_seconds":\(seconds / 2)}}}
+            """.utf8), now: now)
+            let window = try XCTUnwrap(result.first)
+            XCTAssertEqual(window.duration, Double(seconds))
+            XCTAssertEqual(try XCTUnwrap(window.usagePace(now: now)).percentagePoints, 30,
+                           accuracy: 0.00001)
+        }
     }
 
     /// A duration that is none of the named buckets still gets a usable label
@@ -66,6 +94,7 @@ final class CodexUsageTests: XCTestCase {
         "primary_window":{"used_percent":8,"limit_window_seconds":604800},
         "secondary_window":{"used_percent":0,"limit_window_seconds":18000,"reset_after_seconds":120}}}
         """)
+        XCTAssertEqual(result.map(\.duration), [604800, 18000])
         XCTAssertEqual(result.map(\.id), ["primary", "secondary"])
         XCTAssertEqual(result.first?.usedFraction, 0.08)
         XCTAssertNil(result.first?.resetsAt)
@@ -110,6 +139,135 @@ final class CodexUsageTests: XCTestCase {
           "secondary_window":null}}
         """))
     }
+
+    func testDecodesProfileTokenUsageAndBuildsAThirtyDaySeries() throws {
+        let json = """
+        {"profile":{"display_name":"Test"},
+         "stats":{"lifetime_tokens":1200,"peak_daily_tokens":300,
+         "longest_running_turn_sec":4020,"current_streak_days":2,"longest_streak_days":11,
+         "daily_usage_buckets":[
+           {"start_date":"2026-08-12","tokens":100},
+           {"start_date":"2026-09-03","tokens":200},
+           {"start_date":"2026-09-08","tokens":300}
+         ]}}
+        """
+        let usage = try CodexUsage.profileUsage(from: Data(json.utf8))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 9, day: 9))!
+
+        XCTAssertEqual(usage.last30Days(now: now, calendar: calendar).count, 30)
+        XCTAssertEqual(usage.last30Days(now: now, calendar: calendar).first?.startDate,
+                       "2026-08-11")
+        XCTAssertEqual(usage.usageInLast30Days(now: now, calendar: calendar), 600)
+        XCTAssertEqual(usage.peakDailyTokens, 300)
+        XCTAssertEqual(usage.summary?.lifetimeTokens, 1200)
+        XCTAssertEqual(usage.summary?.peakDailyTokens, 300)
+        XCTAssertEqual(usage.summary?.longestRunningTurnSeconds, 4020)
+        XCTAssertEqual(usage.summary?.currentStreakDays, 2)
+        XCTAssertEqual(usage.summary?.longestStreakDays, 11)
+        XCTAssertEqual(usage.usageToday(now: now, calendar: calendar), nil,
+                       "a missing current-day bucket should be shown as Pending")
+    }
+
+    /// `/wham/rate-limit-reset-credits` reports how many unused resets remain
+    /// and when the next one expires. The count is its own field because the
+    /// credits array can be truncated.
+    func testResetCreditsReadsAvailableCountAndSoonestExpiry() throws {
+        let json = """
+        {"credits":[
+          {"id":"later","reset_type":"rate_limit","status":"available",
+           "granted_at":"2026-09-01T12:00:00Z",
+           "expires_at":"2026-09-20T12:00:00.250Z",
+           "title":"Reset","description":"Unused reset","extra":true},
+          {"id":"spent","reset_type":"rate_limit","status":"redeemed",
+           "granted_at":"2026-08-01T00:00:00Z",
+           "expires_at":"2026-09-12T00:00:00Z"},
+          {"id":"sooner","reset_type":"rate_limit","status":"available",
+           "granted_at":"2026-09-02T00:00:00Z",
+           "expires_at":"2026-09-15T08:00:00Z"}
+         ],
+         "available_count":2,
+         "server_time":"2026-09-10T00:00:00Z"}
+        """
+        let result = try CodexUsage.resetCredits(from: Data(json.utf8))
+        XCTAssertEqual(result.availableCount, 2)
+        XCTAssertEqual(result.credits.map(\.id), ["later", "spent", "sooner"])
+        XCTAssertEqual(result.available.map(\.id), ["sooner", "later"])
+        XCTAssertEqual(result.nextExpiry, ISO8601DateFormatter().date(from: "2026-09-15T08:00:00Z"))
+
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        XCTAssertEqual(result.available.last?.expiresAt,
+                       fractional.date(from: "2026-09-20T12:00:00.250Z"))
+    }
+
+    func testResetCreditsTrustsAvailableCountWhenTheArrayIsTruncated() throws {
+        let result = try CodexUsage.resetCredits(from: Data("""
+        {"available_count":3,"credits":[
+          {"id":"only","status":"available","expires_at":"2026-09-18T00:00:00Z"}
+        ]}
+        """.utf8))
+        XCTAssertEqual(result.availableCount, 3)
+        XCTAssertEqual(result.credits.map(\.id), ["only"])
+        XCTAssertEqual(result.available.count, 1)
+        XCTAssertEqual(result.nextExpiry, ISO8601DateFormatter().date(from: "2026-09-18T00:00:00Z"))
+    }
+
+    func testResetCreditsCountsAvailableCreditsWhenThePayloadOmitsTheCount() throws {
+        let result = try CodexUsage.resetCredits(from: Data("""
+        {"credits":[
+          {"id":"a","status":"available","expires_at":"2026-09-18T00:00:00Z"},
+          {"id":"b","status":"redeemed","expires_at":"2026-09-10T00:00:00Z"}
+        ]}
+        """.utf8))
+        XCTAssertEqual(result.availableCount, 1)
+        XCTAssertEqual(result.available.map(\.id), ["a"])
+    }
+
+    /// A non-object entry is skipped; an unreadable date becomes no expiry.
+    /// None of that is a reason to fail the usage fetch.
+    func testResetCreditsSkipsMalformedCreditsRatherThanFailing() throws {
+        let result = try CodexUsage.resetCredits(from: Data("""
+        {"credits":[
+          "nope",
+          {"id":"ok","status":"available","expires_at":null}
+        ],"available_count":1}
+        """.utf8))
+        XCTAssertEqual(result.credits.map(\.id), ["ok"])
+        XCTAssertNil(result.credits.first?.expiresAt)
+        XCTAssertEqual(result.availableCount, 1)
+        XCTAssertNil(result.nextExpiry)
+    }
+
+    func testResetCreditsThrowsOnlyOnInvalidJSON() throws {
+        XCTAssertThrowsError(try CodexUsage.resetCredits(from: Data("not-json".utf8))) { error in
+            guard case UsageProviderError.badResponse = error else {
+                return XCTFail("expected badResponse, got \(error)")
+            }
+        }
+        XCTAssertEqual(try CodexUsage.resetCredits(from: Data("{}".utf8)).availableCount, 0)
+        XCTAssertEqual(try CodexUsage.resetCredits(from: Data("[]".utf8)).credits, [])
+    }
+
+    func testAccountUsageCardGetsRoomForTheActivitySection() {
+        let plain = NotchLayout.cardHeight(windowCount: 2)
+        let withTokens = NotchLayout.cardHeight(windowCount: 2, hasTokenUsage: true)
+
+        XCTAssertGreaterThan(withTokens, plain)
+        XCTAssertEqual(
+            withTokens - plain,
+            NotchLayout.codexUsageTop + NotchLayout.hairline + NotchLayout.blockSpacing
+                + NotchLayout.codexMetricTop + NotchLayout.codexMetricHeight
+                + NotchLayout.codexMetricBottom
+                + NotchLayout.hairline
+                + 2 * NotchLayout.cardBodyLineHeight
+                + NotchLayout.codexUsageRowGap
+                + NotchLayout.codexChartTop + NotchLayout.codexChartHeight,
+            accuracy: 0.001
+        )
+    }
+
 }
 
 /// The activity signal is a heuristic — a rollout written moments ago — so what
@@ -136,13 +294,24 @@ final class CodexActivityTests: XCTestCase {
     }
 
     func testTheBoundaryIsInclusive() {
-        XCTAssertNotNil(CodexActivityMonitor.session(
+        XCTAssertEqual(CodexActivityMonitor.session(
             id: "codex.x", name: "Codex",
             modified: now.addingTimeInterval(-8), staleAfter: 8, now: now
-        ))
+        )?.state, .busy)
+
+        XCTAssertEqual(CodexActivityMonitor.session(
+            id: "codex.x", name: "Codex",
+            modified: now.addingTimeInterval(-15), staleAfter: 8, now: now
+        )?.state, .success)
+
+        XCTAssertEqual(CodexActivityMonitor.session(
+            id: "codex.x", name: "Codex",
+            modified: now.addingTimeInterval(-20), staleAfter: 8, now: now
+        )?.state, .idle)
+
         XCTAssertNil(CodexActivityMonitor.session(
             id: "codex.x", name: "Codex",
-            modified: now.addingTimeInterval(-8.1), staleAfter: 8, now: now
+            modified: now.addingTimeInterval(-24), staleAfter: 8, now: now
         ))
     }
 }
@@ -243,6 +412,24 @@ final class UsageBlockTests: XCTestCase {
         XCTAssertFalse(text.contains("min"), "a countdown, not the time it lifts")
     }
 
+    /// The clock keeps the locale's hour cycle, as the reset line does: a
+    /// 24-hour region reads "Paused until 16:13", not "4:13 PM".
+    func testTheClockFollowsTheLocalesHourCycle() {
+        let now = Date(timeIntervalSince1970: 1_788_000_000)
+        let block = UsageBlock(reason: "Paused", resetsAt: now.addingTimeInterval(90 * 60))
+        for id in ["fr_FR", "de_DE", "ja_JP", "en_GB"] {
+            let locale = Locale(identifier: id)
+            let text = block.summary(now: now, locale: locale)
+            let symbols = DateFormatter()
+            symbols.locale = locale
+            XCTAssertFalse(text.contains(symbols.amSymbol) || text.contains(symbols.pmSymbol),
+                           "\(id) got a 12-hour clock: \(text)")
+        }
+        let american = block.summary(now: now, locale: Locale(identifier: "en_US"))
+        XCTAssertTrue(american.contains("AM") || american.contains("PM"),
+                      "en_US lost its AM/PM: \(american)")
+    }
+
     /// With no reset time there is nothing to promise, so it says only what it
     /// knows.
     func testWithoutAResetItSaysOnlyTheReason() {
@@ -277,4 +464,3 @@ final class UsageBlockTests: XCTestCase {
         )
     }
 }
-

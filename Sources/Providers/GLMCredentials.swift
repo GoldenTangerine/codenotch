@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 GLMCredentials.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/GLMCredentials.swift
+ */
 import Foundation
 
 /// The Z.ai key behind a GLM Coding Plan, borrowed from whichever tool holds
@@ -135,7 +144,7 @@ enum GLMCredentials {
     // MARK: OpenCode
 
     /// The provider names OpenCode's own sign-in writes, most specific first.
-    private static let openCodeProviderIDs = ["zai-coding-plan", "zai", "z-ai", "z.ai", "zhipu", "zhipuai"]
+    private static let openCodeProviderIDs = ["zai-coding-plan", "zai", "z-ai", "z.ai", "glm", "zhipu", "zhipuai"]
 
     static func openCode(_ url: URL) -> Credential? {
         guard let root = dictionary(at: url) else { return nil }

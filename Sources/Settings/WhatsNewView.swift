@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 WhatsNewView.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Settings/WhatsNewView.swift
+ */
 import AppKit
 import SwiftUI
 
@@ -18,7 +27,7 @@ struct WhatsNewView: View {
             Divider()
             HStack {
                 Spacer(minLength: 0)
-                Button("Continue", action: onContinue)
+                Button(L10n.t("Continue"), action: onContinue)
                     .keyboardShortcut(.defaultAction)
             }
             .padding(.horizontal, 24)
@@ -35,10 +44,10 @@ struct WhatsNewView: View {
                     .frame(width: 60, height: 60)
                     .padding(.bottom, 8)
             }
-            Text("What's new in Codenotch")
+            Text(L10n.t("What's new in Codenotch"))
                 .font(.system(size: 19, weight: .semibold))
                 .multilineTextAlignment(.center)
-            Text("Version \(note.version)")
+            Text(L10n.t("Version \(note.version)"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             Text(note.headline)

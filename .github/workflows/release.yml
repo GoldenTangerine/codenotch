@@ -5,6 +5,9 @@
 # @Date: 2026-09-08 13:45:00
 # @LastEditTime: 2026-09-08 13:45:00
 # @FilePath: .github/workflows/release.yml
+# Current policy: every release requires SPARKLE_EDDSA_KEY and a real signed
+# appcast. RELEASE_SIGNING only enables optional Apple signing/notarization.
+# The original track notes below describe the earlier policy, not this guard.
 # Release pipeline: push a version tag (v1.5.1, bumping the patch digit each
 # time) and this builds and publishes the release.
 #
@@ -60,6 +63,15 @@ jobs:
         with:
           # The build number is the commit count, so history has to be whole.
           fetch-depth: 0
+
+      - name: Require Sparkle update signing
+        env:
+          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+        run: |
+          if [ -z "$SPARKLE_EDDSA_KEY" ]; then
+            echo "Set the SPARKLE_EDDSA_KEY repository secret. See CONTRIBUTING.md. Apple signing is optional." >&2
+            exit 1
+          fi
 
       - name: Read the version from the tag
         id: version
@@ -179,7 +191,6 @@ jobs:
           make verify-release
 
       - name: Build the appcast
-        if: env.SIGNED == 'true'
         env:
           SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
         run: |
@@ -197,8 +208,12 @@ jobs:
             "$SPARKLE_BIN/generate_appcast" site \
             --download-url-prefix "https://github.com/GoldenTangerine/codenotch/releases/download/$GITHUB_REF_NAME/" --ed-key-file -
 
-      - name: Create the GitHub Release (signed)
-        if: env.SIGNED == 'true'
+      - name: Validate the update feed
+        run: |
+          python3 Scripts/promote-release.py --validate "$GITHUB_REF_NAME" site/appcast.xml "$DMG" \
+            build/release/Codenotch.xcarchive/Products/Applications/Codenotch.app/Contents/Info.plist
+
+      - name: Create the GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
@@ -207,19 +222,8 @@ jobs:
           --title "Codenotch $GITHUB_REF_NAME"
           --notes-file "$RUNNER_TEMP/release-notes.md"
 
-      - name: Create the GitHub Release (unsigned)
-        if: env.SIGNED != 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: >
-          gh release create "$GITHUB_REF_NAME" "$DMG"
-          --repo GoldenTangerine/codenotch --latest=false
-          --title "Codenotch $GITHUB_REF_NAME"
-          --notes-file "$RUNNER_TEMP/release-notes.md"
-
       - name: Promote the newest stable release
         id: latest
-        if: env.SIGNED == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -228,7 +232,7 @@ jobs:
           echo "promoted=$promoted" >> "$GITHUB_OUTPUT"
 
       - name: Publish the appcast and download to Pages
-        if: env.SIGNED == 'true' && steps.latest.outputs.promoted == 'true'
+        if: steps.latest.outputs.promoted == 'true'
         run: |
           set -euo pipefail
           # The job checked out the tag, so HEAD is detached — the site update

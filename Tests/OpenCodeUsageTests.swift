@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 OpenCodeUsageTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/OpenCodeUsageTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -14,6 +23,7 @@ final class OpenCodeUsageTests: XCTestCase {
 
     func testReadsAllThreeWindows() throws {
         let w = try OpenCodeUsage.windows(fromJSON: payload)
+        XCTAssertEqual(w.map(\.duration), [18000, 604800, 30 * 86400])
         XCTAssertEqual(w.map(\.id), ["rolling", "weekly", "monthly"])
         XCTAssertEqual(w.map(\.label), ["5h limit", "Weekly limit", "Monthly limit"])
         XCTAssertTrue(w.allSatisfy { ($0.usedFraction ?? -1) == 0 })

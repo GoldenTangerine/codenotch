@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 ClaudeCredentials.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/ClaudeCredentials.swift
+ */
 import Foundation
 import Security
 
@@ -42,21 +51,30 @@ struct ClaudeCredentials {
     /// authorization to read — only this second, targeted fetch of the
     /// winner's actual data does, which is why it costs the same single prompt
     /// as before, per profile.
-    static func read(services: [String]) throws -> ClaudeCredentials {
+    /// `interactive` is whether this read may raise the password dialogue.
+    /// Only a person clicking "Allow access…" passes true — see
+    /// `ClaudeKeychain.askAgain`. Everything on a timer passes false.
+    static func read(services: [String], interactive: Bool = false) throws -> ClaudeCredentials {
         guard let winner = KeychainItem.newest(services: services) else {
             Log.usage.error("keychain read failed: no item under \(services.joined(separator: ", "), privacy: .public)")
             throw UsageProviderError.needsAuth
         }
 
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching([
-            kSecClass: kSecClassGenericPassword,
-            kSecValuePersistentRef: winner.persistentRef,
-            kSecReturnData: true,
-            kSecMatchLimit: kSecMatchLimitOne
-        ] as CFDictionary, &item)
+        // Never prompts unless a person asked — see `KeychainSecret.read`. A
+        // refusal is retried through `/usr/bin/security` under the account
+        // Claude Code files these items with, which is this user's.
+        let (status, item) = KeychainSecret.read(
+            query: [
+                kSecClass: kSecClassGenericPassword,
+                kSecValuePersistentRef: winner.persistentRef,
+                kSecReturnData: true,
+                kSecMatchLimit: kSecMatchLimitOne
+            ],
+            interactive: interactive,
+            rescue: (service: winner.service, account: NSUserName())
+        )
 
-        guard status == errSecSuccess, let data = item as? Data else {
+        guard status == errSecSuccess, let data = item else {
             // The status matters: "not found" means the item was deleted
             // between enumeration and this read — Claude Code rotating at the
             // exact wrong instant — whereas -25308 (interaction not allowed) or
@@ -81,6 +99,12 @@ struct ClaudeCredentials {
                 : UsageProviderError.needsAuth
         }
 
+        return try decode(data, services: services)
+    }
+
+    /// Turn the stored JSON into a credential. Shared by both readers, so a
+    /// rescued read is judged exactly as a direct one is.
+    private static func decode(_ data: Data, services: [String]) throws -> ClaudeCredentials {
         struct Payload: Decodable {
             struct OAuth: Decodable {
                 let accessToken: String
@@ -96,12 +120,25 @@ struct ClaudeCredentials {
             throw UsageProviderError.needsAuth
         }
 
+        // A present-but-emptied credential is a real state, not a theoretical
+        // one: Claude Code rewrites this item with `accessToken: ""`, no
+        // refresh token and `expiresAt: 0`. It decodes perfectly and is worth
+        // nothing. Left alone it becomes `Bearer ` on the wire and a puzzling
+        // 401. Reporting it as `needsAuth` is worse still — that means "never
+        // signed in", which makes `supersedesHistory` erase a perfectly good
+        // archived reading every time the owning app does this.
+        guard !payload.claudeAiOauth.accessToken.isEmpty else {
+            Log.usage.error("\(services.joined(separator: ", "), privacy: .public) holds an emptied credential — needs a fresh sign-in")
+            throw UsageProviderError.signedOutByOwner
+        }
+
         return ClaudeCredentials(
             accessToken: payload.claudeAiOauth.accessToken,
             expiresAt: Date(timeIntervalSince1970: payload.claudeAiOauth.expiresAt / 1000),
             subscriptionType: payload.claudeAiOauth.subscriptionType
         )
     }
+
 
     /// Which keychain refusal this was. "Not found" means Claude Code has never
     /// signed in; -25308 or -128 mean the item exists but this app is not on its
@@ -126,7 +163,14 @@ struct ClaudeCredentials {
     /// would be needed. Security doesn't export a named constant for it, so
     /// the raw value is what there is to check.
     static func wasTransient(_ status: OSStatus) -> Bool {
-        status == -25320   // errSecInDarkWake
+        status == -25320       // errSecInDarkWake
+            // errAuthorizationInternal. What a refusal looks like when macOS
+            // decided a prompt was needed and there was no way to show one —
+            // observed five seconds before a clamshell sleep. The credential is
+            // untouched, so this is "not right now", not "signed out"; left to
+            // fall through it read as `needsAuth` and showed a valid account
+            // as signed out for 2h42m.
+            || status == -60008
     }
 
     static func explain(_ status: OSStatus) -> String {
@@ -152,10 +196,33 @@ final class ClaudeKeychain: @unchecked Sendable {
     /// Read once, then held until the token expires — see `CredentialCache`.
     /// Claude Code rotates this roughly hourly, so this is about one keychain
     /// read an hour instead of two a minute.
-    private let cache = CredentialCache<ClaudeCredentials> { $0.isExpired }
+    ///
+    /// Only `.accessDenied` is permanent — a real "Deny" on the ACL prompt.
+    /// Everything else `ClaudeCredentials.read` can throw, `needsAuth`
+    /// included, gets retried after the cache's own backoff even while the
+    /// item's `mdat` has not moved: found on a real machine, a single keychain
+    /// read landing during `errSecInDarkWake` — the Mac in a brief low-power
+    /// wake with no UI possible, nothing to do with the credential at all —
+    /// was cached as `needsAuth` and replayed for the next three hours, since
+    /// nothing else ever touched the item again once it held a valid token.
+    private let cache = CredentialCache<ClaudeCredentials>(
+        isPermanentFailure: { if case UsageProviderError.accessDenied = $0 { return true }; return false },
+        isExpired: { $0.isExpired }
+    )
 
-    init(services: [String]) {
+    private let reader: (_ services: [String], _ interactive: Bool) throws -> ClaudeCredentials
+    private let prompt: PromptPermission
+
+    /// How long an unanswered "Allow access…" stays good for.
+    static let promptWindow = PromptPermission.window
+
+    init(services: [String],
+         now: @escaping () -> Date = Date.init,
+         reader: @escaping (_ services: [String], _ interactive: Bool) throws -> ClaudeCredentials
+            = { try ClaudeCredentials.read(services: $0, interactive: $1) }) {
         self.services = services
+        self.prompt = PromptPermission(now: now)
+        self.reader = reader
     }
 
     convenience init(profile: ClaudeProfile) {
@@ -174,7 +241,7 @@ final class ClaudeKeychain: @unchecked Sendable {
     func load() throws -> ClaudeCredentials {
         try cache.value(
             itemModifiedAt: { KeychainItem.modifiedAt(services: services) },
-            reload: { try ClaudeCredentials.read(services: services) }
+            reload: { [self] in try reader(services, prompt.take()) }
         )
     }
 
@@ -182,4 +249,13 @@ final class ClaudeKeychain: @unchecked Sendable {
     /// different account replaces the keychain item, and the copy in hand is
     /// then wrong despite not having expired.
     func forgetCached() { cache.forget() }
+
+    /// A person asked macOS for this login again: let the next read show the
+    /// dialogue. The only caller that may — `forgetCached` is also what the
+    /// server rejecting a token and the token refresher call, and neither of
+    /// those is someone clicking a button.
+    func askAgain() {
+        prompt.grant()
+        cache.forget()
+    }
 }

@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 OpenCodeProvider.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/OpenCodeProvider.swift
+ */
 import Foundation
 import os
 
@@ -33,7 +42,7 @@ actor OpenCodeProvider: UsageProvider {
     }
 
     nonisolated var signInRoute: SignInRoute {
-        .guidance(String(localized: "Usage rides on the opencode-go key OpenCode stores on sign-in — connect Go inside OpenCode (`opencode auth login`) and the notch reads it."))
+        .guidance(L10n.t("Usage rides on the opencode-go key OpenCode stores on sign-in — connect Go inside OpenCode (`opencode auth login`) and the notch reads it."))
     }
 
     nonisolated func forgetCachedCredential() {
@@ -82,7 +91,9 @@ actor OpenCodeProvider: UsageProvider {
                 fidelity: .official,
                 status: .ok,
                 windows: read,
-                headlineID: "rolling"
+                headlineID: "rolling",
+                weeklyID: "weekly",
+                plan: "Go"
             )
         } catch UsageProviderError.rateLimited(let retryAfter) {
             // Bookkeeping where the answer was, not down in `fetch`: the wait
@@ -113,7 +124,7 @@ actor OpenCodeProvider: UsageProvider {
         // A valid key that is not entitled to Go: readable, but metering
         // nothing — not an error, and it must not be shown as one.
         if status == 403 {
-            throw UsageProviderError.nothingMetered(String(localized: "No OpenCode Go subscription on this key"))
+            throw UsageProviderError.nothingMetered(L10n.t("No OpenCode Go subscription on this key"))
         }
         if status == 429 {
             throw UsageProviderError.rateLimited(

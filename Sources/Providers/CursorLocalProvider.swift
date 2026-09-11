@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 CursorLocalProvider.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/CursorLocalProvider.swift
+ */
 import AppKit
 import Foundation
 import os
@@ -73,7 +82,8 @@ actor CursorLocalProvider: UsageProvider {
             fidelity: .official,
             status: .ok,
             windows: windows,
-            headlineID: CursorUsage.headlineID(in: windows)
+            headlineID: CursorUsage.headlineID(in: windows),
+            plan: CursorUsage.plan(fromJSON: body) ?? account()?.plan?.nonEmptyPlan
         )
     }
 }

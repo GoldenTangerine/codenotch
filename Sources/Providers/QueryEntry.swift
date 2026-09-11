@@ -35,7 +35,7 @@ struct ProviderIcon: Codable, Equatable {
 
 struct QueryEntry: Codable, Equatable, Identifiable {
     var id = UUID().uuidString
-    var name = String(localized: "New Provider")
+    var name = L10n.t("New Provider")
     var icon = ProviderIcon()
     var enabled = true
     var mode: QueryMode = .manual
@@ -90,9 +90,9 @@ enum QueryError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalid(let message): return NSLocalizedString(message, comment: "Query validation error")
-        case .keychain(let status): return String(localized: "Keychain error (\(status)).")
-        case .script: return String(localized: "Script failed. Check request and extractor.")
-        case .timeout: return String(localized: "Query timed out.")
+        case .keychain(let status): return L10n.t("Keychain error (\(status)).")
+        case .script: return L10n.t("Script failed. Check request and extractor.")
+        case .timeout: return L10n.t("Query timed out.")
         }
     }
 }
@@ -166,7 +166,7 @@ final class QueryCatalog: ObservableObject {
                 entries = try JSONDecoder().decode([QueryEntry].self, from: data)
             } catch {
                 entries = []
-                problem = String(localized: "Saved provider configuration could not be read.")
+                problem = L10n.t("Saved provider configuration could not be read.")
             }
         } else {
             entries = providers.map { provider in
@@ -179,6 +179,26 @@ final class QueryCatalog: ObservableObject {
                 entry.nativeID = provider.id
                 return entry
             }
+            defaults.set(try? JSONEncoder().encode(entries), forKey: storageKey)
+        }
+        if problem == nil {
+            // Import newly supported sources once; a later deletion must stay deleted.
+            let key = "upstreamAutomaticProviders.v1"
+            let known = Set(defaults.stringArray(forKey: key) ?? [])
+            let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio"]
+            for provider in providers where !known.contains(provider.id)
+                && (introduced.contains(provider.id) || CodexProfile.slug(fromProviderID: provider.id) != nil) {
+                guard !entries.contains(where: { $0.usesLocalAccount && $0.nativeID == provider.id }) else { continue }
+                var entry = QueryEntry()
+                entry.id = provider.id
+                entry.name = provider.displayName
+                entry.icon.value = provider.glyph.rawValue
+                entry.enabled = !disconnected.contains(provider.id)
+                entry.mode = .automatic
+                entry.nativeID = provider.id
+                entries.append(entry)
+            }
+            defaults.set(Array(known.union(providers.map(\.id))).sorted(), forKey: key)
             defaults.set(try? JSONEncoder().encode(entries), forKey: storageKey)
         }
     }
@@ -210,6 +230,7 @@ final class QueryCatalog: ObservableObject {
 
     func setEnabled(_ enabled: Bool, id: String) {
         guard let index = entries.firstIndex(where: { $0.id == id }) else { return }
+        guard entries[index].enabled != enabled else { return }
         entries[index].enabled = enabled
         persist([])
     }

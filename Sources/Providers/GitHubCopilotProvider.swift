@@ -27,7 +27,7 @@ actor GitHubCopilotProvider: UsageProvider {
     }
 
     nonisolated var signInRoute: SignInRoute {
-        .guidance(String(localized: "Sign in with GitHub CLI using `gh auth login`, then enable GitHub Copilot."))
+        .guidance(L10n.t("Sign in with GitHub CLI using `gh auth login`, then enable GitHub Copilot."))
     }
 
     nonisolated func account() -> ProviderAccount? {
@@ -64,7 +64,8 @@ actor GitHubCopilotProvider: UsageProvider {
             status: .ok,
             windows: windows,
             headlineID: windows.contains { $0.id == "premium_interactions" }
-                ? "premium_interactions" : windows.first?.id
+                ? "premium_interactions" : windows.first?.id,
+            plan: GitHubCopilotUsage.plan(from: data)
         )
     }
 }
@@ -176,6 +177,13 @@ struct GitHubCopilotCredentials: Sendable {
 enum GitHubCopilotUsage {
     private static let order = ["premium_interactions", "chat", "completions"]
 
+    static func plan(from data: Data) -> String? {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return nil
+        }
+        return ((root["copilot_plan"] as? String) ?? (root["plan"] as? String))?.nonEmptyPlan
+    }
+
     static func windows(from data: Data) throws -> [LimitWindow] {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let quotas = root["quota_snapshots"] as? [String: Any]
@@ -187,7 +195,7 @@ enum GitHubCopilotUsage {
             return window(id: key, quota: quota, root: root)
         }
         guard !windows.isEmpty else {
-            throw UsageProviderError.nothingMetered(String(localized: "GitHub Copilot reported no metered quotas"))
+            throw UsageProviderError.nothingMetered(L10n.t("GitHub Copilot reported no metered quotas"))
         }
         return windows
     }
@@ -205,7 +213,8 @@ enum GitHubCopilotUsage {
         if let entitlement, entitlement > 0 {
             let consumed = used ?? max(0, entitlement - (remaining ?? entitlement))
             return LimitWindow(id: id, label: label(for: id),
-                               usedFraction: max(0, consumed / entitlement), resetsAt: reset)
+                               usedFraction: max(0, consumed / entitlement), resetsAt: reset,
+                               duration: monthlyDuration(endingAt: reset))
         }
         if let remaining, remaining >= 0, used == nil {
             return remaining == 0 && entitlement == 0 ? nil
@@ -217,6 +226,18 @@ enum GitHubCopilotUsage {
                                used: Int(used.rounded()), resetsAt: reset)
         }
         return nil
+    }
+
+    /// Copilot allowances reset at midnight UTC on the first of each month.
+    private static func monthlyDuration(endingAt reset: Date?) -> TimeInterval? {
+        guard let reset else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let parts = calendar.dateComponents([.day, .hour, .minute, .second], from: reset)
+        guard parts.day == 1, parts.hour == 0, parts.minute == 0, parts.second == 0,
+              let previousMonth = calendar.date(byAdding: .second, value: -1, to: reset)
+        else { return nil }
+        return calendar.dateInterval(of: .month, for: previousMonth)?.duration
     }
 
     private static func number(_ value: Any?) -> Double? {
@@ -237,9 +258,9 @@ enum GitHubCopilotUsage {
 
     private static func label(for id: String) -> String {
         switch id {
-        case "premium_interactions": return String(localized: "Premium requests")
-        case "chat":                return String(localized: "Chat requests")
-        case "completions":         return String(localized: "Completions")
+        case "premium_interactions": return L10n.t("Premium requests")
+        case "chat":                return L10n.t("Chat requests")
+        case "completions":         return L10n.t("Completions")
         default:
             return id.replacingOccurrences(of: "_", with: " ").capitalized
         }

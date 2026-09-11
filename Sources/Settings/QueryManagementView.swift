@@ -47,7 +47,7 @@ struct QueryManagementView: View {
                     } label: {
                         Image(systemName: preferences.isMutedAlerts(for: entry.id) ? "bell.slash" : "bell")
                     }
-                    .help(preferences.isMutedAlerts(for: entry.id) ? String(localized: "Unmute alerts") : String(localized: "Mute alerts"))
+                    .help(preferences.isMutedAlerts(for: entry.id) ? L10n.t("Unmute alerts") : L10n.t("Mute alerts"))
                     Toggle("Enabled", isOn: Binding(get: { entry.enabled }, set: { catalog.setEnabled($0, id: entry.id) }))
                         .labelsHidden().toggleStyle(.switch).controlSize(.mini)
                     Button { store.refresh(providerID: entry.id) } label: {
@@ -58,7 +58,8 @@ struct QueryManagementView: View {
                     Menu {
                         if entry.usesLocalAccount {
                             Button("Allow access…", systemImage: "key") { store.reauthorize(providerID: entry.id) }
-                            Button("Open account source", systemImage: "arrow.up.forward.app") { _ = store.openAccountSource(providerID: entry.id) }
+                            Button("Open account source", systemImage: "arrow.up.forward.app") { _ = store.openAccountSource(providerID: entry.id, switching: true) }
+                            Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") { store.signOut(providerID: entry.id) }
                             Divider()
                         }
                         Button("Delete provider", systemImage: "trash", role: .destructive) { deleting = entry }
@@ -100,14 +101,14 @@ struct QueryManagementView: View {
     }
 
     private func detail(_ entry: QueryEntry) -> String {
-        if !entry.enabled { return String(localized: "Disabled") }
-        if store.refreshing.contains(entry.id) { return String(localized: "Refreshing…") }
+        if !entry.enabled { return L10n.t("Disabled") }
+        if store.refreshing.contains(entry.id) { return L10n.t("Refreshing…") }
         if let snapshot = store.snapshots.first(where: { $0.id == entry.id }) {
             if let failure = snapshot.queryFailure { return failure }
-            if snapshot.hasReading { return snapshot.headline?.summary ?? String(localized: "No reading") }
+            if snapshot.hasReading { return snapshot.headline?.summary ?? L10n.t("No reading") }
             if let status = snapshot.statusMessage { return status }
         }
-        return entry.usesLocalAccount ? String(localized: "Automatic credentials") : String(localized: "Manual credentials")
+        return entry.usesLocalAccount ? L10n.t("Automatic credentials") : L10n.t("Manual credentials")
     }
 }
 
@@ -321,10 +322,10 @@ struct QueryEntryEditor: View {
                 guard !Task.isCancelled, testVersion == version else { return }
                 switch error {
                 case let error as QueryError: problem = error.localizedDescription
-                case UsageProviderError.needsAuth: problem = String(localized: "Check the credentials for this query.")
-                case UsageProviderError.rateLimited: problem = String(localized: "Rate limited. Waiting before retrying.")
+                case UsageProviderError.needsAuth: problem = L10n.t("Check the credentials for this query.")
+                case UsageProviderError.rateLimited: problem = L10n.t("Rate limited. Waiting before retrying.")
                 case UsageProviderError.badResponse(let status): problem = "HTTP \(status)"
-                default: problem = String(localized: "Query failed. Check the credentials, URL and script.")
+                default: problem = L10n.t("Query failed. Check the credentials, URL and script.")
                 }
             }
             testing = false
@@ -388,7 +389,7 @@ struct BrandIconOption: Identifiable {
 
     static let all: [BrandIconOption] = ManualNativeQuery.options.map {
         BrandIconOption(id: $0.id == "codex" ? "openai" : $0.id, name: $0.name)
-    } + [BrandIconOption(id: "third", name: String(localized: "Generic"))]
+    } + [BrandIconOption(id: "third", name: L10n.t("Generic"))]
       + CodeSwitchIcon.libraryIcons.map { BrandIconOption(id: CodeSwitchIcon.libraryPrefix + $0, name: $0) }
 
     static func matching(_ query: String, in options: [BrandIconOption] = all) -> [BrandIconOption] {
