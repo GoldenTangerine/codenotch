@@ -207,8 +207,8 @@ final class CodexProfileTests: XCTestCase {
         let w = CodexActivityMonitor(profile: work)
         p.start(); w.start()
         defer { p.stop(); w.stop() }
-        XCTAssertEqual(p.sessions.map(\.id), ["codex.desktop"])
-        XCTAssertEqual(w.sessions.map(\.id), ["codex-work.desktop"])
+        XCTAssertEqual(p.sessions.map(\.id), ["codex.desktop:test"])
+        XCTAssertEqual(w.sessions.map(\.id), ["codex-work.desktop:test"])
         XCTAssertEqual(p.sessions.map(\.name), ["Personal task"])
         XCTAssertEqual(w.sessions.map(\.name), ["Work task"])
     }
@@ -234,8 +234,8 @@ final class CodexProfileTests: XCTestCase {
             var db: OpaquePointer?
             XCTAssertEqual(sqlite3_open(profile.stateURL.path, &db), SQLITE_OK)
             defer { sqlite3_close(db) }
-            XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE threads (rollout_path TEXT, archived INTEGER, updated_at_ms INTEGER)", nil, nil, nil), SQLITE_OK)
-            XCTAssertEqual(sqlite3_exec(db, "INSERT INTO threads VALUES ('\(rollout.path)', 0, 1)", nil, nil, nil), SQLITE_OK)
+            XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE threads (id TEXT, rollout_path TEXT, archived INTEGER, updated_at_ms INTEGER)", nil, nil, nil), SQLITE_OK)
+            XCTAssertEqual(sqlite3_exec(db, "INSERT INTO threads VALUES ('test', '\(rollout.path)', 0, 1)", nil, nil, nil), SQLITE_OK)
         }
         let p = CodexActivityMonitor(profile: personal)
         let w = CodexActivityMonitor(profile: work)

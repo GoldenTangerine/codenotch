@@ -67,6 +67,8 @@ struct NotchPosition: Codable, Equatable {
         if edge == .top {
             frame.origin.y = ((joinsHardware && screen.hardwareNotch != nil
                 ? screen.frameValue.maxY : usable.maxY) - frame.height).rounded()
+        } else if edge == .bottom {
+            frame.origin.y = usable.minY.rounded()
         }
         let center = joinsHardware && screen.hardwareNotch != nil ? screen.frameValue.midX : nil
         return (frame, ((center.map { $0 - shapeLength / 2 } ?? (usable.minX + barStart)) - frame.minX).rounded())

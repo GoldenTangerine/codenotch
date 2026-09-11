@@ -221,11 +221,14 @@ final class OllamaModelCellTests: XCTestCase {
                 controller.model.edge = edge
                 controller.model.sizeScale = size.scale
                 controller.model.isExpanded = true
+                // Small displays may page the cells at larger notch sizes.
+                controller.model.scrollStart = 1
                 controller.relocate()
                 defer { controller.stop() }
                 let panel = try XCTUnwrap(controller.panelContentViewForTesting?.window as? NotchPanel)
                 panel.contentView?.layoutSubtreeIfNeeded()
                 let model = controller.model
+                XCTAssertTrue(model.visibleIndices.contains(1))
                 let point = NotchPlacement(edge: edge, panelSize: panel.frame.size).point(
                     along: model.slack + model.ringCenter(index: 1) * model.sizeScale,
                     across: (model.contentInset + NotchLayout.bodyDepth(for: edge) / 2) * model.sizeScale)

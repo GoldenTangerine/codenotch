@@ -72,10 +72,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     func updateSnapshots(_ providerSnapshots: [ProviderSnapshot]) {
-        let hoveredID = hoveredSnapshot?.id
         let next = ProviderOrder.cells(from: providerSnapshots, keeping: snapshots).map(decorated)
-        let nextHoveredIndex = hoveredID.flatMap { id in next.firstIndex { $0.id == id } }
-        if hoveredIndex != nextHoveredIndex { hoveredIndex = nextHoveredIndex }
         replaceSnapshots(next)
     }
 

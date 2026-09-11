@@ -40,7 +40,7 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
-            version: "1.6.21",
+            version: "1.6.22",
             headline: L10n.t("More providers and clearer usage tracking."),
             changes: [
                 ReleaseNote.Change(title: L10n.t("Weekly limits and usage pacing")),

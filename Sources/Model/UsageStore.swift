@@ -469,6 +469,9 @@ final class UsageStore: ObservableObject {
         if provider is ConfiguredUsageProvider,
            let until = backoffs[provider.id] ?? archive.loadBackoffUntil(providerID: provider.id), until > pollingNow() {
             backoffs[provider.id] = until
+            if snapshots.contains(where: { $0.id == provider.id && $0.queryRetryAfter == until && $0.queryFailure != nil }) {
+                return Task {}
+            }
             publish(configuredFailure(provider: provider,
                 error: UsageProviderError.rateLimited(retryAfter: until.timeIntervalSince(pollingNow()))))
             return Task {}
