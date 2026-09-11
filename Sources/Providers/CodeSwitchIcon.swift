@@ -26,10 +26,15 @@ enum CodeSwitchIcon {
         return colorBrands.contains(key) ? key + "-color" : key
     }
 
-    static func image(_ value: String, bundle: Bundle = .main) -> NSImage? {
+    static func isKimi(_ value: String) -> Bool {
+        value.hasPrefix(prefix) && resourceKey(String(value.dropFirst(prefix.count))) == "kimi-color"
+    }
+
+    static func image(_ value: String, bundle: Bundle = .main, useLightVariant: Bool = false) -> NSImage? {
         guard value.hasPrefix(prefix), let key = resourceKey(String(value.dropFirst(prefix.count))),
               let directory = bundle.url(forResource: "CodeSwitchIcons", withExtension: "bundle") else { return nil }
-        let url = directory.appendingPathComponent(key).appendingPathExtension("png")
+        let resource = key == "kimi-color" && useLightVariant ? "kimi-color-light" : key
+        let url = directory.appendingPathComponent(resource).appendingPathExtension("png")
         let cacheKey = url.path as NSString
         if let image = images.object(forKey: cacheKey) { return image }
         guard let image = NSImage(contentsOf: url) else { return nil }

@@ -299,7 +299,8 @@ struct CodeSwitchSettingsProviderRow: View {
             }
         } identity: {
             HStack(alignment: .top, spacing: 6) {
-                QueryIconView(icon: row.snapshot?.icon, fallback: row.snapshot?.glyph ?? .third, size: 20)
+                QueryIconView(icon: row.snapshot?.icon, fallback: row.snapshot?.glyph ?? .third, size: 20,
+                              isStale: row.snapshot.map { $0.status.isStale || !$0.hasReading } ?? true)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(row.name).font(.callout.weight(.medium)).lineLimit(2).help(row.name)

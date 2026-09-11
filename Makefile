@@ -188,7 +188,8 @@ SPARKLE_BIN = $(shell dirname $$(find $$HOME/Library/Developer/Xcode/DerivedData
 PAGES_DIR := site
 # Where the dmg actually sits. The enclosure URL the appcast advertises has to
 # match it exactly, or an update downloads and then fails to verify.
-DOWNLOAD_PREFIX := https://goldentangerine.github.io/codenotch/
+# Releases serve immutable versioned downloads; site remains the legacy mirror.
+DOWNLOAD_PREFIX = https://github.com/GoldenTangerine/codenotch/releases/download/$(TAG)/
 
 appcast: $(DMG)
 	@test -n "$(SPARKLE_BIN)" || (echo "Sparkle tools not found — run make build first" && exit 1)
@@ -201,7 +202,7 @@ appcast: $(DMG)
 	rm -f $(PAGES_DIR)/appcast.xml
 	cp $(DMG) $(PAGES_DIR)/
 	$(SPARKLE_BIN)/generate_appcast $(PAGES_DIR) --download-url-prefix $(DOWNLOAD_PREFIX)
-	@echo "Publish by committing $(PAGES_DIR)/ and pushing."
+	@echo "Upload the appcast and DMG together with make publish TAG=$(TAG)."
 
 release: notarize verify-release appcast
 	@echo "Notarized: $(DMG)"
@@ -218,12 +219,13 @@ release: notarize verify-release appcast
 VERSION := $(shell awk -F'"' '/MARKETING_VERSION:/ {print $$2}' project.yml)
 TAG     ?= v$(VERSION)
 
-publish: $(DMG)
+publish: appcast
 	@test -n "$(VERSION)" || (echo "No MARKETING_VERSION in project.yml" && exit 1)
 	@# --clobber so re-running after a rebuild replaces the asset instead of
 	@# failing on the name already being taken.
-	gh release upload $(TAG) $(DMG) --clobber
-	@echo "Attached $(DMG) to $(TAG)."
+	gh release upload "$(TAG)" "$(DMG)" "$(PAGES_DIR)/appcast.xml" --repo GoldenTangerine/codenotch --clobber
+	python3 Scripts/promote-release.py "$(TAG)"
+	@echo "Attached $(DMG) and appcast.xml to $(TAG)."
 
 # What Gatekeeper on a customer's Mac will check. `spctl` accepting the app is
 # the actual proof that the download will open without a right-click.

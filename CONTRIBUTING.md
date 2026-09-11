@@ -1,3 +1,12 @@
+<!--
+@name: 贡献与发布指南
+@Descripttion: 说明本地开发检查及版本发布要求。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-11 11:05:39
+@LastEditTime: 2026-09-11 11:05:39
+@FilePath: CONTRIBUTING.md
+-->
 # Contributing
 
 ## Building
@@ -22,9 +31,39 @@ certificate, notarizes with Apple, and regenerates the Sparkle auto-update
 feed. That's the maintainer's job for cutting an official build, and it needs
 credentials only the maintainer has. You won't need it to contribute.
 
+## Automatic update releases
+
+New builds read the Sparkle feed from
+`https://github.com/GoldenTangerine/codenotch/releases/latest/download/appcast.xml`.
+Each signed release must include both `appcast.xml` and `Codenotch.dmg`.
+The feed points to the DMG under that specific release tag, so publishing a
+new version cannot change the download associated with an older signature.
+
+For CI releases, enable the repository variable `RELEASE_SIGNING=true` and
+configure the signing secrets documented in `.github/workflows/release.yml`.
+The Sparkle signing key must match the public key in `project.yml`; the Apple
+signing configuration must also belong to the maintainer publishing the app.
+The signed workflow uploads both assets, then compares numeric stable versions
+before marking the release as Latest. Republishing an older version does not
+replace Latest or the Pages mirror. Missing assets, API failures, and unknown
+stable version formats stop promotion; draft and prerelease versions are skipped.
+Unsigned releases do not replace Latest because they have no update feed.
+Do not manually mark a release without `appcast.xml` as Latest.
+
+For a local signed release, run `make release TAG=vX.Y.Z` with the matching
+version in `project.yml`, then explicitly run `make publish TAG=vX.Y.Z` to
+upload both assets to an existing release and promote it only if no newer
+stable release exists. Local and CI publication share this version check.
+CI still publishes a Pages mirror for older installed builds. Those builds
+keep their original feed URL until upgraded; if that Pages address is
+unavailable, install a release containing the new URL manually once.
+Automatic updates become available only after a correctly signed release
+with both assets has been published.
+
 ## Before opening a PR
 
 - `make test` passes.
+- `python3 -m unittest discover -s Scripts -p 'test_*.py'` passes for release tooling changes.
 - New behavior has a test. `Tests/` mirrors `Sources/` by concern, not by
   file — look for the existing test class closest to what you're changing
   before adding a new one.

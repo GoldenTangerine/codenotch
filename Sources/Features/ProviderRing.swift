@@ -68,7 +68,8 @@ struct ProviderRing: View {
                         .animation(NotchMotion.reading, value: band)
                 }
 
-                QueryIconView(icon: icon, fallback: glyph)
+                QueryIconView(icon: icon, fallback: glyph, isStale: isStale,
+                              onDarkBackground: true, dimsStaleIcon: false)
                     .foregroundStyle(Palette.textPrimary)
                     // A spent limit dims its glyph so the ring reads as "waiting".
                     .opacity(band == .exhausted ? 0.35 : 1)

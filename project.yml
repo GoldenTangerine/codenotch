@@ -23,8 +23,8 @@ settings:
     # Sources/Info.plist reads both from here — hardcoding them there instead
     # silently pins every build to one version, so no customer ever sees an
     # update. Bump CURRENT_PROJECT_VERSION on every release.
-    MARKETING_VERSION: "1.6.15"
-    CURRENT_PROJECT_VERSION: "55"
+    MARKETING_VERSION: "1.6.16"
+    CURRENT_PROJECT_VERSION: "56"
     # Signed with a stable identity on purpose. The app reads Claude Code's
     # OAuth token out of the login keychain, and the keychain's ACL remembers
     # *which signed binary* was allowed. Ad-hoc or unsigned builds get a new
@@ -95,7 +95,8 @@ targets:
         #
         # Must stay reachable for as long as any copy is installed: the feed is
         # the only route by which a shipped build can ever be replaced.
-        SUFeedURL: https://goldentangerine.github.io/codenotch/appcast.xml
+        # New builds use Releases; Pages remains a mirror for older installs.
+        SUFeedURL: https://github.com/GoldenTangerine/codenotch/releases/latest/download/appcast.xml
         # The public half of the EdDSA key in the login keychain. Sparkle
         # refuses any update not signed by its private half, so a hijacked feed
         # or a swapped download cannot install code. Losing the private key

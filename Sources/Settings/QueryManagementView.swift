@@ -392,12 +392,21 @@ struct QueryIconView: View {
     let icon: ProviderIcon?
     let fallback: ProviderGlyph
     var size: CGFloat = Design.px(46)
+    var isStale: Bool = false
+    var onDarkBackground: Bool = false
+    // The ring already dims its entire reading, including the icon.
+    var dimsStaleIcon: Bool = true
+    @Environment(\.colorScheme) private var colorScheme
     static let symbols = ["server.rack", "cloud", "cpu", "bolt", "terminal", "creditcard", "building.2", "sparkles"]
 
     var body: some View {
         Group {
-            if let icon, icon.kind == .brand, let image = CodeSwitchIcon.image(icon.value) {
-                Image(nsImage: image).resizable().scaledToFit()
+            if let icon, icon.kind == .brand,
+               let image = CodeSwitchIcon.image(icon.value, useLightVariant: !onDarkBackground && colorScheme == .light) {
+                Image(nsImage: image)
+                    .renderingMode(isStale && CodeSwitchIcon.isKimi(icon.value) ? .template : nil)
+                    .resizable().scaledToFit()
+                    .opacity(dimsStaleIcon && isStale && CodeSwitchIcon.isKimi(icon.value) ? 0.45 : 1)
             } else if let icon, icon.kind == .symbol {
                 Image(systemName: Self.symbols.contains(icon.value) ? icon.value : "server.rack")
                     .resizable().scaledToFit()

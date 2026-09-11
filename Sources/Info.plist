@@ -1,4 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+@name: 应用属性清单
+@Descripttion: 定义应用标识、版本及自动更新订阅配置。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-11 11:05:39
+@LastEditTime: 2026-09-11 11:05:39
+@FilePath: Sources/Info.plist
+-->
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -32,7 +41,7 @@
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUFeedURL</key>
-	<string>https://goldentangerine.github.io/codenotch/appcast.xml</string>
+	<string>https://github.com/GoldenTangerine/codenotch/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>rmUfT5r49nR+3HdkbR5/YYLghfnAi6L49eOk3sIegSk=</string>
 	<key>SUScheduledCheckInterval</key>

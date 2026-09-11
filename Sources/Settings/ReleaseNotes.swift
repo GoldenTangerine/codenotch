@@ -40,6 +40,20 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.16",
+            headline: String(localized: "Clearer Kimi icons and reliable update sources."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Kimi stays visible on light and dark backgrounds"),
+                    detail: String(localized: "The icon keeps its blue accent and original size. Missing or outdated readings use a consistent gray appearance in the notch, details and linked provider settings.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Updates from this repository"),
+                    detail: String(localized: "Automatic updates use signed releases from GoldenTangerine/codenotch. If the old update address is unavailable, install this version manually once.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.15",
             headline: String(localized: "Arrange linked providers your way."),
             changes: [

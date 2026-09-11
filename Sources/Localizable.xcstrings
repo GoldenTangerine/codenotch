@@ -1,6 +1,11 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Clearer Kimi icons and reliable update sources." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "Kimi 图标更清晰，更新来源更可靠。"}}}},
+    "Kimi stays visible on light and dark backgrounds" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "Kimi 图标适配深浅背景"}}}},
+    "The icon keeps its blue accent and original size. Missing or outdated readings use a consistent gray appearance in the notch, details and linked provider settings." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "保留蓝色标记和原有尺寸。无数据或读数过期时，刘海、详情与联动设置页统一显示灰白状态。"}}}},
+    "Updates from this repository" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "从当前仓库获取更新"}}}},
+    "Automatic updates use signed releases from GoldenTangerine/codenotch. If the old update address is unavailable, install this version manually once." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "自动更新使用 GoldenTangerine/codenotch 的签名版本。原更新地址不可用时，请先手动安装本版本一次。"}}}},
     "Arrange linked providers your way." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "按你的习惯排列联动供应商。"}}}},
     "One provider order across settings and the notch" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "设置与刘海同步排序"}}}},
     "Drag linked providers to reorder them locally. Settings and the notch share the same default and saved order without changing Code Switch R priorities." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "拖动调整联动供应商的本地顺序。设置与刘海使用相同的默认和保存顺序，不修改 Code Switch R 的供应商优先级。"}}}},

@@ -332,7 +332,8 @@ private struct CodeSwitchTooltip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TooltipHeader(title: snapshot.displayName) {
-                QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph)
+                QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph,
+                              isStale: snapshot.status.isStale || !snapshot.hasReading, onDarkBackground: true)
                     .foregroundStyle(Palette.textPrimary)
             }
             TooltipScrollContent(scrolls: !fullContent) {
@@ -423,7 +424,8 @@ private struct ProviderTooltip: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             TooltipHeader(title: snapshot.tooltipTitle, note: readingAge) {
-                QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph)
+                QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph,
+                              isStale: snapshot.status.isStale || !snapshot.hasReading, onDarkBackground: true)
                     .foregroundStyle(Palette.textPrimary)
             }
             .help(snapshot.queryFailure ?? snapshot.displayName)

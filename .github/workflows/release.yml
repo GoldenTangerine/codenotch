@@ -108,7 +108,9 @@ jobs:
           security find-identity -v -p codesigning | grep "Developer ID Application"
 
       - name: Test
-        run: make test
+        run: |
+          python3 -m unittest discover -s Scripts -p 'test_*.py'
+          make test
 
       - name: Archive and package the dmg (signed)
         if: env.SIGNED == 'true'
@@ -193,14 +195,15 @@ jobs:
           # The private key goes in over stdin; a file would sit on disk.
           printf '%s' "$SPARKLE_EDDSA_KEY" | \
             "$SPARKLE_BIN/generate_appcast" site \
-            --download-url-prefix https://goldentangerine.github.io/codenotch/ --ed-key-file -
+            --download-url-prefix "https://github.com/GoldenTangerine/codenotch/releases/download/$GITHUB_REF_NAME/" --ed-key-file -
 
       - name: Create the GitHub Release (signed)
         if: env.SIGNED == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
-          gh release create "$GITHUB_REF_NAME" "$DMG"
+          gh release create "$GITHUB_REF_NAME" "$DMG" site/appcast.xml
+          --repo GoldenTangerine/codenotch --latest=false
           --title "Codenotch $GITHUB_REF_NAME"
           --notes-file "$RUNNER_TEMP/release-notes.md"
 
@@ -210,11 +213,22 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: >
           gh release create "$GITHUB_REF_NAME" "$DMG"
+          --repo GoldenTangerine/codenotch --latest=false
           --title "Codenotch $GITHUB_REF_NAME"
           --notes-file "$RUNNER_TEMP/release-notes.md"
 
-      - name: Publish the appcast and download to Pages
+      - name: Promote the newest stable release
+        id: latest
         if: env.SIGNED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          promoted=$(python3 Scripts/promote-release.py "$GITHUB_REF_NAME")
+          echo "promoted=$promoted" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the appcast and download to Pages
+        if: env.SIGNED == 'true' && steps.latest.outputs.promoted == 'true'
         run: |
           set -euo pipefail
           # The job checked out the tag, so HEAD is detached — the site update

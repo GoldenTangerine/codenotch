@@ -52,6 +52,19 @@ final class CodeSwitchBridgeTests: XCTestCase {
         XCTAssertNil(CodeSwitchIcon.resourceKey(""))
     }
 
+    func testKimiAppearanceVariantsRemainColoredAndUseSeparateCacheEntries() throws {
+        XCTAssertTrue(CodeSwitchIcon.isKimi("code-switch: KIMI "))
+        XCTAssertFalse(CodeSwitchIcon.isKimi("kimi"))
+        XCTAssertFalse(CodeSwitchIcon.isKimi("code-switch:openai"))
+        let dark = try XCTUnwrap(CodeSwitchIcon.image("code-switch:kimi"))
+        let light = try XCTUnwrap(CodeSwitchIcon.image("code-switch:kimi", useLightVariant: true))
+        XCTAssertFalse(dark.isTemplate)
+        XCTAssertFalse(light.isTemplate)
+        XCTAssertFalse(dark === light)
+        XCTAssertEqual(dark.size, light.size)
+        XCTAssertTrue(dark === CodeSwitchIcon.image("code-switch:kimi"))
+    }
+
     func testStalledHeartbeatHidesEvenWhenSameFileIsReadRepeatedly() throws {
         var state = CodeSwitchSnapshotState()
         let snapshot = try fixture()
