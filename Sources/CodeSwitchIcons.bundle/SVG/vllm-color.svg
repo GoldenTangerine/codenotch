@@ -1,0 +1,10 @@
+<!--
+@name: vllm-color 品牌图标
+@Descripttion: 来自 LobeHub 图库的供应商品牌 SVG 资源。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-11 11:33:32
+@LastEditTime: 2026-09-11 11:33:32
+@FilePath: Sources/CodeSwitchIcons.bundle/SVG/vllm-color.svg
+-->
+<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>vLLM</title><path d="M0 4.973h9.324V23L0 4.973z" fill="#FDB515"></path><path d="M13.986 4.351L22.378 0l-6.216 23H9.324l4.662-18.649z" fill="#30A2FF"></path></svg>

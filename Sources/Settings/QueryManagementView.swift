@@ -213,13 +213,7 @@ struct QueryEntryEditor: View {
                 }
             }
             if entry.icon.kind == .brand {
-                Picker("Brand icon", selection: $entry.icon.value) {
-                    ForEach(ManualNativeQuery.options, id: \.id) { option in
-                        let value = option.id == "codex" ? "openai" : option.id
-                        HStack { ProviderGlyphView(glyph: ProviderGlyph(rawValue: value) ?? .third, size: 16); Text(option.name) }.tag(value)
-                    }
-                    Text("Generic").tag("third")
-                }
+                BrandIconPicker(selection: $entry.icon.value)
             } else if entry.icon.kind == .symbol {
                 Picker("System symbol", selection: $entry.icon.value) {
                     ForEach(QueryIconView.symbols, id: \.self) { symbol in
@@ -388,6 +382,85 @@ struct QueryEntryEditor: View {
     }
 }
 
+struct BrandIconOption: Identifiable {
+    let id: String
+    let name: String
+
+    static let all: [BrandIconOption] = ManualNativeQuery.options.map {
+        BrandIconOption(id: $0.id == "codex" ? "openai" : $0.id, name: $0.name)
+    } + [BrandIconOption(id: "third", name: String(localized: "Generic"))]
+      + CodeSwitchIcon.libraryIcons.map { BrandIconOption(id: CodeSwitchIcon.libraryPrefix + $0, name: $0) }
+
+    static func matching(_ query: String, in options: [BrandIconOption] = all) -> [BrandIconOption] {
+        let words = query.replacingOccurrences(of: "-", with: " ").split(whereSeparator: \.isWhitespace)
+        return options.filter { option in
+            words.allSatisfy { option.name.localizedCaseInsensitiveContains(String($0)) || option.id.localizedCaseInsensitiveContains(String($0)) }
+        }
+    }
+}
+
+private struct BrandIconPicker: View {
+    @Binding var selection: String
+    @State private var isPresented = false
+    @State private var search = ""
+    @FocusState private var searchFocused: Bool
+
+    private var selectedName: String {
+        BrandIconOption.all.first { $0.id == selection }?.name ?? selection
+    }
+
+    var body: some View {
+        LabeledContent("Brand icon") {
+            Button {
+                search = ""
+                isPresented.toggle()
+            } label: {
+                HStack(spacing: 6) {
+                    QueryIconView(icon: ProviderIcon(kind: .brand, value: selection), fallback: .third, size: 18)
+                    Text(selectedName).lineLimit(1)
+                    Image(systemName: "chevron.down").font(.caption)
+                }
+            }
+            .accessibilityLabel(Text("Brand icon"))
+            .accessibilityValue(selectedName)
+            .popover(isPresented: $isPresented) {
+                VStack(spacing: 8) {
+                    TextField("Search brand icons", text: $search)
+                        .textFieldStyle(.roundedBorder).focused($searchFocused)
+                    let options = BrandIconOption.matching(search)
+                    ScrollView {
+                        LazyVStack(spacing: 2) {
+                            if options.isEmpty {
+                                Text("No matching icons").foregroundStyle(.secondary).padding()
+                            }
+                            ForEach(options) { option in
+                                Button {
+                                    selection = option.id
+                                    isPresented = false
+                                } label: {
+                                    HStack(spacing: 8) {
+                                        QueryIconView(icon: ProviderIcon(kind: .brand, value: option.id), fallback: .third, size: 22)
+                                        Text(option.name).lineLimit(1)
+                                        Spacer()
+                                        if selection == option.id { Image(systemName: "checkmark") }
+                                    }
+                                    .padding(6).contentShape(Rectangle())
+                                }
+                                .buttonStyle(.plain)
+                                .background(selection == option.id ? Color.accentColor.opacity(0.12) : Color.clear,
+                                            in: RoundedRectangle(cornerRadius: 5))
+                            }
+                        }
+                    }.frame(height: 320)
+                }
+                .padding(12).frame(width: 340)
+                .onAppear { searchFocused = true }
+                .onExitCommand { isPresented = false }
+            }
+        }
+    }
+}
+
 struct QueryIconView: View {
     let icon: ProviderIcon?
     let fallback: ProviderGlyph
@@ -404,7 +477,7 @@ struct QueryIconView: View {
             if let icon, icon.kind == .brand,
                let image = CodeSwitchIcon.image(icon.value, useLightVariant: !onDarkBackground && colorScheme == .light) {
                 Image(nsImage: image)
-                    .renderingMode(isStale && CodeSwitchIcon.isKimi(icon.value) ? .template : nil)
+                    .renderingMode(image.isTemplate || (isStale && CodeSwitchIcon.isKimi(icon.value)) ? .template : .original)
                     .resizable().scaledToFit()
                     .opacity(dimsStaleIcon && isStale && CodeSwitchIcon.isKimi(icon.value) ? 0.45 : 1)
             } else if let icon, icon.kind == .symbol {

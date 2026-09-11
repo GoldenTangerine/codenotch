@@ -1,0 +1,10 @@
+<!--
+@name: infinigence-color 品牌图标
+@Descripttion: 来自 LobeHub 图库的供应商品牌 SVG 资源。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-11 11:33:32
+@LastEditTime: 2026-09-11 11:33:32
+@FilePath: Sources/CodeSwitchIcons.bundle/SVG/infinigence-color.svg
+-->
+<svg height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Infinigence</title><path d="M14.186 19.885V4.226H5v4.137h4.226v11.522H5V24h13.412v-4.115h-4.226z" fill="#7F1084"></path><path d="M18.412 0h-4.226v4.226h4.226V0z" fill="#2EA7E0"></path></svg>

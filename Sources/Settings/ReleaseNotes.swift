@@ -40,6 +40,20 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     static let all: [ReleaseNote] = [
         ReleaseNote(
+            version: "1.6.17",
+            headline: String(localized: "Visible provider icons and a searchable brand library."),
+            changes: [
+                ReleaseNote.Change(
+                    title: String(localized: "Restore linked Codex icons"),
+                    detail: String(localized: "OpenAI and other monochrome icons are visible on dark backgrounds again. Colored icons keep their original palette.")
+                ),
+                ReleaseNote.Change(
+                    title: String(localized: "Find your brand icon"),
+                    detail: String(localized: "Search 723 offline icon variants with previews and a selected indicator. Existing choices are preserved.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.16",
             headline: String(localized: "Clearer Kimi icons and reliable update sources."),
             changes: [

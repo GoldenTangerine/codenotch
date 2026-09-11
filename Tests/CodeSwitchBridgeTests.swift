@@ -8,6 +8,8 @@
  @FilePath: Tests/CodeSwitchBridgeTests.swift
  */
 import XCTest
+import AppKit
+import SwiftUI
 @testable import Codenotch
 
 @MainActor
@@ -63,6 +65,78 @@ final class CodeSwitchBridgeTests: XCTestCase {
         XCTAssertFalse(dark === light)
         XCTAssertEqual(dark.size, light.size)
         XCTAssertTrue(dark === CodeSwitchIcon.image("code-switch:kimi"))
+    }
+
+    func testLibraryVariantsLoadAndSelectionRoundTrips() throws {
+        let names = CodeSwitchIcon.libraryIconNames()
+        XCTAssertTrue(names.contains("openai"))
+        XCTAssertTrue(names.contains("claude-color"))
+        for name in names {
+            XCTAssertNotNil(CodeSwitchIcon.image(CodeSwitchIcon.libraryPrefix + name), name)
+        }
+        XCTAssertTrue(try XCTUnwrap(CodeSwitchIcon.image("lobe:claude")).isTemplate)
+        XCTAssertFalse(try XCTUnwrap(CodeSwitchIcon.image("lobe:claude-color")).isTemplate)
+        XCTAssertNil(CodeSwitchIcon.image("lobe:../openai"))
+        let selected = ProviderIcon(kind: .brand, value: "lobe:openai")
+        XCTAssertEqual(try JSONDecoder().decode(ProviderIcon.self, from: JSONEncoder().encode(selected)), selected)
+    }
+
+    func testBrandRenderingPreservesTemplatesAndKimiColorStates() throws {
+        for (value, stale) in [("code-switch:openai", false), ("lobe:openai", false),
+                               ("lobe:kimi-color", false), ("lobe:kimi-color", true)] {
+            let view = QueryIconView(icon: ProviderIcon(kind: .brand, value: value), fallback: .third,
+                                     size: 64, isStale: stale, onDarkBackground: true)
+                .foregroundStyle(.white).background(Color.black)
+            let renderer = ImageRenderer(content: view)
+            let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+            var visible = 0
+            var colored = 0
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide {
+                    let pixel = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+                    if pixel.redComponent > 0.2 || pixel.greenComponent > 0.2 || pixel.blueComponent > 0.2 { visible += 1 }
+                    if pixel.blueComponent - pixel.redComponent > 0.2 { colored += 1 }
+                }
+            }
+            XCTAssertGreaterThan(visible, 100, value)
+            if CodeSwitchIcon.isKimi(value) && !stale { XCTAssertGreaterThan(colored, 0) }
+            else { XCTAssertEqual(colored, 0) }
+        }
+    }
+
+    func testFixedPaletteIconsWithoutColorSuffixKeepTheirColors() throws {
+        for name in ["lobehub"] {
+            let image = try XCTUnwrap(CodeSwitchIcon.image("lobe:" + name))
+            XCTAssertFalse(image.isTemplate, name)
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: try XCTUnwrap(image.tiffRepresentation)))
+            var palettePixels = 0
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide {
+                    let pixel = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+                    guard pixel.alphaComponent > 0.99 else { continue }
+                    let components = [pixel.redComponent, pixel.greenComponent, pixel.blueComponent]
+                    let chroma = components.max()! - components.min()!
+                    if name == "lobehub" ? (pixel.redComponent > 0.1 && pixel.redComponent < 0.9) : chroma > 0.15 {
+                        palettePixels += 1
+                    }
+                }
+            }
+            XCTAssertGreaterThan(palettePixels, 50, name)
+        }
+        XCTAssertTrue(try XCTUnwrap(CodeSwitchIcon.image("lobe:openai")).isTemplate)
+        for name in ["rwkv", "crusoe", "cogvideo", "cogview"] {
+            XCTAssertTrue(try XCTUnwrap(CodeSwitchIcon.image("lobe:" + name)).isTemplate)
+        }
+    }
+
+    func testBrandSearchHandlesWordsCaseAndLegacySelections() {
+        let matches = BrandIconOption.matching("  CLAUDE color  ")
+        XCTAssertTrue(matches.contains { $0.id == "lobe:claude-color" })
+        XCTAssertFalse(matches.contains { $0.id == "lobe:claude" })
+        XCTAssertTrue(BrandIconOption.matching("codex").contains { $0.id == "openai" })
+        XCTAssertEqual(BrandIconOption.matching("  ").count, BrandIconOption.all.count)
+        XCTAssertTrue(BrandIconOption.matching("no-such-brand-xyz").isEmpty)
+        XCTAssertEqual(Set(BrandIconOption.all.map(\.id)).count, BrandIconOption.all.count)
     }
 
     func testStalledHeartbeatHidesEvenWhenSameFileIsReadRepeatedly() throws {

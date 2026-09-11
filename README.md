@@ -45,6 +45,12 @@ Linked quotas show inactive periods explicitly. Brand icons are bundled offline
 from `@lobehub/icons-static-svg` 1.73.0 (MIT; license in
 `Sources/CodeSwitchIcons.bundle/LICENSE.txt`), using the same color aliases as
 Code Switch R. The PNG resources total about 1.7 MB and require no network access.
+The provider editor's searchable Brand icon menu previews all 723 bundled SVG variants
+under `Sources/CodeSwitchIcons.bundle/SVG`, using their matching PNGs for
+reliable SwiftUI rendering. Selections are saved locally;
+monochrome icons follow the foreground color and colored variants retain their
+brand colors, including fixed palettes without a `-color` filename suffix.
+Kimi uses background-aware colors for visibility.
 
 With a compatible Code Switch R running on the same Mac, Codenotch automatically
 appends its current tray suppliers after your existing providers. Active requests

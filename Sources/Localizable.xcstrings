@@ -1,6 +1,13 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Visible provider icons and a searchable brand library." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "供应商图标恢复显示，品牌图库支持搜索。"}}}},
+    "Restore linked Codex icons" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "修复联动 Codex 图标"}}}},
+    "OpenAI and other monochrome icons are visible on dark backgrounds again. Colored icons keep their original palette." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "OpenAI 等单色图标在深色背景上恢复可见，彩色图标保留原有配色。"}}}},
+    "Find your brand icon" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "搜索并预览品牌图标"}}}},
+    "Search 723 offline icon variants with previews and a selected indicator. Existing choices are preserved." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "支持搜索 723 个离线图标变体，提供预览和选中标记，保留已有选择。"}}}},
+    "Search brand icons" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "搜索品牌图标"}}}},
+    "No matching icons" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "没有匹配的图标"}}}},
     "Clearer Kimi icons and reliable update sources." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "Kimi 图标更清晰，更新来源更可靠。"}}}},
     "Kimi stays visible on light and dark backgrounds" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "Kimi 图标适配深浅背景"}}}},
     "The icon keeps its blue accent and original size. Missing or outdated readings use a consistent gray appearance in the notch, details and linked provider settings." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "保留蓝色标记和原有尺寸。无数据或读数过期时，刘海、详情与联动设置页统一显示灰白状态。"}}}},
