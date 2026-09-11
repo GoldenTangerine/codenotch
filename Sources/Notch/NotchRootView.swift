@@ -29,60 +29,62 @@ struct NotchRootView: View {
                 // Outside the notch and outside its clip: the orb hangs past
                 // the end of the shape, tucked into the corner the far flare
                 // makes.
-                SettingsOrb(isHovered: model.isHoveringSettings, edge: model.edge,
-                                    convex: model.orbHugsCorner,
-                                    arcRadius: model.orbArcRadius,
-                                    arcOffset: model.orbArcOffset,
-                                    spins: model.settingsSpins)
-                        // A second route to the same action the panel's own
-                        // `mouseDown` override reaches for — see
-                        // `NotchViewModel.onOpenSettings`. Both still depend
-                        // on the panel's `ignoresMouseEvents`/`hitTest` gate
-                        // to receive the click at all, so this alone would
-                        // not rescue a click that never reaches the content
-                        // view — but once it does, this fires reliably where
-                        // the AppKit-level path did not.
-                        .contentShape(Circle())
-                        .onTapGesture {
-                            model.settingsSpins += 1
-                            model.onOpenSettings?()
-                        }
-                        // Before `position`, not after. `position` hands back a
-                        // view the size of the whole panel with the orb placed
-                        // inside it, so a scale applied after this one scales
-                        // *that* layer about the panel's centre — which moves
-                        // the orb away from the notch by a share of the panel,
-                        // and left the arc floating off the corner it is drawn
-                        // to hug. Here it scales the orb about its own centre,
-                        // which is what `orbCentre` then places.
-                        .scaleEffect(model.sizeScale)
-                        .position(orbCentre(place))
-                        // Outward, into the black — not inward to nothing.
-                        .scaleEffect(model.isExpanded ? 1 : model.orbMergeScale)
-                        // Full strength the whole way in. The arc is buried in
-                        // the notch before this reaches zero, so the fade is
-                        // only there to guarantee nothing is left on screen
-                        // once the notch has folded — it is never what the eye
-                        // sees the arc leave by.
-                        .opacity(model.isExpanded ? 1 : 0)
-                        .animation(motion(orbMotion), value: model.isExpanded)
+                if model.showsEdgeControls {
+                    SettingsOrb(isHovered: model.isHoveringSettings, edge: model.edge,
+                                        convex: model.orbHugsCorner,
+                                        arcRadius: model.orbArcRadius,
+                                        arcOffset: model.orbArcOffset,
+                                        spins: model.settingsSpins)
+                            // A second route to the same action the panel's own
+                            // `mouseDown` override reaches for — see
+                            // `NotchViewModel.onOpenSettings`. Both still depend
+                            // on the panel's `ignoresMouseEvents`/`hitTest` gate
+                            // to receive the click at all, so this alone would
+                            // not rescue a click that never reaches the content
+                            // view — but once it does, this fires reliably where
+                            // the AppKit-level path did not.
+                            .contentShape(Circle())
+                            .onTapGesture {
+                                model.settingsSpins += 1
+                                model.onOpenSettings?()
+                            }
+                            // Before `position`, not after. `position` hands back a
+                            // view the size of the whole panel with the orb placed
+                            // inside it, so a scale applied after this one scales
+                            // *that* layer about the panel's centre — which moves
+                            // the orb away from the notch by a share of the panel,
+                            // and left the arc floating off the corner it is drawn
+                            // to hug. Here it scales the orb about its own centre,
+                            // which is what `orbCentre` then places.
+                            .scaleEffect(model.sizeScale)
+                            .position(orbCentre(place))
+                            // Outward, into the black — not inward to nothing.
+                            .scaleEffect(model.isExpanded ? 1 : model.orbMergeScale)
+                            // Full strength the whole way in. The arc is buried in
+                            // the notch before this reaches zero, so the fade is
+                            // only there to guarantee nothing is left on screen
+                            // once the notch has folded — it is never what the eye
+                            // sees the arc leave by.
+                            .opacity(model.isExpanded ? 1 : 0)
+                            .animation(motion(orbMotion), value: model.isExpanded)
 
-                // The move handle, mirroring the settings orb at the other end
-                // of the stack. Same construction, same reasons — see the
-                // comments on the orb above; only the placement differs.
-                MoveHandle(isHovered: model.isHoveringMove || model.isMoving,
-                           isArmed: model.isMoving,
-                           edge: model.edge,
-                           convex: model.orbHugsCorner,
-                           arcRadius: model.orbArcRadius,
-                           arcOffset: model.moveArcOffset,
-                           spins: model.moveSpins)
-                        .contentShape(Circle())
-                        .scaleEffect(model.sizeScale)
-                        .position(moveCentre(place))
-                        .scaleEffect(model.isExpanded ? 1 : model.orbMergeScale)
-                        .opacity(model.isExpanded ? 1 : 0)
-                        .animation(motion(orbMotion), value: model.isExpanded)
+                    // The move handle, mirroring the settings orb at the other end
+                    // of the stack. Same construction, same reasons — see the
+                    // comments on the orb above; only the placement differs.
+                    MoveHandle(isHovered: model.isHoveringMove || model.isMoving,
+                               isArmed: model.isMoving,
+                               edge: model.edge,
+                               convex: model.orbHugsCorner,
+                               arcRadius: model.orbArcRadius,
+                               arcOffset: model.moveArcOffset,
+                               spins: model.moveSpins)
+                            .contentShape(Circle())
+                            .scaleEffect(model.sizeScale)
+                            .position(moveCentre(place))
+                            .scaleEffect(model.isExpanded ? 1 : model.orbMergeScale)
+                            .opacity(model.isExpanded ? 1 : 0)
+                            .animation(motion(orbMotion), value: model.isExpanded)
+                }
 
                 if let snapshot = model.hoveredSnapshot, let index = model.hoveredIndex,
                    model.isExpanded {
@@ -137,6 +139,7 @@ struct NotchRootView: View {
 
     private func notch(_ place: NotchPlacement) -> some View {
         let shape = SideNotchShape(edge: model.edge, joining: model.joinedNotch)
+        let alongOffset = model.slack + model.shapeLength * model.sizeScale / 2 - place.panelLength / 2
         // Glass is for the open notch only. Folded, the pill has to read as
         // part of the bezel — and as the hardware notch itself on a MacBook —
         // so it stays black; and glass under a `.statusBar` panel at rest
@@ -238,6 +241,9 @@ struct NotchRootView: View {
                                               : place.panelSize.width) / 2,
                 across: model.notchDepth / 2
             ))
+            // 窗口为详情卡预留空间；显示栏沿边位置必须与命中区域使用同一锚点。
+            .offset(x: model.edge.isVertical ? 0 : alongOffset,
+                    y: model.edge.isVertical ? alongOffset : 0)
             // Pushed a shade past the bezel, and then clipped by the panel.
             //
             // The arithmetic above already lands the shape's outer edge on the

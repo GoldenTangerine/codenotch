@@ -298,7 +298,7 @@ final class NotchWindowController {
         if previewPosition != nil || savedPosition != nil {
             let layout = activePosition.layout(on: screen, panelSize: size,
                 shapeLength: model.shapeLength(cellCount: cellCount ?? model.snapshots.count) * model.sizeScale,
-                endClearance: NotchLayout.orbHotZone)
+                endClearance: model.showsEdgeControls ? NotchLayout.orbHotZone : 0)
             frame = layout.frame
             model.positionedLeading = layout.leading
             let usable = screen.visibleFrame
@@ -318,7 +318,8 @@ final class NotchWindowController {
             model.positionedLeading = layout.leading
         } else {
             frame = NotchGeometry.panelFrame(for: screen, panelSize: size, edge: model.edge,
-                alongOffset: model.alongOffset, slack: model.slack(cellCount: cellCount ?? model.snapshots.count), trailingExtent: model.trailingExtent)
+                alongOffset: model.alongOffset, slack: model.slack(cellCount: cellCount ?? model.snapshots.count),
+                trailingExtent: model.showsEdgeControls ? model.trailingExtent : 0)
             model.positionedLeading = nil
             model.tooltipAlongBounds = nil
         }
@@ -474,10 +475,11 @@ final class NotchWindowController {
     /// Whether the pointer is on the handle itself rather than merely inside
     /// the box that contains it.
     private func isOverHandle(_ local: CGPoint) -> Bool {
+        guard model.showsEdgeControls else { return false }
         // Back into the notch's own measurements, which is what `isOnOrbHandle`
         // is written in — the orb scales with the notch, so its hit test has to
         // be asked in the same space the shape was drawn in.
-        model.isOnOrbHandle(
+        return model.isOnOrbHandle(
             along: (placement.along(of: local) - model.slack) / model.sizeScale,
             across: placement.across(of: local) / model.sizeScale
         )
@@ -486,7 +488,8 @@ final class NotchWindowController {
     /// Whether the pointer is on the move handle, asked in the same notch-own
     /// measurements `isOverHandle` uses.
     private func isOverMoveHandle(_ local: CGPoint) -> Bool {
-        model.isOnMoveHandle(
+        guard model.showsEdgeControls else { return false }
+        return model.isOnMoveHandle(
             along: (placement.along(of: local) - model.slack) / model.sizeScale,
             across: placement.across(of: local) / model.sizeScale
         )
@@ -498,7 +501,7 @@ final class NotchWindowController {
     private var liveRect: CGRect {
         guard model.isExpanded else { return pillRect }
         // The orb hangs below the shape, so the live region is both together.
-        return notchRect.union(handleRect)
+        return model.showsEdgeControls ? notchRect.union(handleRect) : notchRect
     }
 
     /// The card, its tail, and the gap between the tail and the notch — so
@@ -1280,6 +1283,13 @@ final class NotchWindowController {
         editPosition.target = menuActions
         editPosition.isEnabled = !model.isEditingPosition
         menu.addItem(editPosition)
+        let settings = NSMenuItem(
+            title: L10n.t("Settings…"),
+            action: #selector(MenuActions.openSettings(_:)), keyEquivalent: ""
+        )
+        settings.target = menuActions
+        settings.isEnabled = true
+        menu.addItem(settings)
         menu.addItem(.separator())
 
         let refresh = NSMenuItem(
@@ -1317,6 +1327,9 @@ final class NotchWindowController {
         togglePinned: { [weak self] in self?.togglePinned() },
         editPosition: { [weak self] in
             DispatchQueue.main.async { self?.beginPositionEditing() }
+        },
+        openSettings: { [weak self] in
+            DispatchQueue.main.async { self?.onOpenSettings?() }
         }
     )
 }
@@ -1329,22 +1342,26 @@ final class MenuActions: NSObject {
     private let signIn: (Int) -> Void
     private let pin: () -> Void
     private let edit: () -> Void
+    private let settings: () -> Void
 
     init(
         refresh: @escaping () -> Void,
         signIn: @escaping (Int) -> Void,
         togglePinned: @escaping () -> Void,
-        editPosition: @escaping () -> Void = {}
+        editPosition: @escaping () -> Void = {},
+        openSettings: @escaping () -> Void = {}
     ) {
         self.refresh = refresh
         self.signIn = signIn
         self.pin = togglePinned
         self.edit = editPosition
+        self.settings = openSettings
     }
 
     @objc func refreshNow(_ sender: Any?) { refresh() }
     @objc func togglePinned(_ sender: Any?) { pin() }
     @objc func editPosition(_ sender: Any?) { edit() }
+    @objc func openSettings(_ sender: Any?) { settings() }
 
     @objc func signIn(_ sender: Any?) {
         guard let item = sender as? NSMenuItem else { return }

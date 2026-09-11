@@ -285,7 +285,7 @@ struct ProviderCell: View {
                 isRefreshing: isRefreshing, icon: snapshot.icon,
                 localPerformance: snapshot.localPerformance,
                 localContextFraction: snapshot.localContextFraction,
-                weeklyFraction: snapshot.hasReading ? snapshot.weeklyFraction : nil,
+                weeklyFraction: snapshot.hasReading ? snapshot.secondaryWindow?.usedFraction : nil,
                 weeklyRing: weeklyRing
             )
             Text(readingText)
@@ -303,7 +303,7 @@ struct ProviderCell: View {
                 .animation(NotchMotion.reading, value: readingText)
         }
         .frame(height: NotchLayout.cellExtent)
-        .help(snapshot.headline?.summary ?? snapshot.statusMessage ?? snapshot.displayName)
+        .help(quotaRingText ?? snapshot.headline?.summary ?? snapshot.statusMessage ?? snapshot.displayName)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityText)
     }
@@ -312,7 +312,17 @@ struct ProviderCell: View {
     var accessibilityText: String {
         snapshot.localModel.map {
             "\($0.brand.map { "\($0.displayName), " } ?? "")\($0.name), \(snapshot.displayName) local, \(snapshot.showsLocalPerformance ? (snapshot.localPerformance.map { "Last generation speed \($0.speedText), \($0.band.label)" } ?? "Speed not measured") : "Loaded"), \($0.detail)\(localActivityText)\(localLedgerText)"
-        } ?? "\(snapshot.displayName), \(readingText)"
+        } ?? "\(snapshot.displayName), \(quotaRingText ?? readingText)"
+    }
+
+    var quotaRingText: String? {
+        guard weeklyRing != .off, snapshot.hasReading,
+              let secondary = snapshot.secondaryWindow else { return nil }
+        if weeklyRing == .inside, let activity, activity.state != .idle { return nil }
+        let main = snapshot.headline.map { "\(L10n.t("Main ring")): \($0.label), \($0.summary)" }
+        let position = weeklyRing == .inside ? L10n.t("Inner ring") : L10n.t("Outer ring")
+        return [main, "\(position): \(secondary.label), \(secondary.summary)"]
+            .compactMap { $0 }.joined(separator: "; ")
     }
 
     /// What the model is doing, the way the tooltip's header says it.

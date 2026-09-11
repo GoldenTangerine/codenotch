@@ -91,6 +91,48 @@ final class NotchRenderTests: XCTestCase {
         }
     }
 
+    func testCustomPlacementPaintsAtTheHitRegionOnEveryEdge() throws {
+        for edge in NotchEdge.allCases {
+            for scale: CGFloat in [0.75, 1.25] {
+                let model = model(edge: edge)
+                model.sizeScale = scale
+                let place = NotchPlacement(edge: edge, panelSize: model.panelSize)
+                let length = model.shapeLength * scale
+                for leading in [CGFloat(0), place.panelLength - length] {
+                    model.positionedLeading = leading
+                    let rep = try XCTUnwrap(render(model))
+                    let painted = (0..<Int(place.panelLength)).filter { along in
+                        let point = place.point(along: CGFloat(along),
+                                                across: model.notchDepth * scale / 2)
+                        return (rep.colorAt(x: Int(point.x), y: Int(point.y))?.alphaComponent ?? 0) > 0.5
+                    }
+                    let first = CGFloat(try XCTUnwrap(painted.first))
+                    let last = CGFloat(try XCTUnwrap(painted.last))
+                    // 弧形端部会缩进；校验轮廓中心跟随热区且绘制不越界。
+                    XCTAssertEqual((first + last) / 2, leading + length / 2, accuracy: 2,
+                                   "\(edge), scale \(scale): painted centre must follow the hit region")
+                    XCTAssertGreaterThanOrEqual(first, leading - 1)
+                    XCTAssertLessThanOrEqual(last, leading + length + 1)
+                }
+            }
+        }
+    }
+
+    func testExpandedBarDoesNotPaintControlsOutsideItsBody() throws {
+        for edge in NotchEdge.allCases {
+            let model = model(edge: edge)
+            let rep = try XCTUnwrap(render(model))
+            let place = NotchPlacement(edge: edge, panelSize: model.panelSize)
+            for x in 0..<rep.pixelsWide {
+                for y in 0..<rep.pixelsHigh {
+                    let point = CGPoint(x: x, y: y)
+                    guard place.across(of: point) > model.notchDepth * model.sizeScale + 2 else { continue }
+                    XCTAssertLessThan(rep.colorAt(x: x, y: y)?.alphaComponent ?? 0, 0.1)
+                }
+            }
+        }
+    }
+
     func testPositionEditingOutlineUsesTheNotchAccent() throws {
         let model = model(edge: .right, cells: 0)
         model.isEditingPosition = true

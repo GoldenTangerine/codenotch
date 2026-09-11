@@ -423,6 +423,19 @@ is asked on the first real alert rather than at launch.
 
 ## Placement
 
+Right-click the notch to open **Settings…** or **Edit position**. The bar has
+no separate settings or move handles.
+
+Appearance → **Secondary quota ring** shows another quota period beside the main
+ring. Code Switch R uses the next available period in its supplied order, so a
+weekly main ring can have a monthly second ring. Balance-only, unlimited and
+invalid quotas do not become a second ring. The inside ring temporarily yields
+to the working indicator; the outside ring remains visible.
+
+**Show usage pace** also applies to Code Switch R details for 5-hour, daily and
+weekly quotas with a reset time. Monthly and custom periods need an exact cycle
+length before their pace can be calculated; their quota rings still work.
+
 Right-click the notch and choose **Edit position** to drag it along any of the
 four edges or onto another display. Release to save; press Escape to cancel.
 The position survives relaunches. A disconnected display temporarily falls back

@@ -44,11 +44,11 @@ enum WeeklyRing: String, CaseIterable, Identifiable {
     var explanation: String {
         switch self {
         case .off:
-            return L10n.t("One ring per provider, showing the headline limit. The weekly allowance stays in the hover card.")
+            return L10n.t("One ring shows the main quota. Other quotas remain in the hover card.")
         case .inside:
-            return L10n.t("A thinner ring for the weekly limit, drawn inside the main one. It shares the gap with the working indicator.")
+            return L10n.t("Shows another quota period inside the main ring. Hidden while the working indicator is active.")
         case .outside:
-            return L10n.t("A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.")
+            return L10n.t("Shows another quota period outside the main ring, such as monthly quota beside weekly quota.")
         }
     }
 

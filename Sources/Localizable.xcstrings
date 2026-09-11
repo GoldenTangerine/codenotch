@@ -10712,6 +10712,90 @@
         }
       }
     },
+    "Simpler controls and clearer quota rings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "更简洁的操作，更清晰的额度圆环。" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "操作がシンプルに、利用枠リングが分かりやすくなりました。" } }
+      }
+    },
+    "Open settings and edit position from the right-click menu": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "通过右键菜单打开设置和编辑位置" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "右クリックメニューから設定と位置編集を開く" } }
+      }
+    },
+    "Drag placement now matches the visible bar": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "修复拖动位置与显示栏错位" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "ドラッグ位置とバーの表示位置のずれを修正" } }
+      }
+    },
+    "Show another quota period in the secondary ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "第二圆环支持另一周期的额度" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "追加リングに別の期間の利用枠を表示" } }
+      }
+    },
+    "Usage pacing now supports linked 5-hour, daily and weekly quotas": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "用量节奏支持同步的 5 小时、日和周额度" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "連携された5時間・日次・週次の利用枠で使用ペースを表示" } }
+      }
+    },
+    "Main ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "主圈" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "メインリング" } }
+      }
+    },
+    "Inner ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "内圈" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "内側リング" } }
+      }
+    },
+    "Outer ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "外圈" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "外側リング" } }
+      }
+    },
+    "Secondary quota ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "第二额度圆环" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "追加の利用枠リング" } }
+      }
+    },
+    "One ring shows the main quota. Other quotas remain in the hover card.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "主圈显示主要额度，其他额度可悬停查看。" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "メインリングに主な利用枠を表示します。他の利用枠はホバーカードで確認できます。" } }
+      }
+    },
+    "Shows another quota period inside the main ring. Hidden while the working indicator is active.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "内圈显示另一周期的额度，工作指示启用时暂时隐藏。" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "内側に別の期間の利用枠を表示します。動作インジケーターの表示中は非表示になります。" } }
+      }
+    },
+    "Shows another quota period outside the main ring, such as monthly quota beside weekly quota.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "外圈显示另一周期的额度，例如主圈显示周额度、外圈显示月额度。" } },
+        "ja": { "stringUnit": { "state": "translated", "value": "外側に別の期間の利用枠を表示します。例えば、主リングが週間なら外側は月間の利用枠です。" } }
+      }
+    },
     "Weekly ring": {
       "extractionState": "manual",
       "localizations": {

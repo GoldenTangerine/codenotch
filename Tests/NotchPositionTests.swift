@@ -179,6 +179,38 @@ final class NotchPositionEditingTests: XCTestCase {
         XCTAssertEqual(controller.savedPosition?.displayID, "detached-display")
     }
 
+    func testLegacyDraggingReachesTrailingEdgeWithoutHiddenControlClearance() throws {
+        let controller = try controller()
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        controller.assignedScreen = screen
+        controller.restore(position: nil)
+        for edge in NotchEdge.allCases {
+            controller.model.edge = edge
+            controller.model.alongOffset = 100_000
+            controller.relocate()
+            let frame = try XCTUnwrap(controller.panelFrameForTesting)
+            let end = controller.model.slack + controller.model.shapeLength * controller.model.sizeScale
+            if edge.isVertical {
+                XCTAssertEqual(frame.maxY - end, screen.frame.minY, accuracy: 2)
+            } else {
+                XCTAssertEqual(frame.minX + end, screen.frame.maxX, accuracy: 2)
+            }
+        }
+    }
+
+    func testContextMenuOpensSettingsAndRetainsPositionEditing() async throws {
+        let controller = try controller()
+        let opened = expectation(description: "Settings opened from context menu")
+        controller.onOpenSettings = { opened.fulfill() }
+        let panel = try XCTUnwrap(controller.panelContentViewForTesting?.window as? NotchPanel)
+        let menu = try XCTUnwrap(panel.contextMenuProvider?())
+        XCTAssertNotNil(menu.items.first { $0.action == #selector(MenuActions.editPosition(_:)) })
+        let index = try XCTUnwrap(menu.items.firstIndex { $0.action == #selector(MenuActions.openSettings(_:)) })
+        XCTAssertTrue(menu.items[index].isEnabled)
+        menu.performActionForItem(at: index)
+        await fulfillment(of: [opened], timeout: 1)
+    }
+
     func testFleetKeepsSavedPositionAndActivityMappingAcrossScopes() throws {
         let fleet = NotchFleet(scope: .mainDisplay, edge: .right)
         let position = NotchPosition(edge: .bottom, fraction: 0.25, displayID: "detached-display")

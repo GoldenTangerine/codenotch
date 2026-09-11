@@ -46,6 +46,94 @@ final class CodeSwitchBridgeTests: XCTestCase {
         XCTAssertNil(quota.window)
     }
 
+    private func quota(_ key: String, kind: String = "progress", total: Double = 100,
+                       unlimited: Bool = false, active: Bool = true) -> CodeSwitchQuota {
+        CodeSwitchQuota(key: key, label: nil, used: 30, total: total, unlimited: unlimited,
+                        nextReset: "2026-09-12T00:00:00Z", active: active, valueMode: nil,
+                        unit: nil, extra: nil, invalidMessage: nil, displayKind: kind)
+    }
+
+    private func snapshot(quotas: [CodeSwitchQuota]) throws -> ProviderSnapshot {
+        let platform = try fixture().platforms[0]
+        let provider = CodeSwitchProvider(providerId: "periods", providerName: "Periods", icon: "openai",
+            activeRequests: 0, status: "enabled", loading: false, updatedAt: 0, quotas: quotas, stats: nil)
+        return provider.snapshot(platform: platform)
+    }
+
+    func testSecondaryRingUsesNextAvailablePeriod() throws {
+        for keys in [["five_hour", "daily", "weekly"], ["daily", "weekly"], ["weekly", "monthly"]] {
+            let snapshot = try snapshot(quotas: keys.map { quota($0) })
+            XCTAssertEqual(snapshot.headline?.id, keys[0])
+            XCTAssertEqual(snapshot.secondaryWindow?.id, keys[1])
+            XCTAssertEqual(snapshot.secondaryWindow?.usedFraction, 0.3)
+        }
+        XCTAssertNil(try snapshot(quotas: [quota("weekly")]).secondaryWindow)
+    }
+
+    func testSecondaryRingSkipsUnusableAndDuplicateQuotas() throws {
+        let snapshot = try snapshot(quotas: [quota("weekly"), quota("weekly"),
+            quota("balance", kind: "balance"), quota("daily", unlimited: true),
+            quota("five_hour", active: false), quota("daily", total: 0), quota("monthly")])
+        XCTAssertEqual(snapshot.secondaryWindow?.id, "monthly")
+    }
+
+    func testTimedLinkedQuotasProvidePaceWithoutGuessingUnknownCycles() throws {
+        for (key, duration) in [("five_hour", 18000.0), ("daily", 86400.0), ("weekly", 604800.0)] {
+            let window = try XCTUnwrap(quota(key).window)
+            XCTAssertEqual(window.duration, duration)
+            let halfway = try XCTUnwrap(window.resetsAt).addingTimeInterval(-duration / 2)
+            XCTAssertEqual(try XCTUnwrap(window.usagePace(now: halfway)).percentagePoints, -20, accuracy: 0.001)
+        }
+        for key in ["monthly", "total", "custom"] {
+            XCTAssertNil(quota(key).window?.usagePace(now: now))
+        }
+        XCTAssertNil(quota("weekly", kind: "balance").window?.usagePace(now: now))
+        XCTAssertNil(quota("weekly", unlimited: true).window?.usagePace(now: now))
+    }
+
+    func testNativeSecondaryRingFallsBackWhenWeeklyIsHeadline() {
+        let snapshot = ProviderSnapshot(id: "native", displayName: "Native", glyph: .claude,
+            fidelity: .official, status: .ok, windows: [
+                LimitWindow(id: "weekly", label: "Weekly", usedFraction: 0.3, duration: 604800),
+                LimitWindow(id: "monthly", label: "Monthly", usedFraction: 0.6, duration: 2592000)
+            ], headlineID: "weekly", weeklyID: "weekly")
+        XCTAssertEqual(snapshot.secondaryWindow?.id, "monthly")
+    }
+
+    func testRingDescriptionsIdentifyBothPeriodsAndRespectVisibility() throws {
+        let snapshot = try snapshot(quotas: [quota("weekly"), quota("monthly")])
+        let outer = ProviderCell(snapshot: snapshot, weeklyRing: .outside)
+        let description = try XCTUnwrap(outer.quotaRingText)
+        XCTAssertTrue(description.contains(L10n.t("Main ring")))
+        XCTAssertTrue(description.contains(L10n.t("Outer ring")))
+        XCTAssertTrue(description.contains(L10n.t("Weekly")))
+        XCTAssertTrue(description.contains(L10n.t("Monthly")))
+        XCTAssertTrue(outer.accessibilityText.contains(description))
+        XCTAssertNil(ProviderCell(snapshot: snapshot, weeklyRing: .off).quotaRingText)
+        XCTAssertNotNil(ProviderCell(snapshot: snapshot, weeklyRing: .inside).quotaRingText)
+        let working = ActivitySummary(state: .working)
+        XCTAssertNil(ProviderCell(snapshot: snapshot, activity: working, weeklyRing: .inside).quotaRingText)
+        XCTAssertNotNil(ProviderCell(snapshot: snapshot, activity: working, weeklyRing: .outside).quotaRingText)
+    }
+
+    func testLinkedTooltipRespectsUsagePacePreference() throws {
+        let snapshot = try snapshot(quotas: [quota("weekly")])
+        let domain = "CodeSwitchPaceTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        func render(pace: Bool) throws -> Data {
+            defaults.set(pace, forKey: Preferences.showUsagePaceKey)
+            let renderer = ImageRenderer(content: TooltipCard(snapshot: snapshot, now: now)
+                .defaultAppStorage(defaults))
+            renderer.scale = 1
+            let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+            return try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+        }
+        let withoutPace = try render(pace: false)
+        XCTAssertNotEqual(try render(pace: true), withoutPace)
+        XCTAssertEqual(try render(pace: false), withoutPace)
+    }
+
     func testBrandIconAliasesAndPathValidation() {
         XCTAssertEqual(CodeSwitchIcon.resourceKey("DeepSeek"), "deepseek-color")
         XCTAssertEqual(CodeSwitchIcon.resourceKey("kimi"), "kimi-color")

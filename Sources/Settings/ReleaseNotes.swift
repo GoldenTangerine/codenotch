@@ -40,6 +40,16 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.24",
+            headline: L10n.t("Simpler controls and clearer quota rings."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Open settings and edit position from the right-click menu")),
+                ReleaseNote.Change(title: L10n.t("Drag placement now matches the visible bar")),
+                ReleaseNote.Change(title: L10n.t("Show another quota period in the secondary ring")),
+                ReleaseNote.Change(title: L10n.t("Usage pacing now supports linked 5-hour, daily and weekly quotas"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.23",
             headline: L10n.t("More providers and clearer usage tracking."),
             changes: [

@@ -101,6 +101,7 @@ struct CodeSwitchProvider: Codable, Equatable {
             status: .ok,
             windows: windows,
             headlineID: windows.first?.id,
+            weeklyID: windows.first(where: { $0.id == "weekly" })?.id,
             icon: ProviderIcon(kind: .brand, value: CodeSwitchIcon.prefix + icon),
             linked: CodeSwitchDetails(platform: platform.name, provider: self)
         )
@@ -152,6 +153,16 @@ struct CodeSwitchQuota: Codable, Equatable {
             && used.isFinite && total.isFinite && used >= 0 && total >= 0
     }
 
+    var duration: TimeInterval? {
+        // 月度可能是自然月或账单周期；仅凭下次重置时间不能确定完整周期。
+        switch key {
+        case "five_hour": return 5 * 3600
+        case "daily": return 24 * 3600
+        case "weekly": return 7 * 24 * 3600
+        default: return nil
+        }
+    }
+
     var window: LimitWindow? {
         guard hasWindow else { return nil }
         let balance = displayKind == "balance"
@@ -160,7 +171,7 @@ struct CodeSwitchQuota: Codable, Equatable {
             resetsAt: active ? reset : nil,
             quantity: QuotaQuantity(remaining: max(0, total - used), used: balance ? nil : used,
                 total: balance ? nil : total, unit: unit ?? (valueMode == "count" ? "" : "USD"),
-                unlimited: unlimited == true))
+                unlimited: unlimited == true), duration: duration)
     }
 }
 

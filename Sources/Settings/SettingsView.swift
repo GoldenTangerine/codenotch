@@ -582,7 +582,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Picker(L10n.t("Weekly ring"), selection: $preferences.weeklyRing) {
+                Picker(L10n.t("Secondary quota ring"), selection: $preferences.weeklyRing) {
                     ForEach(WeeklyRing.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)

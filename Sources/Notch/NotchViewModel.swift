@@ -12,6 +12,8 @@ import Combine
 
 @MainActor
 final class NotchViewModel: ObservableObject {
+    // 两端入口统一移入右键菜单，绘制和热区必须同时关闭。
+    let showsEdgeControls = false
     @Published var snapshots: [ProviderSnapshot] = []
     @Published var tooltipHeightMode: TooltipHeightMode = .standard
     @Published var fullTooltipHeightLimit: CGFloat = NotchLayout.defaultMaxCardHeight

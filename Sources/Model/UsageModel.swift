@@ -370,6 +370,23 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// without a denominator — the same rule the headline ring follows.
     var weeklyFraction: Double? { weeklyWindow?.usedFraction }
 
+    var secondaryWindow: LimitWindow? {
+        // 联动额度保留来源顺序，本地来源优先使用已声明的第二额度。
+        func isUsable(_ window: LimitWindow) -> Bool {
+            guard window.id != headline?.id, let fraction = window.usedFraction else { return false }
+            return fraction.isFinite && fraction >= 0 && window.quantity?.unlimited != true
+        }
+        if linked != nil {
+            let periods = ["five_hour", "daily", "weekly", "monthly"]
+            return windows.first { periods.contains($0.id) && isUsable($0) }
+        }
+        if let weeklyWindow, isUsable(weeklyWindow) { return weeklyWindow }
+        return windows.first {
+            isUsable($0) && ($0.duration.map { $0.isFinite && $0 > 0 } ?? false)
+                && $0.duration != headline?.duration
+        }
+    }
+
     /// What the cell prints under the ring.
     var headlineText: String {
         if headline?.quantity?.unlimited == true { return "∞" }

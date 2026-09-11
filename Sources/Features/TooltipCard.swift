@@ -454,6 +454,7 @@ private struct CodeSwitchTooltip: View {
     var activity: ActivitySummary? = nil
     var resetTimeFormat: ResetTimeFormat = .automatic
     var fullContent = false
+    var showUsagePace = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -498,7 +499,7 @@ private struct CodeSwitchTooltip: View {
                                 .foregroundStyle(Palette.textSecondary)
                                 .fixedSize(horizontal: false, vertical: true)
                         } else if let window = quota.window {
-                            LimitWindowRow(window: window, fidelity: .derived, now: now, resetTimeFormat: resetTimeFormat, showsUsagePace: false)
+                            LimitWindowRow(window: window, fidelity: .derived, now: now, resetTimeFormat: resetTimeFormat, showsUsagePace: showUsagePace)
                         } else {
                             Text("\(quota.title): \(L10n.t("Quota unavailable"))")
                                 .foregroundStyle(Palette.critical)
@@ -1183,7 +1184,8 @@ struct TooltipCard: View {
         VStack(alignment: .leading, spacing: 0) {
             if let details = snapshot.linked {
                 CodeSwitchTooltip(snapshot: snapshot, details: details, now: now, activity: activity,
-                                  resetTimeFormat: resetTimeFormat, fullContent: heightMode == .full)
+                                  resetTimeFormat: resetTimeFormat, fullContent: heightMode == .full,
+                                  showUsagePace: showUsagePace)
             } else {
                 ProviderTooltip(activityNote: localActivityNote, snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat,
                                 fullContent: heightMode == .full, isRefreshing: isRefreshing, showUsagePace: showUsagePace)

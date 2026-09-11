@@ -300,7 +300,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 usageStore: store, ollamaRelay: relay, lmstudioMetrics: lmstudio
             )
             // The gear toggles; everything else that opens settings opens it.
-            fleet.onOpenSettings = { [weak settings] in settings?.toggle() }
+            // 两端按钮已隐藏，右键菜单的设置入口始终打开窗口。
+            fleet.onOpenSettings = { [weak settings] in settings?.show() }
             self.settings = settings
 
             // What changed, once per version — including on a fresh install,
