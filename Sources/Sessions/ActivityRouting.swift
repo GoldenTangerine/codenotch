@@ -81,6 +81,16 @@ struct ActivityRouting {
             snapshots.removeAll { hiddenLinked.contains($0.id) && $0.id.hasPrefix("code-switch:") }
             sessions = sessions.filter { !hiddenLinked.contains($0.key) || !$0.key.hasPrefix("code-switch:") }
         }
+        // Session entrances can restore a supplier excluded by the display scope.
+        // Keep local entries that still own unmatched sessions.
+        if snapshots.contains(where: { $0.linked != nil && $0.id.hasPrefix("code-switch:5:codex:") }) {
+            snapshots.removeAll { snapshot in
+                sources[snapshot.id] == "codex" && snapshot.linked == nil && !snapshot.hasReading
+                    && (snapshot.status == .ok || snapshot.status == .stale(since: .distantPast))
+                    && snapshot.queryFailure == nil && snapshot.queryRetryAfter == nil
+                    && (sessions[snapshot.id]?.isEmpty ?? true)
+            }
+        }
         snapshots = CodeSwitchProviderOrder.apply(linkedOrder, to: snapshots)
     }
 

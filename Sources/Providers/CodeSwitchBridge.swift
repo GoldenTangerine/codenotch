@@ -55,7 +55,9 @@ struct CodeSwitchSessionBinding: Codable, Equatable {
     func snapshot(platform: CodeSwitchPlatform, retaining previous: ProviderSnapshot? = nil) -> ProviderSnapshot {
         CodeSwitchProvider(providerId: providerId, providerName: providerName, icon: icon,
                            activeRequests: 0, status: "session", loading: false, updatedAt: updatedAt,
-                           quotas: previous?.linked?.provider.quotas ?? [], stats: previous?.linked?.provider.stats).snapshot(platform: platform)
+                           quotas: previous?.linked?.provider.quotas ?? [], stats: previous?.linked?.provider.stats,
+                           quotaState: previous?.linked?.provider.quotaState,
+                           quotaAutoDisabled: previous?.linked?.provider.quotaAutoDisabled).snapshot(platform: platform)
     }
 }
 
@@ -75,6 +77,19 @@ struct CodeSwitchProvider: Codable, Equatable {
     let updatedAt: Double
     let quotas: [CodeSwitchQuota]
     let stats: CodeSwitchStats?
+    var quotaState: String? = nil
+    var quotaAutoDisabled: Bool? = nil
+
+    var effectiveQuotaState: String {
+        if quotaAutoDisabled == true { return "exhausted" }
+        if let quotaState, ["available", "exhausted", "unknown"].contains(quotaState) { return quotaState }
+        let valid = quotas.filter {
+            ["progress", "balance"].contains($0.displayKind) && $0.invalidMessage?.isEmpty != false
+                && $0.used.isFinite && $0.total.isFinite && $0.used >= 0 && $0.total >= 0
+        }
+        if valid.contains(where: { $0.unlimited != true && $0.total - $0.used <= 0 }) { return "exhausted" }
+        return valid.isEmpty ? "unknown" : "available"
+    }
 
     func snapshot(platform: CodeSwitchPlatform) -> ProviderSnapshot {
         let windows = quotas.compactMap(\.window)
@@ -175,6 +190,7 @@ struct CodeSwitchDetails: Equatable {
 
     var activityText: String {
         if provider.status == "session" { return String(localized: "Session provider") }
+        if provider.quotaAutoDisabled == true { return String(localized: "Automatically disabled by quota") }
         if provider.status == "enabled" { return String(localized: "Enabled provider") }
         return provider.status == "active"
             ? String(localized: "Calling · \(provider.activeRequests)")
@@ -252,6 +268,8 @@ struct CodeSwitchSnapshotState {
 @MainActor
 final class CodeSwitchBridge: ObservableObject {
     @Published private(set) var snapshots: [ProviderSnapshot] = []
+    @Published private(set) var displayedSnapshots: [ProviderSnapshot] = []
+    private var trayIDs = Set<String>()
     @Published private(set) var bindings: [String: CodeSwitchSessionLink] = [:]
     private let file: URL
     private var timer: Timer?
@@ -274,6 +292,11 @@ final class CodeSwitchBridge: ObservableObject {
 
     func configure(enabled: Bool, mode: CodeSwitchDisplayMode) {
         guard enabled != running || mode != self.mode else { return }
+        if enabled && running {
+            self.mode = mode
+            updateDisplayedSnapshots()
+            return
+        }
         stop()
         self.mode = mode
         guard enabled else { return }
@@ -299,6 +322,8 @@ final class CodeSwitchBridge: ObservableObject {
         pending = false
         connection = .disabled
         if !snapshots.isEmpty { snapshots = [] }
+        trayIDs = []
+        if !displayedSnapshots.isEmpty { displayedSnapshots = [] }
         if !bindings.isEmpty { bindings = [:] }
     }
 
@@ -347,7 +372,14 @@ final class CodeSwitchBridge: ObservableObject {
               current == generation else { return }
         if bindings != result.bindings { bindings = result.bindings }
         if snapshots != result.snapshots { snapshots = result.snapshots }
+        trayIDs = result.trayIDs
+        updateDisplayedSnapshots()
         if connection != result.connection { connection = result.connection }
+    }
+
+    private func updateDisplayedSnapshots() {
+        let selected = snapshots.filter { mode.includes($0, trayIDs: trayIDs) }
+        if displayedSnapshots != selected { displayedSnapshots = selected }
     }
 
     deinit {

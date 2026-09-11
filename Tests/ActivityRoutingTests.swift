@@ -49,6 +49,51 @@ import SQLite3
         #expect(model.activity(for: "code-switch:5:codex:42")?.state == .waiting)
     }
 
+    @Test func filteredProviderAppearsForSessionsButManualHidingWins() throws {
+        let state = try bridge()
+        let id = try #require(state.snapshots.first?.id)
+        for activity in [AgentSession.State.waiting, .busy] {
+            let sessions = ["codex": [session(1, state: activity)]]
+            let shown = ActivityRouting(local: [], linked: [], sources: [:], sessions: sessions,
+                bindings: state.bindings, now: now)
+            #expect(shown.snapshots.map(\.id) == [id])
+            let hidden = ActivityRouting(local: [], linked: [], sources: [:], sessions: sessions,
+                bindings: state.bindings, hiddenLinked: [id], now: now)
+            #expect(hidden.snapshots.isEmpty)
+        }
+        let ended = ActivityRouting(local: [], linked: [], sources: [:], sessions: ["codex": [session(1, state: .idle)]],
+            bindings: state.bindings, now: now)
+        #expect(ended.snapshots.isEmpty)
+    }
+
+    @Test func restoredSupplierSuppressesOnlyUnusedLocalPlaceholder() throws {
+        let state = try bridge()
+        let id = try #require(state.snapshots.first?.id)
+        let placeholder = ProviderSnapshot(id: "local-codex", displayName: "Codex", glyph: .openai,
+            fidelity: .derived, status: .ok, windows: [])
+        for activity in [AgentSession.State.busy, .waiting] {
+            let restored = ActivityRouting(local: [placeholder], linked: [], sources: [placeholder.id: "codex"],
+                sessions: ["codex": [session(1, state: activity)]], bindings: state.bindings, now: now)
+            #expect(restored.snapshots.map(\.id) == [id])
+            #expect(restored.sessions[id]?.count == 1)
+            let hidden = ActivityRouting(local: [placeholder], linked: [], sources: [placeholder.id: "codex"],
+                sessions: ["codex": [session(1, state: activity)]], bindings: state.bindings,
+                hiddenLinked: [id], now: now)
+            #expect(hidden.snapshots == [placeholder])
+        }
+        let unmatched = ActivityRouting(local: [placeholder], linked: [], sources: [placeholder.id: "codex"],
+            sessions: ["codex": [session(1), session(99)]], bindings: state.bindings, now: now)
+        #expect(unmatched.snapshots.count == 2)
+        #expect(unmatched.sessions[placeholder.id]?.map(\.id) == [session(99).id])
+        for status in [ProviderStatus.needsAuth, .error("offline")] {
+            let error = ProviderSnapshot(id: placeholder.id, displayName: "Codex", glyph: .openai,
+                fidelity: .derived, status: status, windows: [])
+            let restored = ActivityRouting(local: [error], linked: [], sources: [placeholder.id: "codex"],
+                sessions: ["codex": [session(1)]], bindings: state.bindings, now: now)
+            #expect(restored.snapshots.count == 2)
+        }
+    }
+
     @Test func linkedOrderIncludesSessionSuppliersWithoutMovingLocalOrFallbackSlots() throws {
         let state = try bridge()
         let original = try #require(state.snapshots.first)

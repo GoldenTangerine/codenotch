@@ -108,6 +108,42 @@ import Testing
                 costTotal: 0.0012, avgFirstTokenSec: 0.263, avgTokensPerSec: 29.8))
     }
 
+    @Test func displayScopesKeepUnknownAndUseAnyExhaustedQuota() throws {
+        let platform = try fixture().platforms[0]
+        let available = tableProvider([tableQuota("daily")]).snapshot(platform: platform)
+        var provider = tableProvider([tableQuota("daily"), tableQuota("weekly", used: 100)])
+        let exhausted = provider.snapshot(platform: platform)
+        let unknown = tableProvider([]).snapshot(platform: platform)
+        let tray: Set<String> = [available.id]
+        #expect(CodeSwitchDisplayMode.enabled.includes(exhausted, trayIDs: []))
+        #expect(CodeSwitchDisplayMode.available.includes(unknown, trayIDs: []))
+        #expect(CodeSwitchDisplayMode.available.includes(available, trayIDs: []))
+        #expect(!CodeSwitchDisplayMode.available.includes(exhausted, trayIDs: []))
+        #expect(CodeSwitchDisplayMode.exhausted.includes(exhausted, trayIDs: []))
+        #expect(!CodeSwitchDisplayMode.exhausted.includes(unknown, trayIDs: []))
+        #expect(CodeSwitchDisplayMode.tray.includes(available, trayIDs: tray))
+        #expect(!CodeSwitchDisplayMode.tray.includes(available, trayIDs: []))
+        #expect(!CodeSwitchDisplayMode.active.includes(available, trayIDs: []))
+        let active = CodeSwitchProvider(providerId: "active", providerName: "Active", icon: "openai",
+            activeRequests: 1, status: "active", loading: true, updatedAt: 0, quotas: [], stats: nil)
+        #expect(CodeSwitchDisplayMode.active.includes(active.snapshot(platform: platform), trayIDs: []))
+        provider.quotaState = "unknown"
+        #expect(provider.effectiveQuotaState == "unknown")
+        provider.quotaAutoDisabled = true
+        #expect(provider.effectiveQuotaState == "exhausted")
+        #expect(CodeSwitchDisplayMode(rawValue: "enabled") == .enabled)
+        #expect(CodeSwitchDisplayMode(rawValue: "tray") == .tray)
+    }
+
+    @Test func zeroInactiveBalanceAndInvalidQuotaCompatibility() {
+        let zero = CodeSwitchQuota(key: "balance", label: nil, used: 0, total: 0, unlimited: false,
+            nextReset: nil, active: false, valueMode: "currency", unit: "USD", extra: nil,
+            invalidMessage: nil, displayKind: "balance")
+        #expect(tableProvider([zero]).effectiveQuotaState == "exhausted")
+        #expect(tableProvider([tableQuota("daily", used: 100, unlimited: true)]).effectiveQuotaState == "available")
+        #expect(tableProvider([tableQuota("daily", used: 100, kind: "error")]).effectiveQuotaState == "unknown")
+    }
+
     @Test func settingsTableDoesNotPresentSessionCacheAsCurrentData() throws {
         let source = try fixture()
         let platform = source.platforms[0]
@@ -327,6 +363,27 @@ import Testing
         }
     }
 
+    @Test func limitedSenderKeepsUpgradeHintWhenAPlatformFails() async throws {
+        let dir = try directory(); defer { try? FileManager.default.removeItem(at: dir) }
+        let file = dir.appendingPathComponent("tray-snapshot-v1.json")
+        let reader = CodeSwitchReader(file: file)
+        var main = try fixture()
+        try write(main, file)
+        _ = await reader.read(now: now, mode: .tray, generation: 1)
+        let lease = try JSONDecoder().decode(CodeSwitchSubscription.self,
+            from: Data(contentsOf: dir.appendingPathComponent("codenotch-subscription-v1.json")))
+        let failed = CodeSwitchPlatform(platform: "codex", name: "Codex", icon: "openai", error: true, providers: [])
+        try write(CodeSwitchProviderFile(version: 1, session: main.session, revision: 1, platforms: [failed]),
+            dir.appendingPathComponent("codenotch-providers-v1.json"))
+        main.codenotch = CodeSwitchIntegrationInfo(version: 1, mode: "enabled", consumerSession: lease.session,
+            revision: 1, error: false)
+        try write(main, file)
+        #expect(await reader.read(now: now, mode: .tray, generation: 1)?.connection == .limited)
+        main.codenotch?.providerScope = "enabled-or-quota-disabled"
+        try write(main, file)
+        #expect(await reader.read(now: now, mode: .tray, generation: 1)?.connection == .partial)
+    }
+
     @Test func legacyUpgradeRevisionReuseAndModeReprojection() async throws {
         let dir = try directory(); defer { try? FileManager.default.removeItem(at: dir) }
         let file = dir.appendingPathComponent("tray-snapshot-v1.json")
@@ -351,14 +408,20 @@ import Testing
         upgraded.codenotch = CodeSwitchIntegrationInfo(version: 1, mode: "enabled", consumerSession: lease.session, revision: 1, error: false)
         try write(upgraded, file)
         let full = await reader.read(now: now, mode: .enabled, generation: 1)
-        #expect(full?.connection == .connected)
+        #expect(full?.connection == .limited)
         #expect(full?.snapshots.count == 2)
         for _ in 0..<20 { _ = await reader.read(now: now, mode: .enabled, generation: 1) }
         #expect(await reader.mainDecodes == 2)
         #expect(await reader.providerDecodes == 1)
         let tray = await reader.read(now: now, mode: .tray, generation: 1)
-        #expect(tray?.snapshots.count == 1)
-        #expect(!FileManager.default.fileExists(atPath: leaseURL.path))
+        #expect(tray?.snapshots.count == 2)
+        #expect(tray?.trayIDs.count == 1)
+        #expect(FileManager.default.fileExists(atPath: leaseURL.path))
+        upgraded.codenotch?.providerScope = "enabled-or-quota-disabled"
+        try write(upgraded, file)
+        let supported = await reader.read(now: now, mode: .exhausted, generation: 1)
+        #expect(supported?.connection == .connected)
+        #expect(supported?.snapshots.count == 2)
         await reader.reset(generation: 2)
         #expect(await reader.read(now: now, mode: .enabled, generation: 1) == nil)
         #expect(!FileManager.default.fileExists(atPath: leaseURL.path))
@@ -405,7 +468,7 @@ import Testing
         #expect(await reader.read(now: now, mode: .enabled, generation: 1)?.connection == .failed)
         try write(CodeSwitchProviderFile(version: 1, session: source.session, revision: 2, platforms: []), sidecar)
         let recovered = await reader.read(now: now, mode: .enabled, generation: 1)
-        #expect(recovered?.connection == .connected)
+        #expect(recovered?.connection == .limited)
         #expect(recovered?.snapshots.isEmpty == true)
         try Data("broken".utf8).write(to: file, options: .atomic)
         #expect(await reader.read(now: now.addingTimeInterval(4), mode: .enabled, generation: 1)?.snapshots.isEmpty == true)

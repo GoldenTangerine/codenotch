@@ -291,6 +291,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     notifier.observe(snapshots)
                 }
                 .store(in: &cancellables)
+            codeSwitch.$displayedSnapshots.dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.updateActivity() }
+                .store(in: &cancellables)
             preferences.$hiddenCodeSwitchProviders.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
@@ -426,7 +429,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateActivity() {
         hookMonitor.reconcile(nativeSessions)
         let merged = hookMonitor.state.merging(nativeSessions)
-        let routing = ActivityRouting(local: localSnapshots, linked: codeSwitch?.snapshots ?? [],
+        let routing = ActivityRouting(local: localSnapshots, linked: codeSwitch?.displayedSnapshots ?? [],
                                       sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:],
                                       hiddenLinked: preferences?.hiddenCodeSwitchProviders ?? [],
                                       linkedOrder: preferences?.codeSwitchProviderOrder ?? [])

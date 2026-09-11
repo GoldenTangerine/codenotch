@@ -158,7 +158,7 @@ struct CodeSwitchSettingsView: View {
             Picker("Show providers", selection: $preferences.codeSwitchDisplayMode) {
                 ForEach(CodeSwitchDisplayMode.allCases) { mode in Text(mode.title).tag(mode) }
             }.disabled(!preferences.codeSwitchEnabled)
-            Text("Enabled providers have proxy hosting and their provider switch turned on, including hidden platforms.")
+            Text("Receive enabled and quota-disabled providers, even without proxy hosting. This list stays complete; the scope controls the notch. Active sessions may appear temporarily; hidden providers stay hidden.")
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Text(bridge.connection.title).font(.caption).foregroundStyle(.secondary)
         }
@@ -305,6 +305,13 @@ struct CodeSwitchSettingsProviderRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(row.name).font(.callout.weight(.medium)).lineLimit(2).help(row.name)
                     Text(row.platform).foregroundStyle(.secondary).lineLimit(1).help(row.platform)
+                    if let provider = row.currentSnapshot?.linked?.provider {
+                        if provider.quotaAutoDisabled == true {
+                            Text("Automatically disabled by quota").foregroundStyle(.orange)
+                        } else if provider.effectiveQuotaState == "exhausted" {
+                            Text("Quota exhausted").foregroundStyle(.orange)
+                        }
+                    }
                     if !row.isCurrent && row.snapshot != nil { Text("Session provider").foregroundStyle(.secondary) }
                     if duplicate { Text(row.reference).foregroundStyle(.secondary).lineLimit(1).help(row.reference) }
                 }

@@ -1,6 +1,14 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "All eligible providers" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "全部供应商"}}}},
+    "Not exhausted" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "仅未耗尽"}}}},
+    "Exhausted only" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "仅已耗尽"}}}},
+    "Active requests only" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "仅活跃"}}}},
+    "Update Code Switch R to include quota-disabled providers and platforms without proxy hosting." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "请更新 Code Switch R，以接收额度自动停用及未开启代理托管的平台供应商。"}}}},
+    "Receive enabled and quota-disabled providers, even without proxy hosting. This list stays complete; the scope controls the notch. Active sessions may appear temporarily; hidden providers stay hidden." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "接收已开启及额度自动停用的供应商，无需开启代理托管。列表保留全部供应商，显示范围仅控制刘海；活动会话可临时显示，手动隐藏始终生效。"}}}},
+    "Automatically disabled by quota" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "额度自动停用"}}}},
+    "Quota exhausted" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "额度已耗尽"}}}},
     "Visible provider icons and a searchable brand library." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "供应商图标恢复显示，品牌图库支持搜索。"}}}},
     "Restore linked Codex icons" : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "修复联动 Codex 图标"}}}},
     "OpenAI and other monochrome icons are visible on dark backgrounds again. Colored icons keep their original palette." : {"localizations": {"zh-Hans": {"stringUnit": {"state": "translated", "value": "OpenAI 等单色图标在深色背景上恢复可见，彩色图标保留原有配色。"}}}},

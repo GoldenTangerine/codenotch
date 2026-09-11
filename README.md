@@ -58,12 +58,18 @@ select the active suppliers; idle platforms show their default supplier. Hover a
 ring for quota, balance, reset time, calling status and daily statistics. Disable
 this on the dedicated **Settings → Code Switch R** page.
 
-The default **Follow tray popup** mode reads `~/Library/Caches/code-switch/tray-snapshot-v1.json`.
-**All enabled providers** includes every provider whose platform has proxy hosting
-on and whose own switch is on, including platforms hidden from the home page or tray.
-It does not mean only providers handling a request. Older publishers temporarily
-fall back to tray selection with an upgrade message; an upgraded publisher is
-recognized automatically.
+While integration is enabled, Codenotch subscribes to all providers whose switch
+is on or which were automatically disabled by quota, including hidden platforms
+and platforms without proxy hosting. Manually disabled providers are excluded.
+Settings retains the complete received list. The notch scope can follow the tray
+(the default), show all eligible providers, show only providers not exhausted,
+show only exhausted providers, or show only providers with active requests.
+Unknown quotas remain visible under "Not exhausted". Any valid finite quota
+reaching zero marks a provider exhausted; automatic quota disable also does so.
+Active or waiting sessions can temporarily restore a filtered provider, but
+manual hiding always wins. Existing scope, hidden-provider and order preferences
+are preserved. Older publishers show an upgrade message and use the available
+full list, or fall back to the tray when full-list support is absent.
 
 The same page shows compact supplier rows with today's requests and cost plus
 the most-used allowance or a quota error. Expand a row for success rate, tokens,
@@ -78,7 +84,7 @@ Warning colors follow the notch's usage thresholds. Providers
 retained only for session association keep their visibility control but show no
 cached statistics or quotas as current readings.
 Search by name, platform or supplier ID, and hide individual linked suppliers. Choices are
-saved by platform and provider ID, apply in both modes, and also hide associated
+saved by platform and provider ID, apply in every scope, and also hide associated
 session activity. Hidden entries remain available to restore, including while
 offline. Local accounts and Code Switch R provider switches are unaffected.
 

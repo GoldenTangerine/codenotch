@@ -10,12 +10,26 @@
 import Foundation
 
 enum CodeSwitchDisplayMode: String, CaseIterable, Identifiable {
-    case tray, enabled
+    case tray, enabled, available, exhausted, active
     var id: String { rawValue }
     var title: String {
         switch self {
         case .tray: return String(localized: "Follow tray popup")
-        case .enabled: return String(localized: "All enabled providers")
+        case .enabled: return String(localized: "All eligible providers")
+        case .available: return String(localized: "Not exhausted")
+        case .exhausted: return String(localized: "Exhausted only")
+        case .active: return String(localized: "Active requests only")
+        }
+    }
+
+    func includes(_ snapshot: ProviderSnapshot, trayIDs: Set<String>) -> Bool {
+        guard let provider = snapshot.linked?.provider else { return true }
+        switch self {
+        case .tray: return trayIDs.contains(snapshot.id)
+        case .enabled: return true
+        case .available: return provider.effectiveQuotaState != "exhausted"
+        case .exhausted: return provider.effectiveQuotaState == "exhausted"
+        case .active: return provider.activeRequests > 0
         }
     }
 }
@@ -26,6 +40,7 @@ struct CodeSwitchIntegrationInfo: Codable {
     let consumerSession: String
     let revision: UInt64
     let error: Bool
+    var providerScope: String? = nil
 }
 
 struct CodeSwitchProviderFile: Codable {
@@ -43,7 +58,7 @@ struct CodeSwitchSubscription: Codable {
 }
 
 enum CodeSwitchConnection: Equatable {
-    case disabled, waiting, connected, loading, legacy, failed, subscriptionFailed, partial
+    case disabled, waiting, connected, loading, legacy, limited, failed, subscriptionFailed, partial
     var title: String {
         switch self {
         case .disabled: return String(localized: "Integration is off")
@@ -54,6 +69,7 @@ enum CodeSwitchConnection: Equatable {
         case .failed: return String(localized: "Could not read providers. Retrying automatically…")
         case .subscriptionFailed: return String(localized: "Could not request enabled providers. Check cache folder access.")
         case .partial: return String(localized: "Some platforms could not be read. Retrying automatically…")
+        case .limited: return String(localized: "Update Code Switch R to include quota-disabled providers and platforms without proxy hosting.")
         }
     }
 }
@@ -62,6 +78,7 @@ struct CodeSwitchReadResult {
     let snapshots: [ProviderSnapshot]
     let bindings: [String: CodeSwitchSessionLink]
     let connection: CodeSwitchConnection
+    var trayIDs: Set<String> = []
 }
 
 actor CodeSwitchReader {
@@ -79,6 +96,8 @@ actor CodeSwitchReader {
     private var full: CodeSwitchProviderFile?
     private var state = CodeSwitchSnapshotState()
     private var renewed: Date?
+    private var trayIDs = Set<String>()
+    private var trayState = CodeSwitchSnapshotState()
     private(set) var mainDecodes = 0
     private(set) var providerDecodes = 0
 
@@ -95,6 +114,8 @@ actor CodeSwitchReader {
         main = nil
         full = nil
         state = CodeSwitchSnapshotState()
+        trayIDs = []
+        trayState = CodeSwitchSnapshotState()
     }
 
     private func revoke() {
@@ -134,12 +155,7 @@ actor CodeSwitchReader {
         guard next >= generation else { return nil }
         if next > generation { reset(generation: next) }
         var connection: CodeSwitchConnection = .connected
-        if mode == .enabled {
-            do { try subscribe(now: now) } catch { connection = .subscriptionFailed }
-        } else {
-            revoke()
-            full = nil
-        }
+        do { try subscribe(now: now) } catch { connection = .subscriptionFailed }
         do {
             let attrs = try FileManager.default.attributesOfItem(atPath: file.path)
             let current = Signature(inode: (attrs[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0,
@@ -159,7 +175,9 @@ actor CodeSwitchReader {
                 return result(connection == .subscriptionFailed ? connection : .waiting)
             }
             var platforms = main.platforms
-            if mode == .enabled, connection != .subscriptionFailed {
+            trayState.accept(main, now: now)
+            trayIDs = Set(trayState.snapshots.map(\.id))
+            if connection != .subscriptionFailed {
                 if let info = main.codenotch, info.version == 1 {
                     if info.mode != "enabled" || info.consumerSession != consumerSession {
                         connection = .loading
@@ -178,6 +196,7 @@ actor CodeSwitchReader {
                                 full = decoded
                             }
                             platforms = full?.platforms ?? main.platforms
+                            if info.providerScope != "enabled-or-quota-disabled" { connection = .limited }
                         } catch {
                             connection = .failed
                             // A revision can race an atomic publisher update; retry on the next signal.
@@ -199,6 +218,7 @@ actor CodeSwitchReader {
     }
 
     private func result(_ connection: CodeSwitchConnection) -> CodeSwitchReadResult {
-        CodeSwitchReadResult(snapshots: state.snapshots, bindings: state.bindings, connection: connection)
+        CodeSwitchReadResult(snapshots: state.snapshots, bindings: state.bindings, connection: connection,
+                             trayIDs: trayIDs.intersection(state.snapshots.map(\.id)))
     }
 }
