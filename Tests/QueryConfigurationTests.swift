@@ -12,19 +12,38 @@ import XCTest
 
 @MainActor
 final class QueryConfigurationTests: XCTestCase {
+    func testAwaitedRefreshPersistsBeforeRestartAndCannotRestoreDisconnectedReadings() async throws {
+        let archive = UsageArchive(defaults: defaults())
+        let providers: [UsageProvider] = [QueryProbe(id: "a"), QueryProbe(id: "b")]
+        let first = UsageStore(providers: providers, archive: archive)
+        defer { first.stop() }
+        await first.refresh()
+        XCTAssertEqual(Set(archive.load().keys), ["a", "b"])
+
+        let restarted = UsageStore(providers: providers, archive: archive, disconnected: ["b"])
+        defer { restarted.stop() }
+        await restarted.refresh()
+        XCTAssertEqual(Set(archive.load().keys), ["a"])
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(Set(archive.load().keys), ["a"], "the previous store restored a disconnected reading")
+    }
+
     func testArchiveCoalescesResultsAndFlushesOnStop() async throws {
         let name = "ArchiveBatchTests.\(UUID().uuidString)"
         let defaults = ArchiveWriteDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
         let archive = UsageArchive(defaults: defaults)
         let store = UsageStore(providers: [QueryProbe(id: "a"), QueryProbe(id: "b")], archive: archive)
-        await store.refresh()
+        let first = store.refresh(providerID: "a")
+        let second = store.refresh(providerID: "b")
+        await first?.value
+        await second?.value
         for _ in 0..<200 where defaults.readingWrites == 0 {
             try await Task.sleep(for: .milliseconds(10))
         }
         XCTAssertEqual(defaults.readingWrites, 1)
         XCTAssertEqual(Set(archive.load().keys), ["a", "b"])
-        await store.refresh()
+        await store.refresh(providerID: "a")?.value
         store.stop()
         XCTAssertEqual(defaults.readingWrites, 2)
         try await Task.sleep(for: .milliseconds(300))
@@ -34,7 +53,10 @@ final class QueryConfigurationTests: XCTestCase {
     func testPendingArchiveWriteCannotRestoreSignedOutReading() async throws {
         let archive = UsageArchive(defaults: defaults())
         let store = UsageStore(providers: [QueryProbe(id: "a"), QueryProbe(id: "b")], archive: archive)
-        await store.refresh()
+        let first = store.refresh(providerID: "a")
+        let second = store.refresh(providerID: "b")
+        await first?.value
+        await second?.value
         store.signOut(providerID: "a")
         XCTAssertEqual(Set(archive.load().keys), ["b"])
         try await Task.sleep(for: .milliseconds(300))

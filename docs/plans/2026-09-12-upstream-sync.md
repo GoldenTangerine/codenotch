@@ -45,3 +45,11 @@ macOS 26.5 SDK 应用编译链接、16 个修改 Swift 文件的语法检查、8
 ## v1.6.26 发布准备
 
 用户已授权编写提交及更新日志、提交代码并推送新 tag 触发 GitHub 自动打包。版本设为 `1.6.26 / 263`，同步维护 `CHANGELOG.md`、应用内更新记录和中文翻译。合并远程 `ed462f4`（上次发布自动生成的 site 产物提交），保留远程历史。继续使用现有 `v*` tag 发布工作流；本地验证不替代云端完整 XCTest 和 DMG 构建结果。
+
+## v1.6.27 缓存完成语义修复
+
+v1.6.26 云端因 `CodexProfileTests.testTwoProfilesKeepTheirOrderAndDisconnectIndependently` 和 `DisconnectedProviderForgetsTests.testSwitchingOffForgetsTheArchivedReading` 失败停止打包。原因是批量缓存写入改变了 `await refresh()` 返回时读数已经持久化的原有契约；前次模拟验证等待写入后才检查，遗漏了立即恢复场景。
+
+整轮刷新现于返回前保存尚未持久化的读数并取消待写任务。单项后台查询仍使用 250 毫秒合并窗口。保留失败测试的即时断言，新增刷新后立即重建 Store 并停用账户的回归，验证旧实例的待写任务不能恢复已清除读数。缓存优化测试直接发起单项刷新，以继续验证真实的延迟写入与退出保存。
+
+应用源码编译链接、810 项中文本地化检查和独立缓存行为验证通过；模拟验证覆盖即时恢复、旧任务取消、批量写入和退出保存。版本更新为 `1.6.27 / 264`，通过新 tag 重新触发原有发布工作流，不改写已发布 tag。完整 XCTest 仍由 GitHub 的 Xcode 环境运行。

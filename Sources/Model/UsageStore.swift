@@ -433,6 +433,8 @@ final class UsageStore: ObservableObject {
             beginRefresh($0)
         }
         for task in tasks { await task.value }
+        // Awaiting a full refresh also guarantees that a new store can restore it.
+        if archiveSaveTask != nil { persistArchive() }
     }
 
     /// Refetch one provider, leaving the others alone.

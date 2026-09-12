@@ -40,6 +40,15 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.27",
+            headline: L10n.t("Optional move handle and more reliable placement."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Enable the move handle in Appearance settings")),
+                ReleaseNote.Change(title: L10n.t("The move handle stays clickable when scaled and near screen edges")),
+                ReleaseNote.Change(title: L10n.t("Completed refreshes now save readings before returning"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.26",
             headline: L10n.t("Optional move handle and more reliable placement."),
             changes: [

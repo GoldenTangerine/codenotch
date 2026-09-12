@@ -1,6 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Completed refreshes now save readings before returning": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "整轮刷新完成时，读数已保存，可正确恢复账户状态" } }
+      }
+    },
     "Optional move handle and more reliable placement.": {
       "extractionState": "manual",
       "localizations": {
