@@ -40,6 +40,15 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.30",
+            headline: L10n.t("Clearer Code Switch R statistics at a glance."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Highlight numbers while keeping labels, currencies and units distinct")),
+                ReleaseNote.Change(title: L10n.t("Aligned details adapt to narrow windows and long quota titles")),
+                ReleaseNote.Change(title: L10n.t("Readable quota colors in light and dark appearance, with missing readings kept subtle"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.29",
             headline: L10n.t("Independent handles and more precise interaction."),
             changes: [

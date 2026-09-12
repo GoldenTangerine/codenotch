@@ -93,6 +93,71 @@ import Testing
         #expect(zero.speed == "—")
     }
 
+    @Test func settingsValuesHighlightNumbersWithoutChangingCopyOrUnits() {
+        let samples: [(String, String)] = [
+            ("US$31.4026", "31.4026"), ("1.234,56 US$", "1.234,56"),
+            ("6.22 s", "6.22"), ("9.24 t/s", "9.24"), ("23.35M", "23.35"),
+            ("0.00", "0.00"), ("4 天 6 小时后重置", "46"),
+            ("Resets Thu 12:05 PM", "1205"), ("١٢٫٥ USD", "١٢٫٥")
+        ]
+        for (copy, numbers) in samples {
+            let styled = CodeSwitchTableText.attributed(copy)
+            #expect(String(styled.characters) == copy)
+            let highlighted = styled.runs.filter { $0.foregroundColor == CodeSwitchTableText.valueColor }
+                .map { String(styled[$0.range].characters) }.joined()
+            #expect(highlighted == numbers)
+            for run in styled.runs where run.foregroundColor != CodeSwitchTableText.valueColor {
+                #expect(run.foregroundColor == Color.secondary)
+                #expect(run.font == Font.caption)
+            }
+        }
+    }
+
+    @Test func settingsMissingAndUnlimitedReadingsStaySecondary() {
+        let readings = ["—", QuotaQuantity().summary, QuotaQuantity(unlimited: true).summary,
+                        "No reading", "Unlimited", "Resetting…", "额度暂不可用"]
+        for reading in readings {
+            let styled = CodeSwitchTableText.attributed(reading)
+            #expect(String(styled.characters) == reading)
+            #expect(styled.runs.allSatisfy { $0.foregroundColor == Color.secondary && $0.font == Font.caption })
+        }
+        let zero = CodeSwitchTableText.attributed(QuotaQuantity(remaining: 0, unit: "USD").summary)
+        #expect(zero.runs.contains { $0.foregroundColor == CodeSwitchTableText.valueColor })
+    }
+
+    @Test func settingsQuotaEmphasisKeepsPercentUnitSecondary() {
+        for band in [UsageBand.ample, .watch, .critical, .exhausted] {
+            let color = CodeSwitchTableText.quotaColor(band)
+            let styled = CodeSwitchTableText.attributed("100.37%", color: color)
+            #expect(styled.runs.contains {
+                String(styled[$0.range].characters) == "100.37" && $0.foregroundColor == color
+            })
+            #expect(styled.runs.contains {
+                String(styled[$0.range].characters) == "%" && $0.foregroundColor == Color.secondary
+            })
+        }
+    }
+
+    @Test @MainActor func settingsValueColorsStayReadableOnLightAndDarkSurfaces() throws {
+        let surfaces: [(NSAppearance.Name, Double)] = [(.aqua, 0.8), (.darkAqua, 0.2)]
+        func linear(_ component: Double) -> Double {
+            component <= 0.04045 ? component / 12.92 : pow((component + 0.055) / 1.055, 2.4)
+        }
+        for (name, background) in surfaces {
+            let appearance = try #require(NSAppearance(named: name))
+            appearance.performAsCurrentDrawingAppearance {
+                for band in [UsageBand.ample, .watch, .critical, .exhausted] {
+                    let color = NSColor(CodeSwitchTableText.quotaColor(band)).usingColorSpace(.sRGB)!
+                    let foreground = 0.2126 * linear(color.redComponent)
+                        + 0.7152 * linear(color.greenComponent) + 0.0722 * linear(color.blueComponent)
+                    let surface = linear(background)
+                    let contrast = (max(foreground, surface) + 0.05) / (min(foreground, surface) + 0.05)
+                    #expect(contrast >= 4.5)
+                }
+            }
+        }
+    }
+
     private func tableQuota(_ key: String, used: Double = 25, active: Bool = true,
                             kind: String = "progress", unlimited: Bool = false) -> CodeSwitchQuota {
         CodeSwitchQuota(key: key, label: nil, used: used, total: 100, unlimited: unlimited,

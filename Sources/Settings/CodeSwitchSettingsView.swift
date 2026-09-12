@@ -10,6 +10,37 @@
 import SwiftUI
 import AppKit
 
+enum CodeSwitchTableText {
+    static let valueColor = Color(dark: NSColor(hex: 0x64B5FF), light: NSColor(hex: 0x004FA3))
+
+    static func quotaColor(_ band: UsageBand) -> Color {
+        switch band {
+        case .ample: return valueColor
+        case .watch: return Color(dark: NSColor(hex: 0xFFD666), light: NSColor(hex: 0x704900))
+        case .critical, .exhausted:
+            return Color(dark: NSColor(hex: 0xFF9875), light: NSColor(hex: 0x9F2D00))
+        }
+    }
+
+    // Style numeric ranges without rebuilding localized currency, units or reset copy.
+    static func attributed(_ value: String, color: Color = valueColor) -> AttributedString {
+        var result = AttributedString(value)
+        result.foregroundColor = .secondary
+        result.font = .caption
+        var search = value.startIndex..<value.endIndex
+        while let range = value.range(of: #"\p{Nd}+(?:[.,٬٫]\p{Nd}+)*"#,
+                                      options: .regularExpression, range: search) {
+            if let start = AttributedString.Index(range.lowerBound, within: result),
+               let end = AttributedString.Index(range.upperBound, within: result) {
+                result[start..<end].foregroundColor = color
+                result[start..<end].font = .caption.weight(.semibold).monospacedDigit()
+            }
+            search = range.upperBound..<value.endIndex
+        }
+        return result
+    }
+}
+
 struct CodeSwitchSettingsRow: Identifiable {
     let id: String
     let name: String
@@ -318,8 +349,9 @@ struct CodeSwitchSettingsProviderRow: View {
             }
         } today: {
             VStack(alignment: .leading, spacing: 5) {
-                Text("\(metrics.requests) requests")
-                Text(metrics.cost).foregroundStyle(.secondary)
+                Text("\(metricValue(metrics.requests)) requests")
+                    .foregroundStyle(.secondary)
+                metricValue(metrics.cost)
             }.fixedSize(horizontal: false, vertical: true)
         } quota: {
             CodeSwitchTableQuotaCell(snapshot: row.currentSnapshot, accent: preferences.accentColor.color,
@@ -337,25 +369,44 @@ struct CodeSwitchSettingsProviderRow: View {
     private var detail: some View {
         let metrics = CodeSwitchTableMetrics(stats: row.currentSnapshot?.linked?.provider.stats)
         return VStack(alignment: .leading, spacing: 12) {
-            Divider()
-            HStack(alignment: .top, spacing: 24) {
-                VStack(alignment: .leading, spacing: 6) {
+            let layout = width < 520
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: 16))
+                : AnyLayout(HStackLayout(alignment: .top, spacing: 24))
+            layout {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Today").fontWeight(.medium)
-                    LabeledContent("Success rate", value: metrics.success)
-                    LabeledContent("Tokens", value: metrics.tokens)
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+                        metricRow("Success rate", value: metrics.success)
+                        metricRow("Tokens", value: metrics.tokens)
+                    }
                 }.frame(maxWidth: .infinity, alignment: .leading)
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 10) {
                     Text("Performance").fontWeight(.medium)
-                    LabeledContent("First token", value: metrics.firstToken)
-                    LabeledContent("Speed", value: metrics.speed)
+                    Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 8) {
+                        metricRow("First token", value: metrics.firstToken)
+                        metricRow("Speed", value: metrics.speed)
+                    }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
+            Divider()
             Text("Quota").fontWeight(.medium)
             CodeSwitchTableQuotaCell(snapshot: row.currentSnapshot, accent: preferences.accentColor.color,
                                      resetTimeFormat: preferences.resetTimeFormat, expanded: true)
         }
         .padding(12)
         .background(.quaternary.opacity(0.3), in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func metricValue(_ value: String) -> Text {
+        Text(CodeSwitchTableText.attributed(value))
+    }
+
+    private func metricRow(_ title: LocalizedStringKey, value: String) -> some View {
+        GridRow(alignment: .firstTextBaseline) {
+            Text(title).foregroundStyle(.secondary)
+            metricValue(value)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -395,7 +446,7 @@ struct CodeSwitchTableQuotaCell: View {
             if provider.loading { Text("Loading…").foregroundStyle(.secondary) }
             else if provider.quotas.isEmpty { Text("No reading").foregroundStyle(.secondary) }
             if expanded {
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 140), alignment: .topLeading)], alignment: .leading, spacing: 12) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), alignment: .topLeading)], alignment: .leading, spacing: 12) {
                     ForEach(visible) { item in quotaItem(item) }
                 }
             } else {
@@ -412,19 +463,32 @@ struct CodeSwitchTableQuotaCell: View {
         VStack(alignment: .leading, spacing: 3) {
             if let window = item.window {
                 if let fraction = window.usedFraction {
-                    Text("\(Text(item.quota.title).foregroundColor(.secondary)) \(Text(QuotaQuantity.format(fraction * 100) + "%"))")
-                        .fixedSize(horizontal: false, vertical: true)
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(item.quota.title).foregroundStyle(.secondary).fixedSize()
+                            Spacer(minLength: 0)
+                            quotaPercentage(fraction, band: item.band).fixedSize()
+                        }
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.quota.title).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                            quotaPercentage(fraction, band: item.band)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
+                        }
+                    }
                     ProgressView(value: min(1, max(0, fraction))).progressViewStyle(.linear)
                         .tint(item.band.color(accent: accent))
                         .accessibilityLabel(item.quota.title)
                 } else {
                     Text(item.quota.title).foregroundStyle(.secondary)
-                    Text(window.quantity?.summary ?? L10n.t("No reading"))
+                    Text(CodeSwitchTableText.attributed(window.quantity?.summary ?? L10n.t("No reading")))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 if showsReset, let reset = window.resetsAt {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
-                        Text(ResetCopy.text(for: reset, now: context.date, format: resetTimeFormat))
-                            .foregroundStyle(.secondary)
+                        Text(CodeSwitchTableText.attributed(
+                            ResetCopy.text(for: reset, now: context.date, format: resetTimeFormat)))
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             } else if !item.quota.active && item.quota.displayKind != "error" && item.quota.invalidMessage?.isEmpty != false {
@@ -432,8 +496,13 @@ struct CodeSwitchTableQuotaCell: View {
                 Text("Period has not started").foregroundStyle(.secondary)
             } else {
                 Text(item.quota.title).foregroundStyle(.secondary)
-                Text("Quota unavailable").foregroundStyle(Palette.critical)
+                Text("Quota unavailable").foregroundStyle(CodeSwitchTableText.quotaColor(.critical))
             }
         }
+    }
+
+    private func quotaPercentage(_ fraction: Double, band: UsageBand) -> Text {
+        Text(CodeSwitchTableText.attributed(QuotaQuantity.format(fraction * 100) + "%",
+                                           color: CodeSwitchTableText.quotaColor(band)))
     }
 }

@@ -15568,6 +15568,46 @@
           }
         }
       }
+    },
+    "Clearer Code Switch R statistics at a glance.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code Switch R 统计数据更清晰，一眼可读。"
+          }
+        }
+      }
+    },
+    "Highlight numbers while keeping labels, currencies and units distinct": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "突出数字，清晰区分标题、货币标识与单位"
+          }
+        }
+      }
+    },
+    "Aligned details adapt to narrow windows and long quota titles": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "详情对齐显示，适配窄窗口与长额度标题"
+          }
+        }
+      }
+    },
+    "Readable quota colors in light and dark appearance, with missing readings kept subtle": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "深浅色外观下额度文字清晰，无读数保持次级显示"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
