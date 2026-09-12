@@ -215,6 +215,10 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(showsMoveHandle, forKey: Keys.showsMoveHandle) }
     }
 
+    @Published var showsSettingsHandle: Bool {
+        didSet { defaults.set(showsSettingsHandle, forKey: Keys.showsSettingsHandle) }
+    }
+
     /// The colour used for positive usage and active-work indicators.
     @Published var accentColor: AccentColorChoice {
         didSet { defaults.set(accentColor.rawValue, forKey: Keys.accentColor) }
@@ -393,6 +397,7 @@ final class Preferences: ObservableObject {
         // A new key, so there is nothing under the old app name to migrate.
         static let weeklyRing = "weeklyRing"
         static let showsMoveHandle = "showsMoveHandle"
+        static let showsSettingsHandle = "showsSettingsHandle"
         static let notchSurfaceStyle = "notchSurfaceStyle"
         static let lastSeenVersion = "lastSeenVersion"
         static let order = "providerOrder"
@@ -576,6 +581,7 @@ final class Preferences: ObservableObject {
             .flatMap(WeeklyRing.init(rawValue:)) ?? .off
         // Preserve this fork's menu-based placement until the handle is enabled.
         self.showsMoveHandle = defaults.object(forKey: Keys.showsMoveHandle) as? Bool ?? false
+        self.showsSettingsHandle = defaults.object(forKey: Keys.showsSettingsHandle) as? Bool ?? false
         self.accentColor = defaults.string(forKey: Keys.accentColor)
             .flatMap(AccentColorChoice.init(rawValue:)) ?? .system
         // Snapshot the shared choice once, before either picker can change it.

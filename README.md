@@ -480,6 +480,11 @@ In Settings → Appearance, enable **Show move handle** to add a drag handle
 on every display. It is off by default and the choice survives relaunches;
 **Edge** still changes the notch's screen edge while the handle is hidden.
 
+Below it, **Show settings button** independently adds a settings arc at the
+opposite end. Hover to reveal the gear and click to open Settings. Both controls
+are hidden by default, remember their choices and apply to every display.
+The transparent space between the two handles passes clicks through to the desktop.
+
 In Settings → Appearance → Reset time, choose **Time remaining** for countdowns
 like "Resets in 3 Days 3h". **Reset date** keeps the reset date and time, with
 minutes shown when less than an hour remains.

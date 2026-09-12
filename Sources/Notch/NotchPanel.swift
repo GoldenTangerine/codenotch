@@ -21,6 +21,8 @@ final class NotchPanel: NSPanel {
     /// A left click on the visible chrome. Handled here for the same reason the
     /// menu is: the hit test lands on a SwiftUI subview that may consume it.
     var onClick: ((CGPoint) -> Void)?
+    /// Handle controls before SwiftUI gesture routing; other content keeps its own events.
+    var onControlMouseDown: ((CGPoint) -> Bool)?
     var positionEventHandler: ((NSEvent) -> Bool)?
     var isEditingPosition = false
     /// ⌥-drag on the chrome, reported as the raw pointer delta since the last
@@ -33,6 +35,9 @@ final class NotchPanel: NSPanel {
 
     override func sendEvent(_ event: NSEvent) {
         if positionEventHandler?(event) == true { return }
+        if event.type == .leftMouseDown, !event.modifierFlags.contains(.option),
+           contentView?.hitTest(event.locationInWindow) != nil,
+           onControlMouseDown?(event.locationInWindow) == true { return }
         guard event.type == .rightMouseDown,
               let menu = contextMenuProvider?(),
               let view = contentView,

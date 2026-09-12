@@ -69,6 +69,7 @@ final class NotchFleet {
     /// ring on one display and not another would read as a bug.
     private var weeklyRing: WeeklyRing = .off
     private var showsMoveHandle = false
+    private var showsSettingsHandle = false
     private var surfaceStyle: NotchSurfaceStyle = .glass
     /// The ⌥-drag nudge along the current edge. One value for the whole
     /// fleet, the same as `edge` itself — displays do not each get their own
@@ -197,6 +198,13 @@ final class NotchFleet {
         self.showsMoveHandle = showsMoveHandle
         for controller in controllers.values {
             controller.apply(showsMoveHandle: showsMoveHandle)
+        }
+    }
+
+    func apply(showsSettingsHandle: Bool) {
+        self.showsSettingsHandle = showsSettingsHandle
+        for controller in controllers.values {
+            controller.apply(showsSettingsHandle: showsSettingsHandle)
         }
     }
 
@@ -450,6 +458,7 @@ final class NotchFleet {
         controller.model.notchTriggerHeight = notchTriggerHeight
         controller.model.weeklyRing = weeklyRing
         controller.model.showsMoveHandle = showsMoveHandle
+        controller.model.showsSettingsHandle = showsSettingsHandle
         controller.model.surfaceStyle = surfaceStyle
         controller.onRefresh = onRefresh
         controller.onRefreshProvider = onRefreshProvider

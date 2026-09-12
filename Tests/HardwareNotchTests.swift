@@ -660,6 +660,7 @@ final class BarEndMarginTests: XCTestCase {
 final class OrbHitAccuracyTests: XCTestCase {
     private func model(flush: Bool = true) -> NotchViewModel {
         let model = NotchViewModel()
+        model.showsSettingsHandle = true
         model.edge = .top
         model.isExpanded = true
         model.snapshots = (0..<4).map { index in
@@ -779,6 +780,37 @@ final class ArcConcentricityTests: XCTestCase {
                 "at \(Int(degrees))° the bar's edge is \(edge)pt from the arc's centre, "
                     + "not the corner's own \(m.drawnCornerRadius)pt"
             )
+        }
+    }
+
+    func testMoveArcMirrorsSettingsAndFollowsTheDrawnNearCorner() {
+        let m = model()
+        m.showsSettingsHandle = true
+        m.showsMoveHandle = true
+        XCTAssertEqual(m.moveAlong + m.orbAlong, m.shapeLength, accuracy: 0.001)
+        let near = CGPoint(x: m.moveAlong + m.moveArcOffset.width,
+                           y: m.orbInset + m.moveArcOffset.height)
+        let far = CGPoint(x: m.orbAlong + m.orbArcOffset.width,
+                          y: m.orbInset + m.orbArcOffset.height)
+        XCTAssertEqual(near.x + far.x, m.shapeLength, accuracy: 0.001)
+        XCTAssertEqual(near.y, far.y, accuracy: 0.001)
+        let path = SideNotchShape(edge: .top, joining: realNotch)
+            .path(in: CGRect(origin: .zero, size: m.notchSize))
+        for degrees in stride(from: 95.0, through: 175.0, by: 10.0) {
+            let angle = degrees * .pi / 180
+            var lastInside: CGFloat = -1
+            for radius in stride(from: CGFloat(0), through: 100, by: 0.25) {
+                if path.contains(CGPoint(x: near.x + cos(angle) * radius,
+                                         y: near.y + sin(angle) * radius)) { lastInside = radius }
+            }
+            XCTAssertEqual(lastInside, m.drawnCornerRadius, accuracy: 1.5)
+        }
+        let settingsPoints = m.orbHandlePoints.reversed().map {
+            CGPoint(x: m.shapeLength - $0.x, y: $0.y)
+        }
+        for (move, settings) in zip(m.moveHandlePoints, settingsPoints) {
+            XCTAssertEqual(move.x, settings.x, accuracy: 0.001)
+            XCTAssertEqual(move.y, settings.y, accuracy: 0.001)
         }
     }
 }

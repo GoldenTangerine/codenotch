@@ -140,7 +140,7 @@ final class NotchWindowController {
                 let overTooltip = model.hoveredIndex
                     .flatMap(tooltipRect(index:))
                     .map { model.isExpanded && $0.contains(local) } ?? false
-                if liveRect.contains(local) || overTooltip {
+                if isInLiveRegion(local) || overTooltip {
                     return
                 }
             }
@@ -295,7 +295,7 @@ final class NotchWindowController {
         model.adopt(screen: screen, joinsHardware: activePosition.joinsHardware)
         let size = model.panelSize(cellCount: cellCount ?? model.snapshots.count)
         let leadingExtent = model.showsMoveHandle ? model.leadingExtent * model.sizeScale : 0
-        let trailingExtent = model.showsEdgeControls ? model.trailingExtent * model.sizeScale : 0
+        let trailingExtent = model.showsSettingsHandle ? model.trailingExtent * model.sizeScale : 0
         let frame: CGRect
         if previewPosition != nil || savedPosition != nil {
             let layout = activePosition.layout(on: screen, panelSize: size,
@@ -344,6 +344,7 @@ final class NotchWindowController {
             let hosting = NotchHostingView(rootView: NotchRootView(model: model))
             panel.contextMenuProvider = { [weak self] in self?.contextMenu() }
             panel.onClick = { [weak self] point in self?.handleClick(at: point) }
+            panel.onControlMouseDown = { [weak self] in self?.handleControlClick(at: $0) ?? false }
             panel.positionEventHandler = { [weak self] in self?.handlePositionEvent($0) ?? false }
             panel.onDrag = { [weak self] dx, dy in self?.dragged(dx: dx, dy: dy) }
             panel.onDragEnd = { [weak self] in
@@ -465,21 +466,20 @@ final class NotchWindowController {
     /// The handle's bounding box, for deciding whether the panel takes events
     /// at all. Whether a point is actually *on* the handle is a finer question
     /// than a box can answer — see `isOverHandle`.
-    private var handleRect: CGRect {
+    private var handleRects: [CGRect] {
         let side = NotchLayout.orbHotZone * model.sizeScale
-        let boxes = ((model.showsEdgeControls ? model.orbHandlePoints : []) + model.moveHandlePoints).map { point -> CGRect in
+        return (model.orbHandlePoints + model.moveHandlePoints).map { point -> CGRect in
             let centre = placement.point(along: model.slack + point.x * model.sizeScale,
                                          across: point.y * model.sizeScale)
             return CGRect(x: centre.x - side / 2, y: centre.y - side / 2,
                           width: side, height: side)
         }
-        return boxes.dropFirst().reduce(boxes.first ?? .zero) { $0.union($1) }
     }
 
     /// Whether the pointer is on the handle itself rather than merely inside
     /// the box that contains it.
     private func isOverHandle(_ local: CGPoint) -> Bool {
-        guard model.showsEdgeControls else { return false }
+        guard model.showsSettingsHandle else { return false }
         // Back into the notch's own measurements, which is what `isOnOrbHandle`
         // is written in — the orb scales with the notch, so its hit test has to
         // be asked in the same space the shape was drawn in.
@@ -502,10 +502,15 @@ final class NotchWindowController {
     /// The only region that takes the mouse. Everything else in the panel is a
     /// hole — which matters far more folded than open, since the point of
     /// folding away is to stop being in the way.
-    private var liveRect: CGRect {
-        guard model.isExpanded else { return pillRect }
+    private var liveRects: [CGRect] {
+        guard model.isExpanded else { return [pillRect] }
         // The orb hangs below the shape, so the live region is both together.
-        return model.showsEdgeControls || model.showsMoveHandle ? notchRect.union(handleRect) : notchRect
+        // Keep separated targets separate: their enclosing rectangle includes empty desktop.
+        return [notchRect] + handleRects
+    }
+
+    private func isInLiveRegion(_ point: CGPoint) -> Bool {
+        liveRects.contains { $0.contains(point) }
     }
 
     /// The card, its tail, and the gap between the tail and the notch — so
@@ -530,7 +535,7 @@ final class NotchWindowController {
     }
 
     private func updateInteractiveRects() {
-        var rects = [liveRect]
+        var rects = liveRects
         if model.isExpanded, let index = model.hoveredIndex, let card = tooltipRect(index: index) {
             rects.append(card)
         }
@@ -553,7 +558,7 @@ final class NotchWindowController {
         if let monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
             guard let self, let panel = self.panel, self.model.isExpanded,
                   !self.model.isEditingPosition,
-                  self.liveRect.contains(self.localCursor(in: panel.frame)),
+                  self.isInLiveRegion(self.localCursor(in: panel.frame)),
                   self.model.visibleCount(self.model.snapshots.count) < self.model.snapshots.count else { return event }
             let delta = abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) ? event.scrollingDeltaY : event.scrollingDeltaX
             if event.hasPreciseScrollingDeltas {
@@ -602,7 +607,7 @@ final class NotchWindowController {
         let overTooltip = model.hoveredIndex
             .flatMap(tooltipRect(index:))
             .map { model.isExpanded && $0.contains(local) } ?? false
-        setExpanded(liveRect.contains(local) || overTooltip, ignoreAlwaysOn: isFullScreenActive())
+        setExpanded(isInLiveRegion(local) || overTooltip, ignoreAlwaysOn: isFullScreenActive())
 
         var target: Int?
         if model.isExpanded, notchRect.contains(local) {
@@ -701,6 +706,31 @@ final class NotchWindowController {
         }
     }
 
+    private func handleControlClick(at locationInWindow: CGPoint) -> Bool {
+        guard !model.isEditingPosition, let panel else { return false }
+        let local = CGPoint(x: locationInWindow.x, y: panel.frame.height - locationInWindow.y)
+        // The handle sits inside the notch, so it has to be tested before the
+        // cells — otherwise the cell band nearest the foot of the stack swallows
+        // it and clicking the gear refetches a provider instead.
+        // The move handle is tested before the settings orb and the cells for
+        // the same reason the orb is: it sits over the stack, and whichever
+        // band is nearest would otherwise swallow the press.
+        if model.isExpanded, isOverMoveHandle(local) {
+            model.moveSpins += 1
+            beginMove()
+            return true
+        }
+        if model.isExpanded, isOverHandle(local) {
+            // The same turn the SwiftUI tap gives it, so the gear responds
+            // however the click reached it — this path and the tap gesture
+            // are two routes to one action.
+            model.settingsSpins += 1
+            onOpenSettings?()
+            return true
+        }
+        return false
+    }
+
     /// A click on a ring refetches that provider; a click anywhere else on the
     /// open notch pins it. The ring is the more specific target, so it wins.
     func handleClick(at locationInWindow: CGPoint) {
@@ -712,25 +742,7 @@ final class NotchWindowController {
         // Use the event position even if the pointer has moved since the click.
         let local = CGPoint(x: locationInWindow.x, y: panel.frame.height - locationInWindow.y)
 
-        // The handle sits inside the notch, so it has to be tested before the
-        // cells — otherwise the cell band nearest the foot of the stack swallows
-        // it and clicking the gear refetches a provider instead.
-        // The move handle is tested before the settings orb and the cells for
-        // the same reason the orb is: it sits over the stack, and whichever
-        // band is nearest would otherwise swallow the press.
-        if model.isExpanded, isOverMoveHandle(local) {
-            model.moveSpins += 1
-            beginMove()
-            return
-        }
-        if model.isExpanded, isOverHandle(local) {
-            // The same turn the SwiftUI tap gives it, so the gear responds
-            // however the click reached it — this path and the tap gesture
-            // are two routes to one action.
-            model.settingsSpins += 1
-            onOpenSettings?()
-            return
-        }
+        if handleControlClick(at: locationInWindow) { return }
         // A peek is a question — "this one just finished, do you want it?" —
         // and the click that follows is the answer. It outranks pinning and
         // refetching for as long as the offer stands, and for no longer.
@@ -809,6 +821,14 @@ final class NotchWindowController {
     func apply(showsMoveHandle: Bool) {
         guard model.showsMoveHandle != showsMoveHandle else { return }
         model.showsMoveHandle = showsMoveHandle
+        if !showsMoveHandle { model.isHoveringMove = false }
+        relocate()
+    }
+
+    func apply(showsSettingsHandle: Bool) {
+        guard model.showsSettingsHandle != showsSettingsHandle else { return }
+        model.showsSettingsHandle = showsSettingsHandle
+        if !showsSettingsHandle { model.isHoveringSettings = false }
         relocate()
     }
 
@@ -1084,7 +1104,7 @@ final class NotchWindowController {
                 guard !self.model.staysOpen else { return }
                 // Left open if the peek did its job and the pointer is already
                 // there; the ordinary hover fold takes it from here.
-                guard !self.liveRect.contains(self.localCursor(in: panel.frame)) else { return }
+                guard !self.isInLiveRegion(self.localCursor(in: panel.frame)) else { return }
                 withAnimation(NotchMotion.unfold) {
                     self.model.isExpanded = false
                     self.model.hoveredIndex = nil
@@ -1215,7 +1235,7 @@ final class NotchWindowController {
             if event.keyCode == 53 { finishPositionEditing(commit: false) }
             return true
         case .leftMouseDown:
-            guard let panel, liveRect.contains(localCursor(in: panel.frame)) else { return false }
+            guard let panel, isInLiveRegion(localCursor(in: panel.frame)) else { return false }
             dragStart = NSEvent.mouseLocation
             dragGrabFraction = (placement.along(of: localCursor(in: panel.frame)) - model.slack)
                 / max(1, model.shapeLength * model.sizeScale) - 0.5

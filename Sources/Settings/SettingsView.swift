@@ -710,6 +710,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Toggle(L10n.t("Show settings button"), isOn: $preferences.showsSettingsHandle)
+                Text(L10n.t("Open settings from the other end of the notch."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Picker(L10n.t("Displays"), selection: $preferences.notchScope) {
                     ForEach(NotchScreenScope.allCases) { Text($0.title).tag($0) }
                 }

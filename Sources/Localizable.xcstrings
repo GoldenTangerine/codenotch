@@ -1,6 +1,18 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Show settings button": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "显示设置按钮" } }
+      }
+    },
+    "Open settings from the other end of the notch.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "从显示栏另一端打开设置。" } }
+      }
+    },
     "Completed refreshes now save readings before returning": {
       "extractionState": "manual",
       "localizations": {

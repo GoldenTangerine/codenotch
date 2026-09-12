@@ -29,7 +29,7 @@ struct NotchRootView: View {
                 // Outside the notch and outside its clip: the orb hangs past
                 // the end of the shape, tucked into the corner the far flare
                 // makes.
-                if model.showsEdgeControls {
+                if model.showsSettingsHandle {
                     SettingsOrb(isHovered: model.isHoveringSettings, edge: model.edge,
                                         convex: model.orbHugsCorner,
                                         arcRadius: model.orbArcRadius,

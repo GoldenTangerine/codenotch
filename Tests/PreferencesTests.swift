@@ -114,6 +114,28 @@ final class AccentColorPreferencesTests: XCTestCase {
         XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.accentColor == .blue })
     }
 
+    func testFleetKeepsIndependentHandlesWhenControllersAreRecreated() throws {
+        guard !NSScreen.screens.isEmpty else { throw XCTSkip("Requires a display") }
+        let fleet = NotchFleet(scope: .allDisplays, edge: .top)
+        defer { fleet.stop() }
+        for settings in [true, false] {
+            for move in [true, false] {
+                fleet.apply(showsSettingsHandle: settings)
+                fleet.apply(showsMoveHandle: move)
+                fleet.show()
+                XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+                XCTAssertTrue(fleet.controllersForTesting.allSatisfy {
+                    $0.model.showsSettingsHandle == settings && $0.model.showsMoveHandle == move
+                })
+                fleet.stop()
+                fleet.show()
+                XCTAssertTrue(fleet.controllersForTesting.allSatisfy {
+                    $0.model.showsSettingsHandle == settings && $0.model.showsMoveHandle == move
+                })
+            }
+        }
+    }
+
     func testAppBindingUsesOnlyNotchAccentAndKeepsNewWindowsCurrent() throws {
         guard !NSScreen.screens.isEmpty else { throw XCTSkip("Requires a display") }
         let preferences = Preferences(defaults: makeDefaults())
@@ -199,6 +221,22 @@ final class NotchTriggerPreferencesTests: XCTestCase {
 /// first-launch basics live with the other PreferencesTests.)
 @MainActor
 final class PreferencesMigrationTests: XCTestCase {
+    func testHandleVisibilityPersistsIndependently() {
+        let (fresh, _) = makeDefaults()
+        let initial = Preferences(defaults: fresh)
+        XCTAssertFalse(initial.showsSettingsHandle)
+        XCTAssertFalse(initial.showsMoveHandle)
+        for settings in [true, false] {
+            for move in [true, false] {
+                initial.showsSettingsHandle = settings
+                initial.showsMoveHandle = move
+                let restored = Preferences(defaults: fresh)
+                XCTAssertEqual(restored.showsSettingsHandle, settings)
+                XCTAssertEqual(restored.showsMoveHandle, move)
+            }
+        }
+    }
+
     private func makeDefaults() -> (UserDefaults, String) {
         let name = "PreferencesTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

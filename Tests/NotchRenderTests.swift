@@ -318,6 +318,8 @@ final class NotchRenderTests: XCTestCase {
     func testNothingIsPaintedBeyondTheNotchAndItsOrbAtAnySize() {
         for size in NotchSize.allCases {
             let m = model(edge: .right)
+            m.showsSettingsHandle = true
+            m.showsMoveHandle = true
             m.sizeScale = size.scale
             guard let rep = render(m) else {
                 XCTFail("\(size.rawValue): no image")
@@ -510,6 +512,123 @@ final class PanelSizingIntegrityTests: XCTestCase {
 /// bargain of a window that sits over everything you are working in.
 @MainActor
 final class ClickThroughTests: XCTestCase {
+    private struct HandleScreen: ScreenDescribing {
+        let frameValue = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let visibleFrameValue = CGRect(x: 0, y: 24, width: 1440, height: 838)
+        let hardwareNotch: HardwareNotch? = HardwareNotch(width: 220, height: 38)
+    }
+
+    private func click(_ point: CGPoint, in panel: NSWindow) throws {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try XCTUnwrap(NSEvent.mouseEvent(
+                with: type, location: point, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: panel.windowNumber, context: nil,
+                eventNumber: 1, clickCount: 1, pressure: 1))
+            panel.sendEvent(event)
+        }
+    }
+
+    func testIndependentHandlesLeaveTheHardwareNotchGapTransparent() throws {
+        let controller = NotchWindowController()
+        controller.model.edge = .top
+        controller.model.snapshots = Array(Fixtures.snapshots().prefix(4))
+        controller.show()
+        defer { controller.stop() }
+        let model = controller.model
+        model.adopt(screen: HandleScreen())
+        let content = try XCTUnwrap(controller.panelContentViewForTesting)
+        let panel = try XCTUnwrap(content.window)
+        let host = try XCTUnwrap(content.subviews.first as? NotchHostingView<NotchRootView>)
+        var opens = 0
+        var refreshes = 0
+        controller.onOpenSettings = { opens += 1 }
+        model.onOpenSettings = { opens += 1 }
+        controller.onRefreshProvider = { _ in refreshes += 1 }
+        // Keep the synthetic screen fixed: yielding would deliver real screen notifications.
+        for settings in [true, false] {
+            for move in [true, false] {
+                model.showsSettingsHandle = settings
+                model.showsMoveHandle = move
+                controller.apply(.alwaysShow)
+                let placement = NotchPlacement(edge: .top, panelSize: panel.frame.size)
+                let gap = placement.point(along: model.slack + model.shapeLength / 2,
+                                          across: model.notchDepth + 10)
+                let gear = placement.point(along: model.slack + model.orbAlong, across: model.orbInset)
+                let mover = placement.point(along: model.slack + model.moveAlong, across: model.orbInset)
+                for (point, enabled) in [(gear, settings), (mover, move), (gap, false)] {
+                    XCTAssertEqual(host.interactiveRects.contains { $0.contains(point) }, enabled)
+                    XCTAssertEqual(content.hitTest(CGPoint(x: point.x, y: panel.frame.height - point.y)) != nil,
+                                   enabled)
+                }
+                let before = opens
+                try click(CGPoint(x: gear.x, y: panel.frame.height - gear.y), in: panel)
+                XCTAssertEqual(opens - before, settings ? 1 : 0)
+                let pinned = model.isPinned
+                try click(CGPoint(x: gap.x, y: panel.frame.height - gap.y), in: panel)
+                XCTAssertEqual(opens - before, settings ? 1 : 0)
+                XCTAssertEqual(model.isPinned, pinned)
+                XCTAssertEqual(refreshes, 0)
+            }
+        }
+    }
+
+    func testTransparentHandleGapDoesNotPreventFullScreenFolding() throws {
+        var pointer = CGPoint.zero
+        let controller = NotchWindowController(mouseLocation: { pointer })
+        controller.model.edge = .top
+        controller.model.snapshots = Array(Fixtures.snapshots().prefix(4))
+        controller.show()
+        defer { controller.stop() }
+        let model = controller.model
+        model.adopt(screen: HandleScreen())
+        model.showsSettingsHandle = true
+        model.showsMoveHandle = true
+        controller.apply(.alwaysShow)
+        let frame = try XCTUnwrap(controller.panelFrameForTesting)
+        pointer = CGPoint(x: frame.minX + model.slack + model.shapeLength / 2,
+                          y: frame.maxY - model.notchDepth - 10)
+        controller.isFullScreenActive = { true }
+        controller.handleActiveSpaceOrAppChange()
+        XCTAssertFalse(model.isExpanded)
+    }
+
+    func testSettingsButtonOpensSettingsAndReleasesHiddenHitRegions() throws {
+        for edge in NotchEdge.allCases {
+            for scale: CGFloat in [0.75, 1, 1.5] {
+                let controller = NotchWindowController()
+                controller.model.edge = edge
+                controller.model.sizeScale = scale
+                controller.model.snapshots = Array(Fixtures.snapshots().prefix(2))
+                var opens = 0
+                var refreshes = 0
+                controller.onOpenSettings = { opens += 1 }
+                controller.model.onOpenSettings = { opens += 1 }
+                controller.onRefreshProvider = { _ in refreshes += 1 }
+                controller.show()
+                defer { controller.stop() }
+                controller.model.isExpanded = true
+                controller.apply(showsSettingsHandle: true)
+                let model = controller.model
+                let frame = try XCTUnwrap(controller.panelFrameForTesting)
+                let content = try XCTUnwrap(controller.panelContentViewForTesting)
+                let host = try XCTUnwrap(content.subviews.first as? NotchHostingView<NotchRootView>)
+                let point = NotchPlacement(edge: edge, panelSize: model.panelSize).point(
+                    along: model.slack + model.orbAlong * scale, across: model.orbInset * scale)
+                XCTAssertTrue(host.interactiveRects.contains { $0.contains(point) })
+                let panel = try XCTUnwrap(content.window)
+                try click(CGPoint(x: point.x, y: frame.height - point.y), in: panel)
+                XCTAssertEqual(opens, 1)
+                XCTAssertEqual(refreshes, 0)
+                controller.apply(showsSettingsHandle: false)
+                XCTAssertTrue(model.orbHandlePoints.isEmpty)
+                XCTAssertFalse(host.interactiveRects.contains { $0.contains(point) })
+                try click(CGPoint(x: point.x, y: frame.height - point.y), in: panel)
+                XCTAssertEqual(opens, 1)
+            }
+        }
+    }
+
     func testScaledMoveHandleAcceptsOuterClicksAndReleasesThemWhenHidden() throws {
         for edge in NotchEdge.allCases {
             let controller = NotchWindowController()

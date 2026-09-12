@@ -13,7 +13,8 @@ import Combine
 @MainActor
 final class NotchViewModel: ObservableObject {
     // 两端入口统一移入右键菜单，绘制和热区必须同时关闭。
-    let showsEdgeControls = false
+    // 保留默认隐藏，用户可独立恢复设置入口。
+    @Published var showsSettingsHandle = false
     @Published var snapshots: [ProviderSnapshot] = []
     @Published var tooltipHeightMode: TooltipHeightMode = .standard
     @Published var fullTooltipHeightLimit: CGFloat = NotchLayout.defaultMaxCardHeight
@@ -403,9 +404,7 @@ final class NotchViewModel: ObservableObject {
     /// orb sits past `shapeLength`, so the pair stay symmetric about the notch
     /// at every size and on every edge.
     var moveAlong: CGFloat {
-        guard orbHugsCorner else { return 0 }
-        return cornerCentreAlong - shapeLength
-            + NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
+        shapeLength - orbAlong
     }
 
     /// The mirror of `trailingExtent` at the near end — the room the move
@@ -461,11 +460,12 @@ final class NotchViewModel: ObservableObject {
     /// reaching for, and — where it has parted company with it — the arc you
     /// can actually see.
     var orbHandlePoints: [CGPoint] {
+        guard showsSettingsHandle else { return [] }
         let button = CGPoint(x: orbAlong, y: orbInset)
         guard orbHugsCorner else { return [button] }
 
-        let arcCentre = CGPoint(x: orbAlong + orbArcOffset.width,
-                                y: orbInset + orbArcOffset.height)
+        let offset = NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
+        let arcCentre = CGPoint(x: orbAlong - offset, y: orbInset - offset)
         let reach = hypot(button.x - arcCentre.x, button.y - arcCentre.y)
         guard reach > 0 else { return [button] }
         // The middle of the quadrant, which is out from its centre in the same
@@ -501,8 +501,8 @@ final class NotchViewModel: ObservableObject {
         let button = CGPoint(x: moveAlong, y: orbInset)
         guard orbHugsCorner else { return [button] }
 
-        let arcCentre = CGPoint(x: moveAlong + moveArcOffset.width,
-                                y: orbInset + moveArcOffset.height)
+        let offset = NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
+        let arcCentre = CGPoint(x: moveAlong + offset, y: orbInset - offset)
         let reach = hypot(button.x - arcCentre.x, button.y - arcCentre.y)
         guard reach > 0 else { return [button] }
         let arcMid = CGPoint(
