@@ -294,11 +294,13 @@ final class NotchWindowController {
         guard let screen = currentScreen() else { return }
         model.adopt(screen: screen, joinsHardware: activePosition.joinsHardware)
         let size = model.panelSize(cellCount: cellCount ?? model.snapshots.count)
+        let leadingExtent = model.showsMoveHandle ? model.leadingExtent * model.sizeScale : 0
+        let trailingExtent = model.showsEdgeControls ? model.trailingExtent * model.sizeScale : 0
         let frame: CGRect
         if previewPosition != nil || savedPosition != nil {
             let layout = activePosition.layout(on: screen, panelSize: size,
                 shapeLength: model.shapeLength(cellCount: cellCount ?? model.snapshots.count) * model.sizeScale,
-                endClearance: model.showsEdgeControls ? NotchLayout.orbHotZone : 0)
+                endClearance: trailingExtent, startClearance: leadingExtent)
             frame = layout.frame
             model.positionedLeading = layout.leading
             let usable = screen.visibleFrame
@@ -310,16 +312,18 @@ final class NotchWindowController {
             let standardSize = model.standardPanelSize(cellCount: count)
             let standardSlack = (standardSize.height - model.shapeLength(cellCount: count) * model.sizeScale) / 2
             let standardFrame = NotchGeometry.panelFrame(for: screen, panelSize: standardSize,
-                edge: model.edge, alongOffset: model.alongOffset, slack: standardSlack)
+                edge: model.edge, alongOffset: model.alongOffset, slack: standardSlack,
+                trailingExtent: trailingExtent, leadingExtent: leadingExtent)
             let layout = TooltipSizing.sidePanelLayout(usable: screen.visibleFrame,
                 standardFrame: standardFrame, standardSlack: standardSlack, size: size,
-                shapeLength: model.shapeLength(cellCount: count) * model.sizeScale)
+                shapeLength: model.shapeLength(cellCount: count) * model.sizeScale,
+                leadingExtent: leadingExtent, trailingExtent: trailingExtent)
             frame = layout.frame
             model.positionedLeading = layout.leading
         } else {
             frame = NotchGeometry.panelFrame(for: screen, panelSize: size, edge: model.edge,
                 alongOffset: model.alongOffset, slack: model.slack(cellCount: cellCount ?? model.snapshots.count),
-                trailingExtent: model.showsEdgeControls ? model.trailingExtent : 0)
+                trailingExtent: trailingExtent, leadingExtent: leadingExtent)
             model.positionedLeading = nil
             model.tooltipAlongBounds = nil
         }
@@ -462,8 +466,8 @@ final class NotchWindowController {
     /// at all. Whether a point is actually *on* the handle is a finer question
     /// than a box can answer — see `isOverHandle`.
     private var handleRect: CGRect {
-        let side = NotchLayout.orbHotZone
-        let boxes = (model.orbHandlePoints + model.moveHandlePoints).map { point -> CGRect in
+        let side = NotchLayout.orbHotZone * model.sizeScale
+        let boxes = ((model.showsEdgeControls ? model.orbHandlePoints : []) + model.moveHandlePoints).map { point -> CGRect in
             let centre = placement.point(along: model.slack + point.x * model.sizeScale,
                                          across: point.y * model.sizeScale)
             return CGRect(x: centre.x - side / 2, y: centre.y - side / 2,
@@ -488,7 +492,7 @@ final class NotchWindowController {
     /// Whether the pointer is on the move handle, asked in the same notch-own
     /// measurements `isOverHandle` uses.
     private func isOverMoveHandle(_ local: CGPoint) -> Bool {
-        guard model.showsEdgeControls else { return false }
+        guard model.showsMoveHandle else { return false }
         return model.isOnMoveHandle(
             along: (placement.along(of: local) - model.slack) / model.sizeScale,
             across: placement.across(of: local) / model.sizeScale
@@ -501,7 +505,7 @@ final class NotchWindowController {
     private var liveRect: CGRect {
         guard model.isExpanded else { return pillRect }
         // The orb hangs below the shape, so the live region is both together.
-        return model.showsEdgeControls ? notchRect.union(handleRect) : notchRect
+        return model.showsEdgeControls || model.showsMoveHandle ? notchRect.union(handleRect) : notchRect
     }
 
     /// The card, its tail, and the gap between the tail and the notch — so
@@ -798,6 +802,13 @@ final class NotchWindowController {
     func apply(alongOffset: CGFloat) {
         guard model.alongOffset != alongOffset else { return }
         model.alongOffset = alongOffset
+        relocate()
+    }
+
+    /// Rebuild immediately so the hidden handle also stops intercepting clicks.
+    func apply(showsMoveHandle: Bool) {
+        guard model.showsMoveHandle != showsMoveHandle else { return }
+        model.showsMoveHandle = showsMoveHandle
         relocate()
     }
 

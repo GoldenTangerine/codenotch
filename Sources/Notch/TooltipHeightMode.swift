@@ -25,11 +25,13 @@ enum TooltipSizing {
     static let screenMargin: CGFloat = 8
 
     static func sidePanelLayout(usable: CGRect, standardFrame: CGRect, standardSlack: CGFloat,
-                                size: CGSize, shapeLength: CGFloat) -> (frame: CGRect, leading: CGFloat) {
+                                size: CGSize, shapeLength: CGFloat,
+                                leadingExtent: CGFloat = 0,
+                                trailingExtent: CGFloat = NotchLayout.orbHotZone / 2) -> (frame: CGRect, leading: CGFloat) {
         let notchTop = standardFrame.maxY - standardSlack
         // 旧沿边偏移允许刘海进入菜单栏或 Dock 区域；窗口必须保留本体及设置按钮热区。
-        let bottom = min(usable.minY, notchTop - shapeLength - NotchLayout.orbHotZone / 2).rounded(.down)
-        let top = max(usable.maxY, notchTop).rounded(.up)
+        let bottom = min(usable.minY, notchTop - shapeLength - trailingExtent).rounded(.down)
+        let top = max(usable.maxY, notchTop + leadingExtent).rounded(.up)
         let frame = CGRect(x: standardFrame.minX, y: bottom, width: size.width, height: top - bottom)
         return (frame, frame.maxY - notchTop)
     }

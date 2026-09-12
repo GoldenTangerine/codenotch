@@ -440,6 +440,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.$codeSwitchEnabled.combineLatest(preferences.$codeSwitchDisplayMode)
                 .sink { [weak codeSwitch] enabled, mode in codeSwitch?.configure(enabled: enabled, mode: mode) }
                 .store(in: &cancellables)
+            preferences.$showsMoveHandle
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(showsMoveHandle: $0) }
+                .store(in: &cancellables)
+
             preferences.$weeklyRing
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(weeklyRing: $0) }
@@ -665,6 +670,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.bindNotchAccentColor(preferences, to: fleet)
             .store(in: &cancellables)
         fleet.apply(weeklyRing: preferences.weeklyRing)
+        fleet.apply(showsMoveHandle: preferences.showsMoveHandle)
         fleet.apply(surfaceStyle: preferences.notchSurfaceStyle)
         fleet.show()
     }

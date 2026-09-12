@@ -68,6 +68,7 @@ final class NotchFleet {
     /// One choice for the whole fleet, like the edge and the size: a weekly
     /// ring on one display and not another would read as a bug.
     private var weeklyRing: WeeklyRing = .off
+    private var showsMoveHandle = false
     private var surfaceStyle: NotchSurfaceStyle = .glass
     /// The ⌥-drag nudge along the current edge. One value for the whole
     /// fleet, the same as `edge` itself — displays do not each get their own
@@ -189,6 +190,13 @@ final class NotchFleet {
         self.tooltipHeightMode = tooltipHeightMode
         for controller in controllers.values {
             controller.apply(tooltipHeightMode: tooltipHeightMode)
+        }
+    }
+
+    func apply(showsMoveHandle: Bool) {
+        self.showsMoveHandle = showsMoveHandle
+        for controller in controllers.values {
+            controller.apply(showsMoveHandle: showsMoveHandle)
         }
     }
 
@@ -441,6 +449,7 @@ final class NotchFleet {
         controller.model.accentColor = accentColor
         controller.model.notchTriggerHeight = notchTriggerHeight
         controller.model.weeklyRing = weeklyRing
+        controller.model.showsMoveHandle = showsMoveHandle
         controller.model.surfaceStyle = surfaceStyle
         controller.onRefresh = onRefresh
         controller.onRefreshProvider = onRefreshProvider

@@ -275,6 +275,19 @@ final class PreferencesMigrationTests: XCTestCase {
         XCTAssertEqual(Preferences(defaults: UserDefaults(suiteName: name)!).weeklyRing, .outside)
     }
 
+    /// Keep the fork's hidden default and persist both explicit choices.
+    func testTheMoveHandleStaysHiddenUntilEnabledAndPersistsBothChoices() {
+        let (fresh, name) = makeDefaults()
+        XCTAssertFalse(Preferences(defaults: fresh).showsMoveHandle)
+
+        Preferences(defaults: fresh).showsMoveHandle = true
+        XCTAssertTrue(Preferences(defaults: UserDefaults(suiteName: name)!).showsMoveHandle)
+
+        Preferences(defaults: fresh).showsMoveHandle = false
+
+        XCTAssertFalse(Preferences(defaults: UserDefaults(suiteName: name)!).showsMoveHandle)
+    }
+
     /// The size has to outlive the launch that chose it, or it reads as a
     /// setting that did not take.
     func testTheNotchSizeSurvivesARelaunch() {

@@ -12,6 +12,36 @@ import XCTest
 
 @MainActor
 final class QueryConfigurationTests: XCTestCase {
+    func testArchiveCoalescesResultsAndFlushesOnStop() async throws {
+        let name = "ArchiveBatchTests.\(UUID().uuidString)"
+        let defaults = ArchiveWriteDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let archive = UsageArchive(defaults: defaults)
+        let store = UsageStore(providers: [QueryProbe(id: "a"), QueryProbe(id: "b")], archive: archive)
+        await store.refresh()
+        for _ in 0..<200 where defaults.readingWrites == 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(defaults.readingWrites, 1)
+        XCTAssertEqual(Set(archive.load().keys), ["a", "b"])
+        await store.refresh()
+        store.stop()
+        XCTAssertEqual(defaults.readingWrites, 2)
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(defaults.readingWrites, 2, "stop left a delayed duplicate write")
+    }
+
+    func testPendingArchiveWriteCannotRestoreSignedOutReading() async throws {
+        let archive = UsageArchive(defaults: defaults())
+        let store = UsageStore(providers: [QueryProbe(id: "a"), QueryProbe(id: "b")], archive: archive)
+        await store.refresh()
+        store.signOut(providerID: "a")
+        XCTAssertEqual(Set(archive.load().keys), ["b"])
+        try await Task.sleep(for: .milliseconds(300))
+        XCTAssertEqual(Set(archive.load().keys), ["b"])
+        store.stop()
+    }
+
     private func defaults() -> UserDefaults {
         let name = "QueryTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -429,6 +459,14 @@ private final class MemoryQuerySecrets: QuerySecretStorage {
     func load(_ reference: String) throws -> QuerySecrets { values[reference] ?? QuerySecrets() }
     func save(_ secrets: QuerySecrets, reference: String) throws { values[reference] = secrets }
     func remove(_ reference: String) throws { values[reference] = nil }
+}
+
+private final class ArchiveWriteDefaults: UserDefaults {
+    var readingWrites = 0
+    override func set(_ value: Any?, forKey defaultName: String) {
+        if defaultName == "lastGoodReadings" { readingWrites += 1 }
+        super.set(value, forKey: defaultName)
+    }
 }
 
 private actor QueryProbe: UsageProvider {

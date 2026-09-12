@@ -50,12 +50,12 @@ struct NotchPosition: Codable, Equatable {
 
     /// Keep the visible bar near the pointer while moving transparent tooltip space inward.
     func layout(on screen: ScreenDescribing, panelSize: CGSize, shapeLength: CGFloat,
-                endClearance: CGFloat) -> (frame: CGRect, leading: CGFloat) {
+                endClearance: CGFloat, startClearance: CGFloat = 0) -> (frame: CGRect, leading: CGFloat) {
         let usable = screen.visibleFrameValue
         let total = edge.isVertical ? usable.height : usable.width
         let panelLength = edge.isVertical ? panelSize.height.rounded(.up) : panelSize.width.rounded(.up)
         let barStart = min(max(0, total - shapeLength - endClearance),
-                           max(0, normalizedFraction * total - shapeLength / 2))
+                           max(startClearance, normalizedFraction * total - shapeLength / 2))
         let panelStart = min(max(0, total - panelLength),
                              max(0, barStart - (panelLength - shapeLength) / 2))
         var frame = NotchGeometry.panelFrame(for: screen, panelSize: panelSize, edge: edge)

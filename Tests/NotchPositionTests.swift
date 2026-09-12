@@ -18,6 +18,39 @@ private struct PositionScreen: ScreenDescribing {
 }
 
 final class NotchPositionTests: XCTestCase {
+    func testBothHandlesStayInsideSavedAndLegacyLayoutsAtEveryEdge() {
+        let screen = PositionScreen()
+        for edge in NotchEdge.allCases {
+            let size = edge.isVertical ? CGSize(width: 340, height: 600) : CGSize(width: 600, height: 340)
+            for fraction in [0.0, 1.0] {
+                let layout = NotchPosition(edge: edge, fraction: fraction).layout(
+                    on: screen, panelSize: size, shapeLength: 200,
+                    endClearance: 45, startClearance: 45)
+                let length = edge.isVertical ? layout.frame.height : layout.frame.width
+                XCTAssertGreaterThanOrEqual(layout.leading - 45, 0)
+                XCTAssertLessThanOrEqual(layout.leading + 245, length)
+                let frame = NotchGeometry.panelFrame(for: screen, panelSize: size, edge: edge,
+                    alongOffset: fraction == 0 ? -10000 : 10000, slack: 200,
+                    trailingExtent: 45, leadingExtent: 45)
+                let start = edge.isVertical ? screen.frameValue.maxY - frame.maxY + 200
+                    : frame.minX - screen.frameValue.minX + 200
+                let available = edge.isVertical ? screen.frameValue.height : screen.frameValue.width
+                XCTAssertGreaterThanOrEqual(start - 45, 0)
+                XCTAssertLessThanOrEqual(start + 245, available)
+            }
+        }
+    }
+
+    func testFullTooltipPanelRetainsTheLeadingHandleAboveTheUsableArea() {
+        let layout = TooltipSizing.sidePanelLayout(
+            usable: CGRect(x: 0, y: 60, width: 1600, height: 900),
+            standardFrame: CGRect(x: 1260, y: 555, width: 340, height: 600),
+            standardSlack: 200, size: CGSize(width: 340, height: 1100),
+            shapeLength: 200, leadingExtent: 45, trailingExtent: 0)
+        XCTAssertGreaterThanOrEqual(layout.leading, 45)
+        XCTAssertEqual(layout.frame.maxY - layout.leading, 955)
+    }
+
     func testSnapsToAllEdgesOnANegativeOriginDisplay() {
         let screen = PositionScreen()
         let points: [(NotchEdge, CGPoint)] = [

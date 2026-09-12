@@ -424,7 +424,7 @@ is asked on the first real alert rather than at launch.
 ## Placement
 
 Right-click the notch to open **Settings…** or **Edit position**. The bar has
-no separate settings or move handles.
+no separate settings or move handles by default.
 
 Appearance → **Secondary quota ring** shows another quota period beside the main
 ring. Code Switch R uses the next available period in its supplied order, so a
@@ -475,6 +475,10 @@ on the body itself, since a ring takes its own click to refetch that provider
 and the orb takes one to open Settings. Right-clicking offers the same thing as
 a menu item, **Keep open**, ticked while the notch is being held open, which is
 the surer way to release one that was kept open by accident. The item follows the same persistent visibility setting as Settings → Appearance.
+
+In Settings → Appearance, enable **Show move handle** to add a drag handle
+on every display. It is off by default and the choice survives relaunches;
+**Edge** still changes the notch's screen edge while the handle is hidden.
 
 In Settings → Appearance → Reset time, choose **Time remaining** for countdowns
 like "Resets in 3 Days 3h". **Reset date** keeps the reset date and time, with

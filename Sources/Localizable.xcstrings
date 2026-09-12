@@ -1,6 +1,52 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Optional move handle and more reliable placement.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "可选移动手柄，定位更可靠。" } }
+      }
+    },
+    "Enable the move handle in Appearance settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "可在外观设置中开启移动手柄" } }
+      }
+    },
+    "The move handle stays clickable when scaled and near screen edges": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "缩放或靠近屏幕边界时，移动手柄仍可正常点击" } }
+      }
+    },
+    "Fewer repeated writes when saving provider readings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "减少保存供应商读数时的重复写入" } }
+      }
+    },
+    "Show move handle": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示移动手柄"
+          }
+        }
+      }
+    },
+    "The arc above the notch. Hold it to carry the notch to another edge — Edge above does the same.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按住手柄可将显示栏拖到其他屏幕边缘，也可通过上方的边缘设置调整位置。"
+          }
+        }
+      }
+    },
     "just now": {
       "extractionState": "manual",
       "localizations": {

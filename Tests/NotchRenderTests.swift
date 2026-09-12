@@ -197,6 +197,26 @@ final class NotchRenderTests: XCTestCase {
         XCTAssertGreaterThan(colour(.outside), off, "outside painted no arc")
     }
 
+    /// Hiding the move handle takes its arc off the notch, and leaves nothing
+    /// behind that can still be hovered or pressed — an invisible control that
+    /// starts a move is worse than a visible one.
+    func testAHiddenMoveHandleIsNeitherDrawnNorPressable() throws {
+        let shown = model(edge: .right)
+        shown.showsMoveHandle = true
+        let point = try XCTUnwrap(shown.moveHandlePoints.first)
+        XCTAssertTrue(shown.isOnMoveHandle(along: point.x, across: point.y))
+
+        let hidden = model(edge: .right)
+        hidden.showsMoveHandle = false
+        XCTAssertTrue(hidden.moveHandlePoints.isEmpty)
+        XCTAssertFalse(hidden.isOnMoveHandle(along: point.x, across: point.y),
+                       "a hidden handle still took the press")
+
+        let withHandle = inkedFraction(try XCTUnwrap(render(shown)))
+        let withoutHandle = inkedFraction(try XCTUnwrap(render(hidden)))
+        XCTAssertLessThan(withoutHandle, withHandle, "the handle's arc was still drawn")
+    }
+
     /// A week nobody has spent yet still has to be visible.
     ///
     /// At 0% the arc has no length, so without a track behind it the ring is
@@ -490,6 +510,30 @@ final class PanelSizingIntegrityTests: XCTestCase {
 /// bargain of a window that sits over everything you are working in.
 @MainActor
 final class ClickThroughTests: XCTestCase {
+    func testScaledMoveHandleAcceptsOuterClicksAndReleasesThemWhenHidden() throws {
+        for edge in NotchEdge.allCases {
+            let controller = NotchWindowController()
+            controller.model.edge = edge
+            controller.model.sizeScale = 1.5
+            controller.model.snapshots = Array(Fixtures.snapshots().prefix(2))
+            controller.show()
+            defer { controller.stop() }
+            controller.model.isExpanded = true
+            controller.apply(showsMoveHandle: true)
+            let content = try XCTUnwrap(controller.panelContentViewForTesting)
+            let host = try XCTUnwrap(content.subviews.first as? NotchHostingView<NotchRootView>)
+            let model = controller.model
+            let point = NotchPlacement(edge: edge, panelSize: model.panelSize).point(
+                along: model.slack + model.moveAlong * model.sizeScale - 32,
+                across: model.orbInset * model.sizeScale)
+            XCTAssertTrue(host.interactiveRects.contains { $0.contains(point) })
+            XCTAssertNotNil(content.hitTest(CGPoint(x: point.x, y: content.bounds.height - point.y)))
+            controller.apply(showsMoveHandle: false)
+            XCTAssertFalse(host.interactiveRects.contains { $0.contains(point) })
+            XCTAssertNil(content.hitTest(CGPoint(x: point.x, y: content.bounds.height - point.y)))
+        }
+    }
+
     private func shownController() -> NotchWindowController {
         let controller = NotchWindowController()
         controller.show()

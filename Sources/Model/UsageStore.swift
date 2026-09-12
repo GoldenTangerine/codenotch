@@ -60,7 +60,7 @@ final class UsageStore: ObservableObject {
             // remembered forever and rebuilt from the archive at the next
             // launch, ring and all.
             for id in disconnected { lastGood.removeValue(forKey: id) }
-            archive.save(lastGood)
+            persistArchive()
             for provider in providers where oldValue.contains(provider.id) && !disconnected.contains(provider.id) {
                 publish(Self.placeholder(provider))
             }
@@ -120,6 +120,23 @@ final class UsageStore: ObservableObject {
 
     private let archive: UsageArchive
     private var lastGood: [String: (snapshot: ProviderSnapshot, fetchedAt: Date)] = [:]
+    private var archiveSaveTask: Task<Void, Never>?
+
+    /// Coalesce a burst without postponing the write indefinitely during polling.
+    private func scheduleArchiveSave() {
+        guard archiveSaveTask == nil else { return }
+        archiveSaveTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(250)) }
+            catch { return }
+            self?.persistArchive()
+        }
+    }
+
+    private func persistArchive() {
+        archiveSaveTask?.cancel()
+        archiveSaveTask = nil
+        archive.save(lastGood)
+    }
     private var timer: Timer?
     private var localTimer: Timer?
     private var fetchTasks: [String: Task<Void, Never>] = [:]
@@ -287,6 +304,7 @@ final class UsageStore: ObservableObject {
     }
 
     func stop() {
+        if archiveSaveTask != nil { persistArchive() }
         timer?.invalidate()
         timer = nil
         localTimer?.invalidate()
@@ -527,7 +545,7 @@ final class UsageStore: ObservableObject {
         refusedAccess.remove(providerID)
         snapshots.removeAll { $0.id == providerID }
         lastGood.removeValue(forKey: providerID)
-        archive.forget(providerID)
+        persistArchive()
 
         Task { await provider.signOut() }
     }
@@ -640,7 +658,7 @@ final class UsageStore: ObservableObject {
             // never use quota's last-good cache or survive an app relaunch.
             if provider.kind == .usage {
                 lastGood[provider.id] = (fresh, Date())
-                archive.save(lastGood)
+                scheduleArchiveSave()
             }
             refusedAccess.remove(provider.id)
             // A reading that actually came back is proof the credential works,
@@ -681,7 +699,7 @@ final class UsageStore: ObservableObject {
     private func degraded(provider: UsageProvider, error: Error) -> ProviderSnapshot? {
         if !provider.isVisibleWhenAbsent {
             lastGood[provider.id] = nil
-            archive.save(lastGood)
+            persistArchive()
             return nil
         }
 
@@ -706,7 +724,7 @@ final class UsageStore: ObservableObject {
         // longer read. So the remembered reading is dropped, not dimmed.
         if Self.supersedesHistory(status) {
             lastGood[provider.id] = nil
-            archive.save(lastGood)
+            persistArchive()
             var empty = Self.placeholder(provider)
             empty.status = status
             return empty
@@ -842,7 +860,7 @@ final class UsageStore: ObservableObject {
         for snapshot in snapshots {
             if let old = lastGood[snapshot.id] { lastGood[snapshot.id] = (snapshot, old.fetchedAt) }
         }
-        archive.save(lastGood)
+        persistArchive()
         refreshDue()
     }
 
