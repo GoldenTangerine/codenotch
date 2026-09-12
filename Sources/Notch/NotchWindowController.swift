@@ -43,7 +43,8 @@ final class NotchWindowController {
     private weak var previousKeyWindow: NSWindow?
     private var previousApplication: NSRunningApplication?
     private var dragStart: CGPoint?
-    private var dragGrabFraction: CGFloat = 0
+    /// Screen points keep the grab stable when joining hardware changes the bar's length.
+    private var dragGrabOffset: CGFloat = 0
     private var didDrag = false
     private var accumulatedScroll: CGFloat = 0
 
@@ -394,6 +395,7 @@ final class NotchWindowController {
             Log.usage.debug("panel \(NSStringFromRect(panel.frame), privacy: .public) on screen \(NSStringFromRect(screen.frame), privacy: .public)")
         }
         updateInteractiveRects()
+        updatePositionGuides(on: screen, cellCount: cellCount ?? model.snapshots.count)
     }
 
     /// Feeds a raw pointer delta from an ⌥-drag into `model.alongOffset` and
@@ -717,7 +719,7 @@ final class NotchWindowController {
         // band is nearest would otherwise swallow the press.
         if model.isExpanded, isOverMoveHandle(local) {
             model.moveSpins += 1
-            beginMove()
+            beginMove(at: local)
             return true
         }
         if model.isExpanded, isOverHandle(local) {
@@ -888,56 +890,40 @@ final class NotchWindowController {
     }
 
     private var dropZones: DropZoneOverlay?
+    var positionGuideWindowForTesting: NSWindow? { dropZones?.windowForTesting }
+    var positionGuideTargetForTesting: NotchEdge? { dropZones?.targetForTesting }
 
-    /// Carries the notch: raises the drop zones, follows the pointer until the
-    /// button lifts, and hands the edge it landed on to `onMoveToEdge`.
-    ///
-    /// Driven from the pointer's own position rather than from drag deltas,
-    /// because what is being chosen is a *place on the screen*, not a distance
-    /// moved — and a press that never moves has to be able to end on the edge
-    /// it started from without having accumulated anything.
-    ///
-    /// Blocks on the panel's event stream until mouse-up, the same AppKit
-    /// pattern `NotchPanel.trackOptionDrag` uses.
-    private func beginMove() {
-        guard let panel, let screen = currentScreen() else { return }
+    private var guideScreen: NSScreen?
 
-        let overlay = DropZoneOverlay(screen: screen)
-        dropZones = overlay
-        model.isMoving = true
-        // Starts on the edge it is already on, so releasing without moving is
-        // a no-op rather than a jump to whichever edge the maths rounds to.
-        model.moveTarget = model.edge
-        overlay.show(target: model.edge,
-                     restingDepth: model.restingDepth * model.sizeScale,
-                     restingLength: model.shapeLength * model.sizeScale)
+    /// Both entry points share the same event stream, including Escape and mouse-up.
+    private func beginMove(at local: CGPoint) {
+        let grab = placement.along(of: local) - model.slack - model.shapeLength * model.sizeScale / 2
+        beginPositionEditing()
+        guard model.isEditingPosition else { return }
+        dragStart = mouseLocation()
+        dragGrabOffset = grab
+    }
 
-        defer {
-            model.isMoving = false
-            model.moveTarget = nil
-            overlay.hide()
-            dropZones = nil
+    private func updatePositionGuides(on screen: NSScreen, cellCount: Int) {
+        guard model.isEditingPosition else { return }
+        if guideScreen !== screen {
+            dropZones?.hide()
+            dropZones = DropZoneOverlay(screen: screen)
+            guideScreen = screen
         }
-
-        while let event = panel.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            let local = overlay.localPoint(from: NSEvent.mouseLocation)
-            let target = EdgeDropZones.edge(at: local, in: overlay.screenSize)
-
-            switch event.type {
-            case .leftMouseDragged:
-                if model.moveTarget != target {
-                    model.moveTarget = target
-                }
-                overlay.show(target: target,
-                             restingDepth: model.restingDepth * model.sizeScale,
-                             restingLength: model.shapeLength * model.sizeScale)
-            case .leftMouseUp:
-                if target != model.edge { onMoveToEdge?(target) }
-                return
-            default:
-                return
-            }
+        let frames = model.centeredGuideFrames(on: screen, cellCount: cellCount)
+        let actualCenter = panel.map {
+            CGPoint(x: $0.frame.minX + notchRect.midX - screen.frame.minX,
+                    y: screen.frame.maxY - $0.frame.maxY + notchRect.midY)
         }
+        let centered = frames[model.edge].map { guide in
+            guard let actualCenter else { return false }
+            return abs(model.edge.isVertical ? actualCenter.y - guide.midY : actualCenter.x - guide.midX) <= 1
+        } ?? false
+        dropZones?.show(target: activePosition.normalizedFraction == 0.5 && centered ? model.edge : nil,
+                        frames: frames,
+                        hardwareNotch: screen.hardwareNotch,
+                        scale: model.sizeScale, accent: model.accentColor)
     }
 
     private var lastRelocate = Date.distantPast
@@ -1186,21 +1172,35 @@ final class NotchWindowController {
         previousApplication = NSWorkspace.shared.frontmostApplication
         previewPosition = activePosition
         previewPosition?.displayID = screen.notchDisplayID
+        if savedPosition == nil, !model.isFlushWithHardware {
+            let usable = screen.visibleFrame
+            let center = model.slack + model.shapeLength * model.sizeScale / 2
+            let fraction = model.edge.isVertical
+                ? (usable.maxY - panel.frame.maxY + center) / max(1, usable.height)
+                : (panel.frame.minX + center - usable.minX) / max(1, usable.width)
+            previewPosition?.fraction = Double(min(1, max(0, fraction)))
+        }
         model.hoveredIndex = nil
         model.isHoveringSettings = false
         model.isEditingPosition = true
+        model.isMoving = true
         model.isExpanded = true
         panel.isEditingPosition = true
-        dragGrabFraction = 0
+        dragGrabOffset = 0
         NSCursor.openHand.push()
         panel.makeKey()
         updateInteractiveRects()
+        updatePositionGuides(on: screen, cellCount: model.snapshots.count)
     }
 
     func finishPositionEditing(commit: Bool, restoreFocus: Bool = true) {
         guard model.isEditingPosition else { return }
         let committed = commit && didDrag ? previewPosition : nil
         model.isEditingPosition = false
+        model.isMoving = false
+        dropZones?.hide()
+        dropZones = nil
+        guideScreen = nil
         panel?.isEditingPosition = false
         dragStart = nil
         didDrag = false
@@ -1236,15 +1236,15 @@ final class NotchWindowController {
             return true
         case .leftMouseDown:
             guard let panel, isInLiveRegion(localCursor(in: panel.frame)) else { return false }
-            dragStart = NSEvent.mouseLocation
-            dragGrabFraction = (placement.along(of: localCursor(in: panel.frame)) - model.slack)
-                / max(1, model.shapeLength * model.sizeScale) - 0.5
+            dragStart = mouseLocation()
+            dragGrabOffset = placement.along(of: localCursor(in: panel.frame)) - model.slack
+                - model.shapeLength * model.sizeScale / 2
             didDrag = false
             NSCursor.closedHand.set()
             return true
         case .leftMouseDragged:
             guard let dragStart else { return true }
-            updatePositionDrag(to: NSEvent.mouseLocation, from: dragStart)
+            updatePositionDrag(to: mouseLocation(), from: dragStart)
             return true
         case .leftMouseUp:
             guard dragStart != nil else { return true }
@@ -1267,14 +1267,14 @@ final class NotchWindowController {
               didDrag || hypot(point.x - start.x, point.y - start.y) >= 4,
               let screen = NSScreen.notchScreen(at: point) else { return }
         didDrag = true
+        NSCursor.closedHand.set()
         let old = activePosition
         var candidate = NotchPosition.snapped(to: point, on: screen,
                                              displayID: screen.notchDisplayID, previous: old)
         model.edge = candidate.edge
-        model.adopt(screen: screen, joinsHardware: candidate.joinsHardware)
         var center = point
-        if candidate.edge.isVertical { center.y += dragGrabFraction * model.shapeLength * model.sizeScale }
-        else { center.x -= dragGrabFraction * model.shapeLength * model.sizeScale }
+        if candidate.edge.isVertical { center.y += dragGrabOffset }
+        else { center.x -= dragGrabOffset }
         // The pointer chooses the edge; the grab offset only chooses the position along it.
         candidate = candidate.movingAlong(to: center, on: screen, previous: old)
         previewPosition = candidate
@@ -1315,7 +1315,7 @@ final class NotchWindowController {
         editPosition.isEnabled = !model.isEditingPosition
         menu.addItem(editPosition)
         let settings = NSMenuItem(
-            title: L10n.t("Settings…"),
+            title: L10n.t("Settings"),
             action: #selector(MenuActions.openSettings(_:)), keyEquivalent: ""
         )
         settings.target = menuActions

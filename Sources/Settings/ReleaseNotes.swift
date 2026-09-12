@@ -40,6 +40,16 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.31",
+            headline: L10n.t("Freely position the capsule with clearer center guides."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Edit position from the menu or move handle, with free placement along every edge")),
+                ReleaseNote.Change(title: L10n.t("Drag across displays, release to save, or press Escape to cancel")),
+                ReleaseNote.Change(title: L10n.t("Snap to centered guides that stay aligned and visible at every size")),
+                ReleaseNote.Change(title: L10n.t("Less repeated layout work while dragging, with side placement clear of the Dock"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.30",
             headline: L10n.t("Clearer Code Switch R statistics at a glance."),
             changes: [

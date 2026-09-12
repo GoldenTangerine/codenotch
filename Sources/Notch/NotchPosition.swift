@@ -41,10 +41,11 @@ struct NotchPosition: Codable, Equatable {
         var fraction = edge.isVertical
             ? (frame.maxY - point.y) / max(1, frame.height)
             : (point.x - frame.minX) / max(1, frame.width)
-        if edge == .top, screen.hardwareNotch != nil {
-            let radius: CGFloat = previous.displayID == displayID && previous.joinsHardware ? 36 : 24
-            if abs(point.x - screen.frameValue.midX) <= radius { fraction = 0.5 }
-        }
+        let center = edge == .top && screen.hardwareNotch != nil
+            ? screen.frameValue.midX : (edge.isVertical ? frame.midY : frame.midX)
+        let radius: CGFloat = previous.displayID == displayID && previous.edge == edge
+            && previous.normalizedFraction == 0.5 ? 36 : 24
+        if abs((edge.isVertical ? point.y : point.x) - center) <= radius { fraction = 0.5 }
         return NotchPosition(edge: edge, fraction: Double(min(1, max(0, fraction))), displayID: displayID)
     }
 
@@ -60,6 +61,7 @@ struct NotchPosition: Codable, Equatable {
                              max(0, barStart - (panelLength - shapeLength) / 2))
         var frame = NotchGeometry.panelFrame(for: screen, panelSize: panelSize, edge: edge)
         if edge.isVertical {
+            frame.origin.x = (edge == .left ? usable.minX : usable.maxX - frame.width).rounded()
             frame.origin.y = (usable.maxY - panelStart - frame.height).rounded()
             return (frame, (frame.maxY - usable.maxY + barStart).rounded())
         }

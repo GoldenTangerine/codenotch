@@ -14,27 +14,42 @@ import SwiftUI
 ///
 /// A window of its own rather than something inside `NotchPanel`: the panel is
 /// a thin strip welded to one edge, and the zones have to be visible on all
-/// four at once. It is click-through everywhere — the move is driven by the
-/// pointer position while the mouse button is held on the handle, so this
-/// surface must never intercept the events that drive it.
+/// four at once. It is click-through everywhere so either editing entry point
+/// can keep receiving drag and cancellation events through the notch panel.
 @MainActor
 final class DropZoneOverlay {
     private var window: NSWindow?
     private var hosting: NSHostingView<EdgeDropZones>?
     private let screen: NSScreen
+    private var presentation: Presentation?
+    private struct Presentation: Equatable {
+        let target: NotchEdge?
+        let frames: [NotchEdge: CGRect]
+        let hardware: HardwareNotch?
+        let scale: CGFloat
+        let accent: AccentColorChoice
+    }
+    var windowForTesting: NSWindow? { window }
+    var targetForTesting: NotchEdge? { presentation?.target }
 
     init(screen: NSScreen) {
         self.screen = screen
     }
 
     /// Puts the zones on screen, or updates which one is highlighted.
-    func show(target: NotchEdge?, restingDepth: CGFloat, restingLength: CGFloat) {
+    func show(target: NotchEdge?, frames: [NotchEdge: CGRect], hardwareNotch: HardwareNotch?,
+              scale: CGFloat, accent: AccentColorChoice) {
+        let next = Presentation(target: target, frames: frames, hardware: hardwareNotch, scale: scale, accent: accent)
+        guard presentation != next else { return }
+        presentation = next
         let frame = screen.frame
         let view = EdgeDropZones(
             target: target,
             size: frame.size,
-            restingDepth: restingDepth,
-            restingLength: restingLength
+            frames: frames,
+            hardwareNotch: hardwareNotch,
+            scale: scale,
+            accentColor: accent.color
         )
 
         if let hosting {
@@ -62,7 +77,7 @@ final class DropZoneOverlay {
         panel.isReleasedWhenClosed = false
         panel.contentView = hostingView
         panel.setFrame(frame, display: false)
-        panel.orderFront(nil)
+        if !Runtime.isUnderTest { panel.orderFront(nil) }
 
         window = panel
         hosting = hostingView
@@ -72,6 +87,7 @@ final class DropZoneOverlay {
         window?.orderOut(nil)
         window = nil
         hosting = nil
+        presentation = nil
     }
 
     /// Converts a screen point into this overlay's own top-left-origin space,

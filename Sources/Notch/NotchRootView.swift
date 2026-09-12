@@ -275,7 +275,7 @@ struct NotchRootView: View {
     /// How far the shape may overhang the screen edge. Small enough that the
     /// notch is not visibly shallower for it, large enough to swallow a
     /// rounding error at any size.
-    private static let bezelBleed: CGFloat = 2
+    private static let bezelBleed = SideNotchShape.bezelBleed
 
     /// The cells fade and lift into place a beat after the shape starts opening,
     /// each trailing the one before it. Folded shut they are not just hidden but

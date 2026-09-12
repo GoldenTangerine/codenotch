@@ -8,6 +8,7 @@
  @FilePath: Tests/NotchPositionTests.swift
  */
 import AppKit
+import SwiftUI
 import XCTest
 @testable import Codenotch
 
@@ -18,6 +19,64 @@ private struct PositionScreen: ScreenDescribing {
 }
 
 final class NotchPositionTests: XCTestCase {
+    func testGuideSilhouetteMatchesScaledCapsuleOnEveryEdge() {
+        for edge in NotchEdge.allCases {
+            for scale: CGFloat in [0.75, 1, 1.3, 1.5] {
+                for hardware in [nil, HardwareNotch(width: 180, height: 30)] {
+                    let shape = SideNotchShape(edge: edge, joining: edge == .top ? hardware : nil)
+                    let size = NotchPlacement.panelSize(edge: edge, length: 400, depth: 90)
+                    let frame = CGRect(x: 17, y: 29, width: size.width * scale, height: size.height * scale)
+                    let expected = shape.path(in: CGRect(origin: .zero, size: size))
+                        .applying(CGAffineTransform(scaleX: scale, y: scale))
+                        .applying(CGAffineTransform(translationX: frame.minX + edge.outward.x * 2,
+                                                   y: frame.minY + edge.outward.y * 2))
+                    let guide = shape.renderedPath(in: frame, scale: scale)
+                    XCTAssertEqual(guide.boundingRect.minX, expected.boundingRect.minX, accuracy: 0.000001)
+                    XCTAssertEqual(guide.boundingRect.minY, expected.boundingRect.minY, accuracy: 0.000001)
+                    XCTAssertEqual(guide.boundingRect.width, expected.boundingRect.width, accuracy: 0.000001)
+                    XCTAssertEqual(guide.boundingRect.height, expected.boundingRect.height, accuracy: 0.000001)
+                    for x in stride(from: frame.minX - 3, through: frame.maxX + 3, by: 3) {
+                        for y in stride(from: frame.minY - 3, through: frame.maxY + 3, by: 3) {
+                            let point = CGPoint(x: x + 0.37, y: y + 0.61)
+                            XCTAssertEqual(guide.contains(point), expected.contains(point))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testSidePlacementAvoidsSideDock() {
+        let screen = PositionScreen(visibleFrameValue: CGRect(x: -1500, y: 160, width: 1400, height: 910))
+        for edge in [NotchEdge.left, .right] {
+            let layout = NotchPosition(edge: edge).layout(on: screen,
+                panelSize: CGSize(width: 340, height: 600), shapeLength: 200, endClearance: 30)
+            XCTAssertTrue(screen.visibleFrameValue.contains(layout.frame))
+            XCTAssertEqual(edge == .left ? layout.frame.minX : layout.frame.maxX,
+                           edge == .left ? screen.visibleFrameValue.minX : screen.visibleFrameValue.maxX)
+        }
+    }
+
+    func testEveryEdgeSnapsToVisibleCenterWithHysteresis() {
+        let screen = PositionScreen()
+        for edge in NotchEdge.allCases {
+            let old = NotchPosition(edge: edge, fraction: 0.2, displayID: "external")
+            func point(_ offset: CGFloat) -> CGPoint {
+                CGPoint(x: screen.visibleFrameValue.midX + (edge.isVertical ? 0 : offset),
+                        y: screen.visibleFrameValue.midY + (edge.isVertical ? offset : 0))
+            }
+            let joined = old.movingAlong(to: point(24), on: screen, previous: old)
+            XCTAssertEqual(joined.fraction, 0.5)
+            XCTAssertEqual(joined.movingAlong(to: point(36), on: screen, previous: joined).fraction, 0.5)
+            XCTAssertNotEqual(joined.movingAlong(to: point(37), on: screen, previous: joined).fraction, 0.5)
+            XCTAssertNotEqual(old.movingAlong(to: point(25), on: screen, previous: old).fraction, 0.5)
+            let otherScreen = NotchPosition(edge: edge, displayID: "other")
+            XCTAssertNotEqual(old.movingAlong(to: point(30), on: screen, previous: otherScreen).fraction, 0.5)
+            let otherEdge = NotchPosition(edge: edge == .left ? .right : .left, displayID: "external")
+            XCTAssertNotEqual(old.movingAlong(to: point(30), on: screen, previous: otherEdge).fraction, 0.5)
+        }
+    }
+
     func testBothHandlesStayInsideSavedAndLegacyLayoutsAtEveryEdge() {
         let screen = PositionScreen()
         for edge in NotchEdge.allCases {
@@ -128,6 +187,180 @@ final class NotchPositionTests: XCTestCase {
 
 @MainActor
 final class NotchPositionEditingTests: XCTestCase {
+    func testGuideCacheTracksLayoutChanges() {
+        let model = NotchViewModel()
+        var screen = PositionScreen()
+        let initial = model.centeredGuideFrames(on: screen, cellCount: 3)
+        XCTAssertEqual(initial, model.centeredGuideFrames(on: screen, cellCount: 3))
+        model.sizeScale = 1.5
+        let resized = model.centeredGuideFrames(on: screen, cellCount: 3)
+        XCTAssertNotEqual(initial, resized)
+        XCTAssertNotEqual(resized, model.centeredGuideFrames(on: screen, cellCount: 1))
+        screen.visibleFrameValue.origin.x += 80
+        screen.visibleFrameValue.size.width -= 80
+        XCTAssertNotEqual(resized[.left], model.centeredGuideFrames(on: screen, cellCount: 3)[.left])
+        screen.hardwareNotch = HardwareNotch(width: 180, height: 30)
+        XCTAssertNotEqual(resized[.top], model.centeredGuideFrames(on: screen, cellCount: 3)[.top])
+    }
+
+    func testEditingCancellationNotificationsRemoveGuidesWithoutSaving() throws {
+        let controller = try controller()
+        controller.show()
+        let original = controller.savedPosition
+        var writes = 0
+        controller.onPositionCommitted = { _ in writes += 1 }
+        for name in [NSApplication.didResignActiveNotification,
+                     NSWindow.didResignKeyNotification, NSApplication.didChangeScreenParametersNotification] {
+            controller.beginPositionEditing()
+            let guide = try XCTUnwrap(controller.positionGuideWindowForTesting)
+            XCTAssertTrue(guide.ignoresMouseEvents)
+            let panel = try XCTUnwrap(controller.panelContentViewForTesting?.window)
+            let point = try XCTUnwrap(NSScreen.screens.first).visibleFrame.origin
+            controller.updatePositionDrag(to: point, from: CGPoint(x: point.x + 80, y: point.y + 80))
+            NotificationCenter.default.post(name: name, object: name == NSWindow.didResignKeyNotification ? panel : nil)
+            XCTAssertFalse(controller.model.isEditingPosition)
+            XCTAssertNil(controller.positionGuideWindowForTesting)
+            XCTAssertFalse(guide.isVisible)
+            XCTAssertEqual(controller.savedPosition, original)
+        }
+        controller.beginPositionEditing()
+        controller.stop()
+        XCTAssertNil(controller.positionGuideWindowForTesting)
+        XCTAssertEqual(writes, 0)
+    }
+
+    func testOnlyCenteredLandingHighlightsAndCommitRemovesGuides() throws {
+        let controller = try controller()
+        let screen = try XCTUnwrap(NSScreen.screens.first)
+        let usable = screen.visibleFrame
+        controller.beginPositionEditing()
+        let guide = try XCTUnwrap(controller.positionGuideWindowForTesting)
+        let center = CGPoint(x: usable.midX, y: usable.minY)
+        controller.updatePositionDrag(to: center, from: CGPoint(x: center.x, y: center.y + 80))
+        XCTAssertEqual(controller.positionGuideTargetForTesting, .bottom)
+        XCTAssertTrue(controller.positionGuideWindowForTesting === guide)
+        controller.updatePositionDrag(to: CGPoint(x: center.x + 37, y: center.y), from: .zero)
+        XCTAssertNil(controller.positionGuideTargetForTesting)
+        controller.finishPositionEditing(commit: true)
+        XCTAssertNil(controller.positionGuideWindowForTesting)
+        XCTAssertNotEqual(controller.savedPosition?.fraction, 0.5)
+    }
+
+    func testCrossDisplayPreviewMovesGuidesAndCancelRestoresOriginal() throws {
+        guard NSScreen.screens.count >= 2 else { throw XCTSkip("Needs two displays") }
+        let first = NSScreen.screens[0]
+        let second = NSScreen.screens[1]
+        let controller = NotchWindowController()
+        let original = NotchPosition(edge: .left, fraction: 0.3, displayID: first.notchDisplayID)
+        controller.restore(position: original)
+        controller.relocate()
+        defer { controller.stop() }
+        controller.beginPositionEditing()
+        let oldGuide = try XCTUnwrap(controller.positionGuideWindowForTesting)
+        let point = CGPoint(x: second.visibleFrame.midX, y: second.visibleFrame.minY + 2)
+        controller.updatePositionDrag(to: point, from: CGPoint(x: point.x, y: point.y + 80))
+        XCTAssertEqual(controller.currentScreen(), second)
+        XCTAssertEqual(controller.positionGuideWindowForTesting?.frame, second.frame)
+        XCTAssertFalse(controller.positionGuideWindowForTesting === oldGuide)
+        XCTAssertFalse(oldGuide.isVisible)
+        controller.finishPositionEditing(commit: false)
+        XCTAssertEqual(controller.savedPosition, original)
+        XCTAssertEqual(controller.currentScreen(), first)
+        XCTAssertNil(controller.positionGuideWindowForTesting)
+        controller.beginPositionEditing()
+        controller.updatePositionDrag(to: point, from: CGPoint(x: point.x, y: point.y + 80))
+        controller.finishPositionEditing(commit: true)
+        XCTAssertEqual(controller.savedPosition?.displayID, second.notchDisplayID)
+        XCTAssertEqual(controller.savedPosition?.edge, .bottom)
+    }
+
+    func testCenteredGuidesMatchActualLandingGeometry() throws {
+        for hardware in [nil, HardwareNotch(width: 180, height: 30)] {
+            let screen = PositionScreen(hardwareNotch: hardware)
+            let model = NotchViewModel()
+            model.sizeScale = 1.3
+            model.showsMoveHandle = true
+            model.showsSettingsHandle = true
+            let guides = model.centeredGuideFrames(on: screen, cellCount: 3)
+            for edge in NotchEdge.allCases {
+                model.edge = edge
+                model.adopt(screen: screen)
+                let length = model.shapeLength(cellCount: 3) * model.sizeScale
+                let layout = NotchPosition(edge: edge).layout(on: screen,
+                    panelSize: model.panelSize(cellCount: 3), shapeLength: length,
+                    endClearance: model.trailingExtent * model.sizeScale,
+                    startClearance: model.leadingExtent * model.sizeScale)
+                let guide = try XCTUnwrap(guides[edge])
+                let actual = NotchPlacement(edge: edge, panelSize: layout.frame.size).rect(
+                    along: layout.leading, across: 0, length: length, depth: model.notchDrawnDepth)
+                XCTAssertEqual(guide.minX, layout.frame.minX + actual.minX - screen.frameValue.minX, accuracy: 1)
+                XCTAssertEqual(guide.minY, screen.frameValue.maxY - layout.frame.maxY + actual.minY, accuracy: 1)
+                XCTAssertEqual(guide.size, actual.size)
+            }
+        }
+    }
+
+    func testHandleClickAndDirectDragSharePositionEditing() throws {
+        _ = NSApplication.shared
+        guard let screen = NSScreen.screens.first else { throw XCTSkip("Needs a window server") }
+        var mouse = CGPoint.zero
+        let controller = NotchWindowController(mouseLocation: { mouse })
+        controller.assignedScreen = screen
+        controller.restore(position: NotchPosition(edge: .left, fraction: 0.3, displayID: screen.notchDisplayID))
+        controller.model.isExpanded = true
+        controller.model.showsMoveHandle = true
+        controller.relocate()
+        defer { controller.stop() }
+        var writes: [NotchPosition] = []
+        controller.onPositionCommitted = { writes.append($0) }
+        let panel = try XCTUnwrap(controller.panelContentViewForTesting?.window as? NotchPanel)
+        func pressHandle() throws {
+            let model = controller.model
+            let local = NotchPlacement(edge: model.edge, panelSize: panel.frame.size).point(
+                along: model.slack + model.moveAlong * model.sizeScale,
+                across: model.orbInset * model.sizeScale)
+            mouse = CGPoint(x: panel.frame.minX + local.x, y: panel.frame.maxY - local.y)
+            try send(.leftMouseDown)
+            XCTAssertTrue(controller.model.isEditingPosition)
+        }
+        func send(_ type: NSEvent.EventType) throws {
+            panel.sendEvent(try XCTUnwrap(NSEvent.mouseEvent(with: type,
+                location: CGPoint(x: mouse.x - panel.frame.minX, y: mouse.y - panel.frame.minY),
+                modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber, context: nil,
+                eventNumber: 0, clickCount: 1, pressure: 1)))
+        }
+        try pressHandle()
+        try send(.leftMouseUp)
+        XCTAssertTrue(controller.model.isEditingPosition)
+        XCTAssertTrue(writes.isEmpty)
+        controller.finishPositionEditing(commit: false)
+        try pressHandle()
+        let before = panel.frame.maxY - controller.model.slack
+        mouse.y -= 80
+        try send(.leftMouseDragged)
+        XCTAssertEqual(panel.frame.maxY - controller.model.slack, before - 80, accuracy: 1)
+        try send(.leftMouseUp)
+        XCTAssertFalse(controller.model.isEditingPosition)
+        XCTAssertFalse(controller.model.isMoving)
+        XCTAssertEqual(writes.count, 1)
+        XCTAssertNotEqual(writes.first?.fraction, 0.5)
+    }
+
+    func testContextMenuActuallyEntersTheSharedEditor() async throws {
+        let controller = try controller()
+        let panel = try XCTUnwrap(controller.panelContentViewForTesting?.window as? NotchPanel)
+        let menu = try XCTUnwrap(panel.contextMenuProvider?())
+        let index = try XCTUnwrap(menu.items.firstIndex { $0.action == #selector(MenuActions.editPosition(_:)) })
+        menu.performActionForItem(at: index)
+        let dispatched = expectation(description: "Menu action dispatched")
+        DispatchQueue.main.async { dispatched.fulfill() }
+        await fulfillment(of: [dispatched], timeout: 1)
+        XCTAssertTrue(controller.model.isEditingPosition)
+        XCTAssertTrue(controller.model.isMoving)
+        controller.finishPositionEditing(commit: false)
+        XCTAssertFalse(controller.model.isMoving)
+    }
+
     private func preferences() -> Preferences {
         let name = "NotchPositionTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

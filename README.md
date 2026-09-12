@@ -480,6 +480,14 @@ In Settings → Appearance, enable **Show move handle** to add a drag handle
 on every display. It is off by default and the choice survives relaunches;
 **Edge** still changes the notch's screen edge while the handle is hidden.
 
+Click the move handle or choose **Edit position** from the right-click menu to
+enter position editing. You can also drag the handle directly. Move the capsule
+anywhere along any screen edge, including on another display; release after
+dragging to save, or press Esc to cancel. Four dashed outlines mark the centered
+positions on the current display. The capsule snaps near a center and highlights
+its outline; drag farther away to release it. Centers follow the usable screen
+area, except the top center joins the physical notch on MacBooks that have one.
+
 Below it, **Show settings button** independently adds a settings arc at the
 opposite end. Hover to reveal the gear and click to open Settings. Both controls
 are hidden by default, remember their choices and apply to every display.

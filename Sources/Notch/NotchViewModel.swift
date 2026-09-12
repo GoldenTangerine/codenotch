@@ -205,8 +205,7 @@ final class NotchViewModel: ObservableObject {
     /// Bumped each time the move handle is pressed, on the same counter
     /// pattern `settingsSpins` uses and for the same reason.
     @Published var moveSpins = 0
-    /// The notch is in hand: the move handle has been held past its threshold
-    /// and the drop zones are up, waiting for a release.
+    /// Position editing is active from either entry point; keep the move handle armed.
     @Published var isMoving = false
     /// Which edge a release would land on. Nil before the pointer has moved
     /// far enough for a target to be meaningful.
@@ -782,6 +781,56 @@ final class NotchViewModel: ObservableObject {
                                 edge: edge, flare: flare,
                                 spacing: cellSpacing(cellCount: cellCount))
             + 2 * endSpread(cellCount: cellCount)
+    }
+
+    private struct GuideLayoutKey: Equatable {
+        let frame: CGRect
+        let usable: CGRect
+        let hardware: HardwareNotch?
+        let scale: CGFloat
+        let count: Int
+        let snapshots: [ProviderSnapshot]
+        let now: Date
+        let tooltipMode: TooltipHeightMode
+        let moveHandle: Bool
+        let settingsHandle: Bool
+    }
+    private var guideLayoutKey: GuideLayoutKey?
+    private var guideFrames: [NotchEdge: CGRect] = [:]
+
+    /// Preview each centered landing with its own hardware and edge geometry.
+    func centeredGuideFrames(on screen: ScreenDescribing, cellCount: Int) -> [NotchEdge: CGRect] {
+        let key = GuideLayoutKey(frame: screen.frameValue, usable: screen.visibleFrameValue,
+            hardware: screen.hardwareNotch, scale: sizeScale, count: cellCount, snapshots: snapshots,
+            now: now, tooltipMode: tooltipHeightMode, moveHandle: showsMoveHandle, settingsHandle: showsSettingsHandle)
+        if guideLayoutKey == key { return guideFrames }
+        let preview = NotchViewModel()
+        preview.now = now
+        preview.sizeScale = sizeScale
+        preview.snapshots = snapshots
+        preview.tooltipHeightMode = tooltipHeightMode
+        preview.showsMoveHandle = showsMoveHandle
+        preview.showsSettingsHandle = showsSettingsHandle
+        var frames: [NotchEdge: CGRect] = [:]
+        for edge in NotchEdge.allCases {
+            preview.edge = edge
+            preview.adopt(screen: screen)
+            let length = preview.shapeLength(cellCount: cellCount) * sizeScale
+            let depth = preview.notchDrawnDepth
+            let start = showsMoveHandle ? preview.leadingExtent * sizeScale : 0
+            let end = showsSettingsHandle ? preview.trailingExtent * sizeScale : 0
+            let size = NotchPlacement.panelSize(edge: edge, length: length + start + end, depth: depth)
+            let layout = NotchPosition(edge: edge).layout(on: screen, panelSize: size,
+                shapeLength: length, endClearance: end, startClearance: start)
+            let local = NotchPlacement(edge: edge, panelSize: layout.frame.size)
+                .rect(along: layout.leading, across: 0, length: length, depth: depth)
+            frames[edge] = CGRect(x: layout.frame.minX + local.minX - screen.frameValue.minX,
+                y: screen.frameValue.maxY - layout.frame.maxY + local.minY,
+                width: local.width, height: local.height)
+        }
+        guideLayoutKey = key
+        guideFrames = frames
+        return frames
     }
 
     /// The panel as it lands on screen, size choice included.

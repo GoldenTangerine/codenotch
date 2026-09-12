@@ -17,6 +17,47 @@ import Combine
 /// which is the one thing the arithmetic tests cannot tell you.
 @MainActor
 final class NotchRenderTests: XCTestCase {
+    func testPositionGuidesRemainVisibleOnOppositeThemeWallpapers() throws {
+        let size = CGSize(width: 640, height: 360)
+        for scheme in [ColorScheme.light, .dark] {
+            for whiteBackground in [false, true] {
+                for scale: CGFloat in [0.75, 1.5] {
+                    let length = 140 * scale
+                    let depth = 44 * scale
+                    let frames: [NotchEdge: CGRect] = [
+                        .left: CGRect(x: 0, y: (size.height - length) / 2, width: depth, height: length),
+                        .right: CGRect(x: size.width - depth, y: (size.height - length) / 2, width: depth, height: length),
+                        .top: CGRect(x: (size.width - length) / 2, y: 0, width: length, height: depth),
+                        .bottom: CGRect(x: (size.width - length) / 2, y: size.height - depth, width: length, height: depth)
+                    ]
+                    let renderer = ImageRenderer(content: EdgeDropZones(target: .bottom, size: size,
+                        frames: frames, hardwareNotch: nil, scale: scale, accentColor: .cyan)
+                        .background(whiteBackground ? Color.white : Color.black)
+                        .environment(\.colorScheme, scheme))
+                    renderer.scale = 1
+                    let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+                    for edge in NotchEdge.allCases {
+                        let frame = try XCTUnwrap(frames[edge])
+                        var contrastPixels = 0
+                        var accentPixels = 0
+                        for x in Int(frame.minX.rounded(.up))..<Int(frame.maxX.rounded(.down)) {
+                            for y in Int(frame.minY.rounded(.up))..<Int(frame.maxY.rounded(.down)) {
+                                let color = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+                                let low = min(color.redComponent, color.greenComponent, color.blueComponent)
+                                let high = max(color.redComponent, color.greenComponent, color.blueComponent)
+                                if whiteBackground ? low < 0.6 : high > 0.4 { contrastPixels += 1 }
+                                if high - low > 0.3 { accentPixels += 1 }
+                            }
+                        }
+                        XCTAssertGreaterThan(contrastPixels, 10, "Guide must contrast with the wallpaper: \(edge)")
+                        if edge == .bottom { XCTAssertGreaterThan(accentPixels, 10) }
+                        else { XCTAssertEqual(accentPixels, 0) }
+                    }
+                }
+            }
+        }
+    }
+
     private func model(edge: NotchEdge, cells: Int = 4) -> NotchViewModel {
         let model = NotchViewModel()
         model.edge = edge

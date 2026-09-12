@@ -15608,6 +15608,90 @@
           }
         }
       }
+    },
+    "Settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglages"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajustes"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置"
+          }
+        }
+      }
+    },
+    "Freely position the capsule with clearer center guides.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自由调整胶囊位置，居中参考更清晰。"
+          }
+        }
+      }
+    },
+    "Edit position from the menu or move handle, with free placement along every edge": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过右键菜单或移动手柄编辑位置，沿四边自由放置"
+          }
+        }
+      }
+    },
+    "Drag across displays, release to save, or press Escape to cancel": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支持跨屏拖动，松开保存，按 Esc 取消"
+          }
+        }
+      }
+    },
+    "Snap to centered guides that stay aligned and visible at every size": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "靠近居中虚框自动吸附，缩放后轮廓仍对齐且清晰可见"
+          }
+        }
+      }
+    },
+    "Less repeated layout work while dragging, with side placement clear of the Dock": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "减少拖动时的重复布局计算，侧边定位避让 Dock"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏轮廓
+ @Descripttion: 定义胶囊形状及居中预览共用的屏幕空间轮廓。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-12 15:29:28
+ @LastEditTime: 2026-09-12 15:29:28
+ @FilePath: Sources/Notch/SideNotchShape.swift
+ */
 import SwiftUI
 
 /// The notch body: a pill welded to one edge of the screen, with *inverse*
@@ -14,6 +23,16 @@ import SwiftUI
 /// straight body runs from `rect.minY + curlRadius` to `rect.maxY - curlRadius`,
 /// and `rect.maxX` is the screen edge.
 struct SideNotchShape: Shape {
+    static let bezelBleed: CGFloat = 2
+
+    /// Scale the original path, including its curves, before applying the bezel overhang.
+    func renderedPath(in frame: CGRect, scale: CGFloat) -> Path {
+        path(in: CGRect(origin: .zero, size: CGSize(width: frame.width / scale, height: frame.height / scale)))
+            .applying(CGAffineTransform(scaleX: scale, y: scale))
+            .applying(CGAffineTransform(translationX: frame.minX + edge.outward.x * Self.bezelBleed,
+                                       y: frame.minY + edge.outward.y * Self.bezelBleed))
+    }
+
     var edge: NotchEdge = .right
     /// The display's own notch, when this one is drawn as it.
     ///
