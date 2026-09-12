@@ -40,6 +40,24 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.29",
+            headline: L10n.t("Independent handles and more precise interaction."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Enable the settings button independently below the move handle in Appearance")),
+                ReleaseNote.Change(title: L10n.t("Handle arcs now follow the notch corners accurately")),
+                ReleaseNote.Change(title: L10n.t("Settings clicks respond reliably, and transparent gaps let desktop clicks through"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.28",
+            headline: L10n.t("Independent handles and more precise interaction."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Enable the settings button independently below the move handle in Appearance")),
+                ReleaseNote.Change(title: L10n.t("Handle arcs now follow the notch corners accurately")),
+                ReleaseNote.Change(title: L10n.t("Settings clicks respond reliably, and transparent gaps let desktop clicks through"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.27",
             headline: L10n.t("Optional move handle and more reliable placement."),
             changes: [

@@ -1,6 +1,30 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Independent handles and more precise interaction.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "独立控制两端手柄，交互定位更准确。" } }
+      }
+    },
+    "Enable the settings button independently below the move handle in Appearance": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "在外观设置的移动手柄开关下，独立开启设置按钮" } }
+      }
+    },
+    "Handle arcs now follow the notch corners accurately": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "两端手柄弧线准确贴合显示栏圆角" } }
+      }
+    },
+    "Settings clicks respond reliably, and transparent gaps let desktop clicks through": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "设置按钮点击更可靠，透明间隙不再拦截桌面点击" } }
+      }
+    },
     "Show settings button": {
       "extractionState": "manual",
       "localizations": {
