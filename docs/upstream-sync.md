@@ -52,3 +52,37 @@
 - 2 项临时补充测试通过：账户迁移/默认值/开关持久化，以及大日志尾部完成事件识别。持久回归覆盖同时保留在 PreferencesTests、QueryConfigurationTests、CodexUsageTests、ActivityRoutingTests 和 UsageRefreshRecoveryTests。
 - 本地化 JSON、plist、Windows 两个页面的 JavaScript 语法、`Scripts/test-signing.sh` 和 `git diff --check` 通过。
 - 当前无完整 Xcode/XCTest、XcodeGen 或 Cargo，未完成 `make test`、正式应用打包及 Windows Rust 编译。临时动态库编译和测试不替代这些检查。
+
+## 2026-09-14 上游 `v1.11.0` 功能同步
+
+- 来源：<https://github.com/vinzdg/codenotch>，`main`。
+- 上游功能树：`6844681690df9a26c1d12c1148e6203d0f78d582`；上游 appcast：`6c28672c300fadcb7fb59a277ba9d3997d74f1d2`。
+- 本地同步基线：`bc979109171b7d9adbb2f5c8c07835cab11d525a`（`v1.6.33`）；该基线也是本次上游历史的共同祖先。
+- 本次先在工作树中完成同步与冲突修复，经评审和回归验证后作为 `v1.6.34` 发布。
+
+### 合入的上游功能
+
+- Kiro、MiniMax、Claude 每日用量节奏、Codex Spark/代码审查额度、全屏应用折叠开关、DeepSeek 计费与登录修复、重置/耗尽即时提醒，以及 Windows 环和悬浮卡更新。
+- MiniMax 支持 Token Plan/Coding Plan 额度解析、国际/中国大陆区域、Coding Plan 密钥、可选 Cookie 标头和 Codenotch 自有 WebView 登录；新 provider 默认关闭，并避免与已有手动 `nativeID` 条目重复。
+- 补齐本次新增设置、更新说明和 Phone Link 中文文案；清理 catalog 中重复键，保留两类“今日”语义可用的统一翻译。
+
+### 冲突取舍
+
+- 保留本地 Code Switch R 通讯、订阅、供应商过滤/排序、会话绑定、等待状态、断线回退和本地查询模板/手动配置；上游快照不覆盖联动协议或本地调度。
+- 上游 `822b438` 暂停显示手机配对入口；本地保留 Phone Link 协议、配对窗口、服务器和菜单入口，`PhoneLink.isAvailable` 继续为 `true`。
+- 保留本地版本 `1.6.33` / build `274`、Sparkle 公钥、更新地址、`site` 发布产物和工作流，不采用上游 `1.11.0` 版本号或其发布产物覆盖本地配置。
+- WebView 会话只清理所属站点及 MiniMax 的关联 host；Code Switch R 的通讯数据不扩展到手机协议。
+- MiniMax/DeepSeek 登录只通知使用内置账户的查询条目，不触发同名手动查询。MiniMax 切区时废弃旧请求、归档读数和旧区域限流，关闭旧登录窗口；两区 WebView 登录状态互不冒用，切回原区域可沿用其会话。
+
+### 本次验证
+
+- 应用 Swift 源码类型检查和临时动态库链接通过；106 项 Swift Testing 回归全部通过（含新增 MiniMax 条目路由、旧请求失效与切区限流测试）。临时链接借用本机 zstd，未更改项目依赖。
+- `python3 Scripts/check-localization.py` 检查 969 项通过；Windows 翻译脚本、签名脚本、MiniMax XCTest 语法检查和 `git diff --check` 通过。
+- 当前环境只有 Command Line Tools，没有完整 Xcode/XCTest、XcodeGen 或 Cargo；新增 XCTest 无法运行，临时链接与回归不能替代应用打包、屏幕交互和 Windows Rust 构建。
+
+### v1.6.34 发布准备
+
+- 发布前快进纳入 `d012162` 的 v1.6.33 自动发布站点提交，不覆盖本次同步的源码或既有用户改动；本地版本递增为 `1.6.34` / build `276`。
+- MiniMax 设置页接入区域、密钥及 Cookie；失效密钥可回退到 Cookie/WebView，切换凭据或区域时废弃旧读数与限流。网页及 API 都检查内外层认证、限流状态，额度正文不再进入公开日志。
+- 应用源码临时模块构建及 108 项 Swift Testing 回归通过，包含 Code Switch R 和实际执行的 MiniMax 网站脚本；977 项中文目录翻译与参数检查通过。
+- 本机只有 Command Line Tools，无法执行完整 XCTest、正式 DMG 构建或真实账户 WebView 联调；`v1.6.34` 发布工作流将在打包前运行完整 XCTest。

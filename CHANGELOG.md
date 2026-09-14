@@ -10,6 +10,14 @@
 
 # 更新日志
 
+## [1.6.34] - 2026-09-14
+
+- 同步上游 Kiro、MiniMax、Codex Spark/代码审查额度、Claude 每日用量节奏、DeepSeek 分时计费、全屏折叠开关和 Windows 显示更新；保留本地 Code Switch R 通讯、会话关联、账户选择及 Phone Link。
+- MiniMax 新增 Token Plan/Coding Plan 额度：支持国际与中国大陆区域，可通过应用内登录、已保存的 Coding Plan 密钥或可选 Cookie 读取；新供应商默认关闭。
+- 修复 MiniMax 凭据优先级、保存失败提示和失效密钥回退；切换区域或更新凭据时清除旧读数与限流。网页登录和 API 查询均正确处理嵌套的认证失败与限流状态，额度响应不再写入公开日志。
+- 保留额度重置和耗尽后的及时提醒，修复上游功能与本地查询、通知及 Code Switch R 联动的兼容问题。
+- 本地源码构建和 108 项 Swift Testing 回归通过，涵盖 Code Switch R、MiniMax 脚本及区域切换。正式 XCTest、应用打包和真实账户 WebView 联调需由有完整 Xcode 的环境验证；发布工作流先执行完整测试，再打包。
+
 ## [1.6.33] - 2026-09-14
 
 - 修复 Codex 多配置目录活动测试：等待异步首轮结果后再校验，保留后台读取与会话隔离。

@@ -39,6 +39,7 @@ enum ProviderGlyph: String, Codable, Equatable {
     case copilot
     case kimi
     case kiro
+    case minimax
     case ollama
     case ollamaLocal = "ollama-local"
     case lmstudio
@@ -72,6 +73,7 @@ enum ProviderGlyph: String, Codable, Equatable {
         case .copilot: return 0.96
         case .kimi:   return 0.95
         case .kiro:   return 0.95
+        case .minimax: return 0.95
         case .ollama: return 0.95
         case .third:  return 1.0
         case .ollamaLocal: return 0.98
@@ -96,6 +98,7 @@ enum ProviderGlyph: String, Codable, Equatable {
         case .copilot: return GlyphOutline.copilot
         case .kimi:   return GlyphOutline.kimi
         case .kiro:   return GlyphOutline.kiro
+        case .minimax: return GlyphOutline.minimax
         case .ollama, .ollamaLocal: return GlyphOutline.ollama
         }
     }

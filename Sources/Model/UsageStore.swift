@@ -484,6 +484,19 @@ final class UsageStore: ObservableObject {
         return beginRefresh(provider, holdIndicator: true)
     }
 
+    /// A changed account source makes an in-flight response and its archived
+    /// reading belong to the previous source, even if the provider ID stays put.
+    func invalidateUsageSource(providerID: String) {
+        guard let provider = providers.first(where: { $0.id == providerID }) else { return }
+        cancelRefresh(providerID: providerID)
+        attempts[providerID] = nil
+        backoffs[providerID] = nil
+        archive.saveBackoffUntil(nil, providerID: providerID)
+        lastGood[providerID] = nil
+        archive.forget(providerID)
+        if !disconnected.contains(providerID) { publish(Self.placeholder(provider)) }
+    }
+
     func refreshLocalRuntimes() {
         for provider in providers where provider.kind == .localRuntime && !disconnected.contains(provider.id) {
             _ = beginRefresh(provider)
@@ -614,6 +627,10 @@ final class UsageStore: ObservableObject {
         refresh(providerID: providerID)
     }
 
+    func providerAccountChanged() {
+        providerAccountRevision &+= 1
+    }
+
     /// Say that a provider's saved login needs renewing by hand.
     ///
     /// Called by `ClaudeTokenRefresher` when it tried and the expiry did not
@@ -633,6 +650,26 @@ final class UsageStore: ObservableObject {
     /// the prompt never returns — the button would appear to do nothing.
     func reauthorize(providerID: String) {
         providers.first { $0.id == providerID }?.forgetCachedCredential()
+        if let miniMax = underlyingProvider(providerID) as? MiniMaxProvider {
+            providerAccountChanged()
+            let ids = providers.compactMap { provider -> String? in
+                if let native = provider as? MiniMaxProvider, native === miniMax {
+                    return provider.id
+                }
+                guard let configured = provider as? ConfiguredUsageProvider,
+                      configured.entry.usesLocalAccount,
+                      let automatic = configured.automatic as? MiniMaxProvider,
+                      automatic === miniMax
+                else { return nil }
+                return provider.id
+            }
+            for id in ids { invalidateUsageSource(providerID: id) }
+            Task {
+                await miniMax.credentialsDidChange()
+                for id in ids { refresh(providerID: id) }
+            }
+            return
+        }
         refresh(providerID: providerID)
     }
 

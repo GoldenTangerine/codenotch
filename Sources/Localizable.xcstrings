@@ -1,6 +1,72 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "MiniMax plans and upstream updates with Code Switch R preserved.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增 MiniMax 额度与上游改进，保留 Code Switch R 联动。"
+          }
+        }
+      }
+    },
+    "Read MiniMax plans using a saved key, Cookie or in-app sign-in": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过已保存密钥、Cookie 或应用内登录读取 MiniMax 套餐额度"
+          }
+        }
+      }
+    },
+    "Switch MiniMax regions without reusing old readings or rate limits": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换 MiniMax 区域时不沿用旧额度与限流状态"
+          }
+        }
+      }
+    },
+    "Update Kiro while keeping Code Switch R sessions and Phone Link": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新 Kiro，同时保留 Code Switch R 会话联动与手机连接"
+          }
+        }
+      }
+    },
+    "Show Codex extra limits, Claude daily pace and DeepSeek pricing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示 Codex 附加额度、Claude 每日节奏和 DeepSeek 时段计费"
+          }
+        }
+      }
+    },
+    "Refresh limit alerts promptly and choose when to fold for full-screen apps": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "及时刷新额度提醒，并可选择全屏应用时是否折叠显示栏"
+          }
+        }
+      }
+    },
     "Reliable background activity and complete German elapsed times.": {
       "extractionState": "manual",
       "localizations": {
@@ -17240,7 +17306,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "请求"
+            "value": "请求数"
           }
         },
         "de": {
@@ -17644,99 +17710,267 @@
     },
     "Allow phones on this network": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "允许本网络上的手机连接"
+          }
+        }
+      }
     },
     "Your phone reads usage from this Mac over your Wi-Fi. Nothing leaves your network.": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手机通过 Wi-Fi 读取这台 Mac 的用量，数据不会离开本地网络。"
+          }
+        }
+      }
     },
     "Starting…": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动中…"
+          }
+        }
+      }
     },
     "Ready on %@:%d": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已就绪：%@:%d"
+          }
+        }
+      }
     },
     "This Mac isn't on a local network": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台 Mac 不在本地网络中"
+          }
+        }
+      }
     },
     "Connect a Phone…": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接手机…"
+          }
+        }
+      }
     },
     "Paired phones": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已配对手机"
+          }
+        }
+      }
     },
     "No phones yet.": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂未配对手机。"
+          }
+        }
+      }
     },
     "Active now": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当前活跃"
+          }
+        }
+      }
     },
     "Paired %@": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已配对 %@"
+          }
+        }
+      }
     },
     "Remove “%@”?": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除“%@”？"
+          }
+        }
+      }
     },
     "It will need to scan a new code to connect again.": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要重新扫描新二维码才能再次连接。"
+          }
+        }
+      }
     },
     "%@ is connected": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 已连接"
+          }
+        }
+      }
     },
     "Done": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        }
+      }
     },
     "Connect another phone": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接另一部手机"
+          }
+        }
+      }
     },
     "Connect your phone": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接手机"
+          }
+        }
+      }
     },
     "Scan this code with the Codenotch app on your phone.": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请使用手机上的 Codenotch 应用扫描此二维码。"
+          }
+        }
+      }
     },
     "Expires in %@": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将在 %@ 后过期"
+          }
+        }
+      }
     },
     "Copied ✓": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已复制 ✓"
+          }
+        }
+      }
     },
     "Copy Link": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制链接"
+          }
+        }
+      }
     },
     "1. Open Codenotch on your phone": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1. 在手机上打开 Codenotch"
+          }
+        }
+      }
     },
     "2. Tap Scan QR Code": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2. 点击“扫描二维码”"
+          }
+        }
+      }
     },
     "3. Point your phone at this code": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3. 用手机对准此二维码"
+          }
+        }
+      }
     },
     "Your phone must be on the same Wi-Fi as this Mac.": {
       "extractionState": "manual",
-      "localizations": {}
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "手机必须与这台 Mac 连接同一个 Wi-Fi。"
+          }
+        }
+      }
     },
     "Pricing": {
       "extractionState": "manual",
@@ -18756,16 +18990,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "收起额度"
-          }
-        }
-      }
-    },
-    "Today": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "今日统计"
           }
         }
       }
@@ -20196,17 +20420,6 @@
         }
       }
     },
-    "A system notification the moment a provider's headline limit crosses 80%, and again at 100% — once per crossing, and again only after the window rolls over. Mute one from the bell beside its row in Accounts.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "供应商主要限额达到 80% 和 100% 时分别发送一次系统通知；同一周期不重复提醒。可通过账户列表旁的铃铛单独静音。"
-          }
-        }
-      }
-    },
     "API Key": {
       "extractionState": "manual",
       "localizations": {
@@ -20335,17 +20548,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Code Switch R · %@"
-          }
-        }
-      }
-    },
-    "Codenotch already knows the moment an agent stops working or stops to ask you something. Clicking the notch while it is open brings that session's app to the front — the app, not the tab: only some terminals let anything outside them choose a tab, so the tooltip names the session instead.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Codenotch 会在代理结束工作或等待你回应时立即获知。用量环展开时点击可将会话所属应用切到前台；只有部分终端支持从外部切换标签页，因此详情提示会显示会话名称。"
           }
         }
       }
@@ -20702,17 +20904,6 @@
         }
       }
     },
-    "The sound plays on the ordinary output, not the interface sound-effects channel — so it is still heard with “Play user interface sound effects” switched off in System Settings → Sound.": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "声音通过普通音频输出播放，不使用界面音效通道。因此即使在“系统设置 → 声音”中关闭“播放用户界面音效”，仍可听到提醒。"
-          }
-        }
-      }
-    },
     "Tokens this month · billed per token, no limit": {
       "extractionState": "manual",
       "localizations": {
@@ -20885,28 +21076,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "成功率"
-          }
-        }
-      }
-    },
-    "Requests": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请求数"
-          }
-        }
-      }
-    },
-    "Cost": {
-      "extractionState": "manual",
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "费用"
           }
         }
       }
@@ -22348,6 +22517,336 @@
           "stringUnit": {
             "state": "translated",
             "value": "减少拖动时的重复布局计算，侧边定位避让 Dock"
+          }
+        }
+      }
+    },
+    "Kiro and MiniMax, German, a daily pace ring for Claude, and a switch for folding over full-screen apps.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kiro 与 MiniMax、德语、Claude 每日节奏环，以及全屏应用折叠开关。"
+          }
+        }
+      }
+    },
+    "Kiro and MiniMax": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kiro 与 MiniMax"
+          }
+        }
+      }
+    },
+    "Kiro reads the kiro-cli sign-in already on this Mac. MiniMax signs in from Codenotch, with a choice of international or China region.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kiro 读取本机已有的 kiro-cli 登录；MiniMax 可在 Codenotch 中登录，并选择国际或中国大陆区域。"
+          }
+        }
+      }
+    },
+    "Deutsch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "德语"
+          }
+        }
+      }
+    },
+    "German joins the app's languages, and the limit and reset notifications are now in Simplified Chinese too.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "应用新增德语，额度耗尽和重置通知也支持简体中文。"
+          }
+        }
+      }
+    },
+    "A daily pace ring for Claude": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude 每日用量节奏环"
+          }
+        }
+      }
+    },
+    "Optionally, Claude's main ring shows today's share of the weekly limit, a seventh a day, with the session moving to the thin ring.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选：Claude 主环显示每周额度的今日份额（每天七分之一），会话额度移至细环。"
+          }
+        }
+      }
+    },
+    "Codex's extra limits": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codex 额外额度"
+          }
+        }
+      }
+    },
+    "The hover card lists Spark and code review when your account has them, and Appearance can hide them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账户提供时，悬浮卡会列出 Spark 和代码审查额度，也可在外观设置中隐藏。"
+          }
+        }
+      }
+    },
+    "Fold for full-screen apps": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全屏应用折叠"
+          }
+        }
+      }
+    },
+    "The automatic fold over full-screen apps can now be switched off, for anyone whose maximised windows kept folding the notch.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "现在可以关闭全屏应用自动折叠，避免最大化窗口反复收起刘海。"
+          }
+        }
+      }
+    },
+    "DeepSeek pricing windows": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "DeepSeek 计费时段"
+          }
+        }
+      }
+    },
+    "Peak and off-peak hours are fully configurable, and signing in picks up DeepSeek's login more reliably.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高峰和非高峰时段均可配置，登录时也能更可靠地识别 DeepSeek 会话。"
+          }
+        }
+      }
+    },
+    "Alerts on time": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "及时提醒"
+          }
+        }
+      }
+    },
+    "Usage refreshes the moment a limit window rolls over, so reset and limit alerts arrive when they happen, even without a notch on screen.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度窗口切换后立即刷新，因此即使刘海未显示，也能及时收到重置和耗尽提醒。"
+          }
+        }
+      }
+    },
+    "Smaller fixes": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他修复"
+          }
+        }
+      }
+    },
+    "New providers stay off until you switch them on, the recenter button gives clearer feedback, hovering is ignored while Option-dragging, the Codex completion sound keeps its setting, and the Windows rings and hover card match the Mac's.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新供应商默认关闭；居中按钮反馈更清晰；Option 拖动时暂停悬浮；Codex 完成提示音保留设置；Windows 环和悬浮卡与 Mac 保持一致。"
+          }
+        }
+      }
+    },
+    "Most readings are borrowed from a tool that already holds the account. DeepSeek and MiniMax are the exceptions: clicking Sign in opens a Codenotch window for that account, and signing out here clears only that session and its saved reading.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大多数读数借自已经持有该账号的工具。DeepSeek 和 MiniMax 是例外：点“登录”会打开 Codenotch 自己的窗口，在这里退出只会清掉这次会话和已保存的读数。"
+          }
+        }
+      }
+    },
+    "Region": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "区域"
+          }
+        }
+      }
+    },
+    "International": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "国际"
+          }
+        }
+      }
+    },
+    "China": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中国"
+          }
+        }
+      }
+    },
+    "China mainland": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中国大陆"
+          }
+        }
+      }
+    },
+    "MiniMax Coding Plan key": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MiniMax Coding Plan 密钥"
+          }
+        }
+      }
+    },
+    "Could not save MiniMax credential.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存 MiniMax 凭据。"
+          }
+        }
+      }
+    },
+    "Enter a valid Cookie header or check Keychain access.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请输入有效的 Cookie 标头，或检查钥匙串访问权限。"
+          }
+        }
+      }
+    },
+    "Cookie header (optional)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cookie 标头（可选）"
+          }
+        }
+      }
+    },
+    "Cookie: …": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cookie: …"
+          }
+        }
+      }
+    },
+    "Sign in to MiniMax in Codenotch, or paste a Coding Plan key. A Cookie header is optional. Codenotch never reads a browser's cookies.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可在 Codenotch 中登录 MiniMax，或粘贴 Coding Plan 密钥。Cookie 标头可选。Codenotch 不会读取浏览器 Cookie。"
+          }
+        }
+      }
+    },
+    "Paste a Coding Plan key in Settings, or Sign in to MiniMax.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在设置中粘贴 Coding Plan 密钥，或登录 MiniMax。"
+          }
+        }
+      }
+    },
+    "MiniMax reported no usage windows": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MiniMax 未返回可用额度窗口"
           }
         }
       }

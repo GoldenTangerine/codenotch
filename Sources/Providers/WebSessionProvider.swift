@@ -95,8 +95,14 @@ final class WebSessionProvider: NSObject, UsageProvider {
         let displayName: String
         let glyph: ProviderGlyph
         let origin: URL
+        let requestOrigin: URL?
         let fidelity: Fidelity
         let authProbeScript: String?
+        let authFingerprintScript: String?
+        /// Extra hosts whose website data is cleared on sign-out, besides
+        /// `origin.host`. MiniMax's session is created on the platform origin
+        /// and used on www, so both have to go; DeepSeek has none.
+        let associatedHosts: [String]
         /// Runs in the page as an async function body. Must return a JSON string
         /// `{ "status": Int, "body": String }`.
         let script: String
@@ -107,15 +113,20 @@ final class WebSessionProvider: NSObject, UsageProvider {
         init(id: String, displayName: String, glyph: ProviderGlyph, origin: URL,
              script: String, fidelity: Fidelity = .official,
              authProbeScript: String? = nil,
+             requestOrigin: URL? = nil, authFingerprintScript: String? = nil,
+             associatedHosts: [String] = [],
              detailParse: ((String) throws -> ProviderUsageDetail?)? = nil,
              parse: @escaping (String) throws -> [LimitWindow]) {
             self.id = id
             self.displayName = displayName
             self.glyph = glyph
             self.origin = origin
+            self.requestOrigin = requestOrigin
             self.script = script
             self.fidelity = fidelity
             self.authProbeScript = authProbeScript
+            self.authFingerprintScript = authFingerprintScript
+            self.associatedHosts = associatedHosts
             self.detailParse = detailParse
             self.parse = parse
         }
@@ -133,7 +144,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
     /// usage payload we read, but the persisted session is enough to keep the
     /// settings row in its signed-in state after the sheet is reopened.
     nonisolated func account() -> ProviderAccount? {
-        guard UserDefaults.standard.bool(forKey: "\(id).signedIn") else { return nil }
+        guard UserDefaults.standard.bool(forKey: signedInKey) else { return nil }
         return ProviderAccount(
             label: nil,
             plan: nil,
@@ -142,7 +153,9 @@ final class WebSessionProvider: NSObject, UsageProvider {
         )
     }
 
-    private let site: Site
+    /// `nonisolated(unsafe)` so `account()` can still read the origin the way
+    /// DeepSeek does. Mutation stays on the main actor via `apply(site:)`.
+    nonisolated(unsafe) private var site: Site
     private var webView: WKWebView?
     private var signInWindow: NSWindow?
     private var signInProbeTask: Task<Void, Never>?
@@ -160,13 +173,43 @@ final class WebSessionProvider: NSObject, UsageProvider {
         super.init()
     }
 
+    /// MiniMax's platform origin and www remains URL both follow the chosen
+    /// region. DeepSeek never needs this — its site is a constant. Identity
+    /// (`id` / `displayName` / `glyph`) is fixed at init; a different site
+    /// id is ignored so a region switch cannot become a provider switch.
+    func apply(site: Site) {
+        guard site.id == id else { return }
+        if site.origin != self.site.origin {
+            signInProbeTask?.cancel()
+            signInProbeTask = nil
+            switchGate = nil
+            lastAuthFingerprint = nil
+            if let signInWindow {
+                self.signInWindow = nil
+                signInWindow.close()
+            }
+            webView?.stopLoading()
+            webView = nil
+        }
+        self.site = site
+        isLoaded = false
+    }
+
     /// Set once a sign-in has been opened. Until then the provider makes no
     /// request at all: quietly loading someone's account page in a hidden
     /// WebView every minute, unasked, would be both wasteful and reasonably
     /// indistinguishable from automation.
+    ///
+    /// Keyed by the provider's identity, not `site.id`, so a mistaken
+    /// `apply(site:)` cannot rebind DeepSeek's flag onto MiniMax or vice versa.
+    /// MiniMax's two account regions additionally keep separate sign-in flags.
+    nonisolated private var signedInKey: String {
+        id == "minimax" ? "\(id).\(site.origin.host ?? "").signedIn" : "\(id).signedIn"
+    }
+
     private var hasSignedIn: Bool {
-        get { UserDefaults.standard.bool(forKey: "\(site.id).signedIn") }
-        set { UserDefaults.standard.set(newValue, forKey: "\(site.id).signedIn") }
+        get { UserDefaults.standard.bool(forKey: signedInKey) }
+        set { UserDefaults.standard.set(newValue, forKey: signedInKey) }
     }
 
     // MARK: - The browser
@@ -181,6 +224,28 @@ final class WebSessionProvider: NSObject, UsageProvider {
         return scheme == expectedScheme
             && host == expectedHost
             && effectivePort(for: url) == effectivePort(for: origin)
+    }
+
+    /// MiniMax's missing-cookie code is 1004, often under HTTP 200 (the
+    /// page script maps that to 401). A raw 1004 must still be needsAuth,
+    /// not `badResponse(1004)`.
+    nonisolated static func isAuthenticationFailureStatus(_ status: Int) -> Bool {
+        status == 401 || status == 403 || status == 1004
+    }
+
+    /// Hosts whose website data sign-out clears. Origin plus `associatedHosts`,
+    /// never MiniMax's www by default — DeepSeek and Perplexity would otherwise
+    /// wipe a MiniMax session (or accept www as same-origin if this list were
+    /// fed into `matchesOrigin`).
+    nonisolated static func websiteDataHosts(for site: Site) -> [String] {
+        var seen = Set<String>()
+        var hosts: [String] = []
+        for host in [site.origin.host].compactMap({ $0 }) + site.associatedHosts {
+            let key = host.lowercased()
+            guard seen.insert(key).inserted else { continue }
+            hosts.append(key)
+        }
+        return hosts
     }
 
     private nonisolated static func effectivePort(for url: URL) -> Int? {
@@ -229,11 +294,12 @@ final class WebSessionProvider: NSObject, UsageProvider {
 
     private func ensureLoaded() async throws {
         let webView = makeWebViewIfNeeded()
-        if isLoaded, Self.matchesOrigin(webView.url, expected: site.origin) { return }
-        webView.load(URLRequest(url: site.origin))
+        let origin = site.requestOrigin ?? site.origin
+        if isLoaded, Self.matchesOrigin(webView.url, expected: origin) { return }
+        webView.load(URLRequest(url: origin))
         for _ in 0..<40 {
             try await Task.sleep(nanoseconds: 250_000_000)
-            if Self.matchesOrigin(webView.url, expected: site.origin), !webView.isLoading {
+            if Self.matchesOrigin(webView.url, expected: origin), !webView.isLoading {
                 isLoaded = true
                 return
             }
@@ -269,11 +335,15 @@ final class WebSessionProvider: NSObject, UsageProvider {
               let status = envelope["status"] as? Int,
               let body = envelope["body"] as? String
         else {
-            Log.usage.error("\(self.site.id, privacy: .public) response unreadable: \(String(describing: result), privacy: .public)")
+            if site.id == "minimax" {
+                Log.usage.error("minimax response unreadable")
+            } else {
+                Log.usage.error("\(self.site.id, privacy: .public) response unreadable: \(String(describing: result), privacy: .public)")
+            }
             throw UsageProviderError.badResponse(status: 0)
         }
 
-        if status == 401 || status == 403 {
+        if Self.isAuthenticationFailureStatus(status) {
             // Not signed in, or a challenge wants a human. Same remedy either way.
             hasSignedIn = false
             throw UsageProviderError.needsAuth
@@ -283,7 +353,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
         }
 
         // Recorded verbatim so a parser can be written against the real thing.
-        if site.id == "deepseek" {
+        if site.id == "deepseek" || site.id == "minimax" {
             Log.usage.notice("\(self.site.id, privacy: .public) usage response received")
         } else {
             Log.usage.notice("\(self.site.id, privacy: .public) usage -> \(body.prefix(1200), privacy: .public)")
@@ -292,14 +362,26 @@ final class WebSessionProvider: NSObject, UsageProvider {
             Log.usage.notice("\(self.site.id, privacy: .public) probes -> \(probes.prefix(2600), privacy: .public)")
         }
 
+        let windows: [LimitWindow]
+        let usageDetail: ProviderUsageDetail?
+        do {
+            windows = try site.parse(body)
+            usageDetail = try site.detailParse?(body)
+        } catch UsageProviderError.needsAuth {
+            // HTTP 200 with a 1004 body that the page script missed: still a
+            // dead session, not a signed-in parse error.
+            hasSignedIn = false
+            throw UsageProviderError.needsAuth
+        }
+
         return ProviderSnapshot(
             id: id,
             displayName: displayName,
             glyph: glyph,
             fidelity: site.fidelity,
             status: .ok,
-            windows: try site.parse(body),
-            usageDetail: try site.detailParse?(body)
+            windows: windows,
+            usageDetail: usageDetail
         )
     }
 
@@ -337,6 +419,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
     /// Scoped to the site's own host rather than emptying the store — the
     /// default store is shared, so clearing all of it would sign the user out of
     /// every other web provider at the same time.
+    /// Associated hosts are also cleared when the site uses a separate API host.
     func signOut() async {
         signInProbeTask?.cancel()
         signInProbeTask = nil
@@ -345,11 +428,15 @@ final class WebSessionProvider: NSObject, UsageProvider {
         hasSignedIn = false
         isLoaded = false
 
-        guard let host = site.origin.host else { return }
+        let hosts = Self.websiteDataHosts(for: site)
+        guard !hosts.isEmpty else { return }
         let store = WKWebsiteDataStore.default()
         let types = WKWebsiteDataStore.allWebsiteDataTypes()
-        let records = await store.dataRecords(ofTypes: types).filter {
-            $0.displayName == host || host.hasSuffix(".\($0.displayName)")
+        let records = await store.dataRecords(ofTypes: types).filter { record in
+            let name = record.displayName.lowercased()
+            return hosts.contains { host in
+                name == host || host.hasSuffix(".\(name)")
+            }
         }
         await store.removeData(ofTypes: types, for: records)
 
@@ -471,16 +558,34 @@ extension WebSessionProvider: NSWindowDelegate {
         signInProbeTask = Task { [weak self, weak pendingWebView] in
             guard let self, let pendingWebView else { return }
             guard !pendingWebView.isLoading,
-                  Self.matchesOrigin(pendingWebView.url, expected: expectedOrigin),
-                  let result = try? await pendingWebView.callAsyncJavaScript(
+                  Self.matchesOrigin(pendingWebView.url, expected: expectedOrigin)
+            else { return }
+            let fingerprint: String?
+            if let script = self.site.authFingerprintScript {
+                fingerprint = (try? await pendingWebView.callAsyncJavaScript(
+                    script, arguments: [:], in: nil, contentWorld: .page
+                )) as? String
+            } else {
+                fingerprint = nil
+            }
+            guard !Task.isCancelled, self.site.origin == expectedOrigin else { return }
+            if self.site.requestOrigin != nil {
+                do { try await self.ensureLoaded() } catch { return }
+            }
+            guard !Task.isCancelled,
+                  self.site.origin == expectedOrigin,
+                  let probeWebView = self.webView,
+                  let result = try? await probeWebView.callAsyncJavaScript(
                       probe, arguments: [:], in: nil, contentWorld: .page
                   ),
+                  !Task.isCancelled,
+                  self.site.origin == expectedOrigin,
                   let state = Self.authenticationState(from: result),
                   pendingGate.acceptsAuthenticatedStateOnManualClose(
                       authenticated: state.authenticated,
-                      fingerprint: state.fingerprint)
+                      fingerprint: fingerprint ?? state.fingerprint)
             else { return }
-            self.lastAuthFingerprint = state.fingerprint
+            self.lastAuthFingerprint = fingerprint ?? state.fingerprint
             self.authenticationDidComplete()
         }
     }

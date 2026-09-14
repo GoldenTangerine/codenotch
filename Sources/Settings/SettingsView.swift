@@ -37,6 +37,11 @@ extension View {
 private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
     case accounts, codeSwitch, phone, deepseek, ollama, lmstudio, appearance, notifications, general
 
+    /// The sections the sidebar lists; Phone only once pairing is offered.
+    static var visible: [SettingsSection] {
+        allCases.filter { $0 != .phone || PhoneLink.isAvailable }
+    }
+
     var id: String { rawValue }
 
     var title: String {
@@ -318,7 +323,7 @@ struct SettingsView: View {
     /// traffic lights land inside it, which is why the rows start a clear
     /// `trafficLightClearance` below the top rather than at it.
     private var sidebar: some View {
-        List(SettingsSection.allCases, selection: $selection) { section in
+        List(SettingsSection.visible, selection: $selection) { section in
             Label {
                 Text(section.title)
             } icon: {
@@ -521,13 +526,17 @@ struct SettingsView: View {
                                    didConnect: { connect(account.id) })
                     }
                 }
-                ForEach(accounts.filter { $0.id == "gemini" || $0.id == "ollama" }) { account in
+                ForEach(accounts.filter {
+                    $0.id == "gemini" || $0.id == "ollama"
+                        || catalog.automaticEntryIDs(for: "minimax").contains($0.id)
+                }) { account in
                     Section(account.name) {
                         AccountRow(provider: account, preferences: preferences,
                                    signOut: signOut, signIn: signIn, switchAccount: switchAccount, retry: retry,
                                    refresh: { usageStore.reevaluate(providerID: $0) }, isOrderable: false,
                                    drag: drag, cursorRefresh: cursorRefresh, onDrop: {},
-                                   takePlaceOf: { _ in false }, didConnect: { connect(account.id) })
+                                   takePlaceOf: { _ in false }, didConnect: { connect(account.id) },
+                                   isMiniMax: catalog.automaticEntryIDs(for: "minimax").contains(account.id))
                     }
                 }
             } else {
@@ -561,7 +570,7 @@ struct SettingsView: View {
                 }
                 // Beside the switches it explains, not stranded at the end of
                 // the page.
-                Text(L10n.t("Most readings are borrowed from a tool that already holds the account. DeepSeek is the exception: clicking Sign in opens its own Codenotch WebView, and signing out here clears only that session and its saved reading."))
+                Text(L10n.t("Most readings are borrowed from a tool that already holds the account. DeepSeek and MiniMax are the exceptions: clicking Sign in opens a Codenotch window for that account, and signing out here clears only that session and its saved reading."))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -1556,6 +1565,7 @@ private struct AccountRow: View {
     /// Called after this row is switched on, so the list can decide where it
     /// now belongs. The row itself cannot: it can see only itself.
     let didConnect: () -> Void
+    var isMiniMax = false
 
     @Environment(\.codenotchReduceTransparency) private var reduceTransparency
 
@@ -1834,6 +1844,13 @@ private struct AccountRow: View {
             if provider.id == "ollama" {
                 ollamaKeyEntry
             }
+
+            // MiniMax is signed into in Codenotch, or by a Coding Plan key
+            // pasted here. The region is which console that key belongs to.
+            // Stored in the keychain on Save, the same way Ollama's is.
+            if isMiniMax {
+                minimaxEntry
+            }
         }
     }
 
@@ -1873,6 +1890,109 @@ private struct AccountRow: View {
             }
         }
         .padding(.top, 2)
+    }
+
+    /// Region and Coding Plan key for MiniMax.
+    ///
+    /// Laid out like the Ollama key above it, and for the same reason: a
+    /// field's own title becomes a leading label in a `Form` row. Captions
+    /// sit on their own line. Changing the region only stores the choice —
+    /// opening Sign in here would throw a sheet over a preference picker.
+    @State private var minimaxKey = ""
+    @State private var minimaxKeySaved = false
+    @State private var minimaxKeyError = false
+    @State private var minimaxCookie = ""
+    @State private var minimaxCookieSaved = false
+    @State private var minimaxCookieError = false
+
+    private var minimaxEntry: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(L10n.t("Region"))
+                    .foregroundStyle(.secondary)
+                Picker(selection: $preferences.minimaxRegion) {
+                    Text(L10n.t("International")).tag(MiniMaxRegion.international)
+                    Text(L10n.t("China mainland")).tag(MiniMaxRegion.china)
+                } label: {
+                    EmptyView()
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 160)
+            }
+
+            minimaxKeyEntry
+            minimaxCookieEntry
+
+            Text(L10n.t("Sign in to MiniMax in Codenotch, or paste a Coding Plan key. A Cookie header is optional. Codenotch never reads a browser's cookies."))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.top, 2)
+    }
+
+    private var minimaxKeyEntry: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.t("MiniMax Coding Plan key"))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                SecureField(L10n.t("Paste your key"), text: $minimaxKey)
+                    .textContentType(.password)
+                    .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
+                    .frame(maxWidth: 260)
+                Button(L10n.t("Save")) {
+                    guard !minimaxKey.isEmpty else { return }
+                    minimaxKeySaved = MiniMaxCredentials.storeAPIKey(minimaxKey)
+                    minimaxKeyError = !minimaxKeySaved
+                    if minimaxKeySaved {
+                        minimaxKey = ""
+                        retry(provider.id)
+                    }
+                }
+                .disabled(minimaxKey.isEmpty)
+                if minimaxKeySaved {
+                    Text(L10n.t("Saved"))
+                        .foregroundStyle(.green)
+                }
+            }
+            if minimaxKeyError {
+                Text(L10n.t("Could not save MiniMax credential."))
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var minimaxCookieEntry: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(L10n.t("Cookie header (optional)"))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                SecureField(L10n.t("Cookie: …"), text: $minimaxCookie)
+                    .textContentType(.password)
+                    .textFieldStyle(.roundedBorder)
+                    .labelsHidden()
+                    .frame(maxWidth: 260)
+                Button(L10n.t("Save")) {
+                    guard !minimaxCookie.isEmpty else { return }
+                    minimaxCookieSaved = MiniMaxCredentials.storeCookieHeader(minimaxCookie)
+                    minimaxCookieError = !minimaxCookieSaved
+                    if minimaxCookieSaved {
+                        minimaxCookie = ""
+                        retry(provider.id)
+                    }
+                }
+                .disabled(minimaxCookie.isEmpty)
+                if minimaxCookieSaved {
+                    Text(L10n.t("Saved"))
+                        .foregroundStyle(.green)
+                }
+            }
+            if minimaxCookieError {
+                Text(L10n.t("Enter a valid Cookie header or check Keychain access."))
+                    .foregroundStyle(.red)
+            }
+        }
     }
 
     @ViewBuilder

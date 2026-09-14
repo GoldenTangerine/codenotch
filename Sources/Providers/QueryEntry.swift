@@ -185,10 +185,13 @@ final class QueryCatalog: ObservableObject {
             // Import newly supported sources once; a later deletion must stay deleted.
             let key = "upstreamAutomaticProviders.v1"
             let known = Set(defaults.stringArray(forKey: key) ?? [])
-            let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio", "kimi", "kiro"]
+            let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio", "kimi", "kiro", "minimax"]
             for provider in providers where !known.contains(provider.id)
                 && (introduced.contains(provider.id) || CodexProfile.slug(fromProviderID: provider.id) != nil) {
-                guard !entries.contains(where: { $0.usesLocalAccount && $0.nativeID == provider.id }) else { continue }
+                // A manually configured entry may already use this native id.
+                // Keep that user-owned query instead of adding a second row for
+                // the same account when the built-in provider is introduced.
+                guard !entries.contains(where: { $0.nativeID == provider.id }) else { continue }
                 var entry = QueryEntry()
                 entry.id = provider.id
                 entry.name = provider.displayName
@@ -208,6 +211,10 @@ final class QueryCatalog: ObservableObject {
             ConfiguredUsageProvider(entry: entry,
                 automatic: automaticProviders.first { $0.id == entry.nativeID }, secrets: secrets)
         }
+    }
+
+    func automaticEntryIDs(for nativeID: String) -> [String] {
+        entries.filter { $0.usesLocalAccount && $0.nativeID == nativeID }.map(\.id)
     }
 
     func save(_ entry: QueryEntry, secrets newSecrets: QuerySecrets?) throws {

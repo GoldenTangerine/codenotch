@@ -144,6 +144,38 @@ final class QueryConfigurationTests: XCTestCase {
         XCTAssertFalse(restored.entries.contains { $0.id == "kiro" })
     }
 
+    func testExistingManualMiniMaxEntryIsNotDuplicatedWhenNativeProviderArrives() throws {
+        let defaults = defaults()
+        let secrets = MemoryQuerySecrets()
+        let original = QueryCatalog(providers: [QueryProbe(id: "claude")], disconnected: [],
+            defaults: defaults, secrets: secrets)
+        var manual = QueryEntry()
+        manual.id = "manual-minimax"
+        manual.name = "MiniMax (custom)"
+        manual.nativeID = "minimax"
+        manual.mode = .manual
+        manual.template = .custom
+        manual.code = "return []"
+        try original.save(manual, secrets: nil)
+
+        let migrated = QueryCatalog(
+            providers: [QueryProbe(id: "claude"), QueryProbe(id: "minimax")],
+            disconnected: [], defaults: defaults, secrets: secrets
+        )
+
+        XCTAssertEqual(migrated.entries.map(\.id), ["claude", "manual-minimax"])
+        XCTAssertEqual(migrated.entries.last?.nativeID, "minimax")
+        XCTAssertEqual(migrated.entries.last?.mode, .manual)
+        XCTAssertTrue(migrated.automaticEntryIDs(for: "minimax").isEmpty)
+
+        var automatic = QueryEntry()
+        automatic.id = "other-minimax"
+        automatic.nativeID = "minimax"
+        automatic.mode = .automatic
+        try migrated.save(automatic, secrets: nil)
+        XCTAssertEqual(migrated.automaticEntryIDs(for: "minimax"), ["other-minimax"])
+    }
+
     func testConfiguredProviderKeepsWeeklyWindowAndAccountPlan() {
         var entry = QueryEntry()
         entry.mode = .automatic

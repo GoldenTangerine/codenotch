@@ -92,6 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// refresher needs to ask one of them how long its token has left, and the
     /// protocol has no business carrying that.
     private var claudeProviders: [ClaudeOAuthProvider] = []
+    /// MiniMax Platform sign-in sheet. Not a UsageProvider — that is MiniMaxProvider.
+    private var miniMaxWeb: WebSessionProvider?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Set here, not in the Info.plist: this call is applied at launch and
@@ -128,10 +130,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // login is explicit, stays in Codenotch's own WKWebView store, and
             // the page-local requests are refreshed only after that login.
             let deepSeek = WebSessionProvider(site: Sites.deepSeek)
+            // MiniMax's ring is MiniMaxProvider. The sheet is the same kind of
+            // WebView DeepSeek uses, but it must not join `webProviders`:
+            // that list is only for standalone browser-backed providers, while
+            // MiniMaxProvider owns the one MiniMax usage poll. Region is applied
+            // here and again when Settings changes it, because the fetch URLs
+            // live on the site.
+            let miniMaxWeb = WebSessionProvider(site: Sites.minimax(region: preferences.minimaxRegion))
+            self.miniMaxWeb = miniMaxWeb
+            let miniMaxProvider = MiniMaxProvider(web: miniMaxWeb)
             let webProviders: [WebSessionProvider] = [deepSeek]
-            fleet.signInItems = webProviders.map { provider in
-                (title: L10n.t("Sign in to \(provider.displayName)…"),
-                 action: { [weak provider] in provider?.presentSignIn() })
+            fleet.signInItems = [deepSeek, miniMaxWeb].map { provider in
+                let name = provider.displayName
+                return (title: L10n.t("Sign in to \(name)…"),
+                        action: { [weak provider] in provider?.presentSignIn() })
             }
 
             // Cursor reads the editor's session, or cursor-agent's if the
@@ -150,7 +162,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     + [CursorLocalProvider()]
                     + codexProfiles.map { CodexLocalProvider(profile: $0) }
                     + [AntigravityProvider(),
-                       GLMProvider(), GrokLocalProvider(), DevinLocalProvider(), OpenCodeProvider(),
+                       GLMProvider(), miniMaxProvider, GrokLocalProvider(), DevinLocalProvider(), OpenCodeProvider(),
                        CommandCodeProvider(), GitHubCopilotProvider(), KimiProvider(), KiroProvider(),
                        OllamaLocalProvider(endpoint: URL(string: preferences.ollamaEndpoint)!),
                        LMStudioLocalProvider(endpoint: URL(string: preferences.lmstudioEndpoint)!),
@@ -189,8 +201,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) }))
             activitySources = Dictionary(uniqueKeysWithValues:
                 catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) })
-            deepSeek.onAuthenticated = { [weak store] in
-                store?.providerAuthenticationChanged(providerID: "deepseek")
+            deepSeek.onAuthenticated = { [weak catalog, weak store] in
+                for id in catalog?.automaticEntryIDs(for: "deepseek") ?? [] {
+                    store?.providerAuthenticationChanged(providerID: id)
+                }
+            }
+            miniMaxWeb.onAuthenticated = { [weak catalog, weak store] in
+                for id in catalog?.automaticEntryIDs(for: "minimax") ?? [] {
+                    store?.providerAuthenticationChanged(providerID: id)
+                }
             }
 
             // The stored edge goes in before the panel is ever put up. The
@@ -449,6 +468,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.$deepSeekPricingSchedule
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(deepSeekPricingSchedule: $0) }
+                .store(in: &cancellables)
+
+            preferences.$minimaxRegion
+                .dropFirst()
+                .removeDuplicates()
+                .receive(on: RunLoop.main)
+                .sink { [weak miniMaxWeb, weak miniMaxProvider, weak catalog, weak store, weak preferences] region in
+                    miniMaxWeb?.apply(site: Sites.minimax(region: region))
+                    store?.providerAccountChanged()
+                    let ids = catalog?.automaticEntryIDs(for: "minimax") ?? []
+                    for id in ids { store?.invalidateUsageSource(providerID: id) }
+                    Task { [weak miniMaxProvider, weak store, weak preferences] in
+                        await miniMaxProvider?.regionDidChange()
+                        guard preferences?.minimaxRegion == region else { return }
+                        for id in ids { store?.refresh(providerID: id) }
+                    }
+                }
                 .store(in: &cancellables)
 
             preferences.$notchEdge
@@ -797,7 +833,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         preferences.$phoneLinkEnabled
             .receive(on: RunLoop.main)
             .sink { [weak self] enabled in
-                guard let self = self, let srv = self.phoneLinkServer else { return }
+                guard PhoneLink.isAvailable, let self = self, let srv = self.phoneLinkServer else { return }
                 Task { @MainActor in
                     if enabled {
                         self.phoneLinkServerStatus?.state = .starting
@@ -1033,7 +1069,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor func openSettings() { settings?.show() }
     @MainActor func openConnectPhone() {
-        guard let pairing = phoneLinkPairing, let registry = phoneLinkRegistry, let status = phoneLinkServerStatus else { return }
+        guard PhoneLink.isAvailable, let pairing = phoneLinkPairing, let registry = phoneLinkRegistry, let status = phoneLinkServerStatus else { return }
         if preferences?.phoneLinkEnabled == false { preferences?.phoneLinkEnabled = true }
         PhoneLinkWindowController.shared.show(pairing: pairing, registry: registry, port: preferences?.phoneLinkPort ?? 8788, serverStatus: status)
     }

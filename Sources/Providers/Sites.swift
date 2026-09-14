@@ -28,6 +28,7 @@ enum Sites {
         try { const p = JSON.parse(text); delete p.sources; trimmed = JSON.stringify(p); } catch (_) {}
         return JSON.stringify({ status: response.status, body: trimmed });
         """,
+        associatedHosts: [],
         parse: PerplexityUsage.windows(fromJSON:)
     )
 
@@ -118,6 +119,7 @@ enum Sites {
             return JSON.stringify({ authenticated: true, fingerprint });
         } catch (_) { return JSON.stringify({ authenticated: false }); }
         """#,
+        associatedHosts: [],
         detailParse: DeepSeekUsage.detail(fromJSON:),
         parse: { json in
             let payload = try DeepSeekUsage.payload(fromJSON: json)
@@ -138,5 +140,81 @@ enum Sites {
             return windows
         }
     )
+
+    /// MiniMax is signed into from Codenotch's own WKWebView, the same way
+    /// DeepSeek is. Login lives on the regional platform origin; coding-plan
+    /// remains is a www host, so the fetch is absolute and sign-out has to
+    /// clear that host as well as the platform one.
+    static func minimax(region: MiniMaxRegion) -> WebSessionProvider.Site {
+        let usesSameOrigin = region == .international
+        let remains = usesSameOrigin ? region.remainsURL.path : region.remainsURL.absoluteString
+        // China uses the absolute www URL from its platform origin. International
+        // loads www before polling, because its credentialed cross-origin response
+        // uses a wildcard CORS origin; the relative path is same-origin there.
+        // 1004 is MiniMax's missing-cookie code and often rides
+        // under HTTP 200, so the envelope has to become 401 or the session
+        // stays signed in.
+        let readRemains = """
+        const response = await fetch('\(remains)', {
+            credentials: '\(usesSameOrigin ? "same-origin" : "include")',
+            headers: { 'Accept': 'application/json' }
+        });
+        let status = response.status;
+        const body = await response.text();
+        try {
+            const parsed = JSON.parse(body);
+            const codes = [
+                parsed && parsed.status_code,
+                parsed && parsed.base_resp && parsed.base_resp.status_code,
+                parsed && parsed.data && parsed.data.base_resp && parsed.data.base_resp.status_code
+            ].map(Number);
+            if (status === 429 || codes.includes(429) || codes.includes(2045)) status = 429;
+            else if (status === 1004 || codes.includes(1004)
+                || codes.includes(401) || codes.includes(403)) status = 401;
+        } catch (_) {}
+        """
+        return WebSessionProvider.Site(
+            id: "minimax",
+            displayName: "MiniMax",
+            glyph: .minimax,
+            origin: region.platformOrigin,
+            script: """
+            \(readRemains)
+            return JSON.stringify({ status: status, body: body });
+            """,
+            fidelity: .derived,
+            authProbeScript: """
+            try {
+                \(readRemains)
+                if (status < 200 || status >= 300) {
+                    return JSON.stringify({ authenticated: false });
+                }
+                let fingerprint = null;
+                try {
+                    const session = localStorage.getItem('access_token');
+                    if (session) {
+                        const bytes = new TextEncoder().encode(session);
+                        const digest = await crypto.subtle.digest('SHA-256', bytes);
+                        fingerprint = Array.from(new Uint8Array(digest))
+                            .map(byte => byte.toString(16).padStart(2, '0')).join('');
+                    }
+                } catch (_) {}
+                return JSON.stringify({ authenticated: true, fingerprint });
+            } catch (_) { return JSON.stringify({ authenticated: false }); }
+            """,
+            requestOrigin: usesSameOrigin ? region.websiteOrigin : nil,
+            authFingerprintScript: usesSameOrigin ? """
+            try {
+                const session = localStorage.getItem('access_token');
+                if (!session) return null;
+                const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(session));
+                return Array.from(new Uint8Array(digest))
+                    .map(byte => byte.toString(16).padStart(2, '0')).join('');
+            } catch (_) { return null; }
+            """ : nil,
+            associatedHosts: [region.remainsURL.host].compactMap { $0 },
+            parse: { try MiniMaxUsage.windows(fromJSON: $0) }
+        )
+    }
 
 }

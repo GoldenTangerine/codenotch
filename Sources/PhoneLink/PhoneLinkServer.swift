@@ -13,6 +13,15 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 
+/// Whether phone pairing is offered at all.
+///
+/// This fork ships the local-network protocol and keeps its pairing UI active.
+/// The upstream app currently sets this to `false` until its companion phone
+/// app ships; retaining `true` preserves the existing Codenotch capability.
+enum PhoneLink {
+    static let isAvailable = true
+}
+
 enum PhoneLinkServerState: Equatable {
     case off
     case starting

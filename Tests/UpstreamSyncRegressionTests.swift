@@ -98,6 +98,108 @@ import SQLite3
         #expect(DailyPace.apply(to: custom, now: Date()).headlineID != DailyPace.windowID)
     }
 
+    @Test func webAccountEventsOnlyRefreshAutomaticCatalogEntries() async throws {
+        let suite = "MiniMaxCatalogSync.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let secrets = SyncSecrets()
+        let original = QueryCatalog(providers: [], disconnected: [], defaults: defaults, secrets: secrets)
+        var manual = QueryEntry()
+        manual.id = "manual-minimax"
+        manual.nativeID = "minimax"
+        manual.template = .custom
+        manual.code = "return []"
+        try original.save(manual, secrets: nil)
+
+        let native = SyncRegionalMiniMax()
+        let catalog = QueryCatalog(providers: [native], disconnected: [], defaults: defaults, secrets: secrets)
+        #expect(catalog.entries.map(\.id) == ["manual-minimax"])
+        #expect(catalog.automaticEntryIDs(for: "minimax").isEmpty)
+        var automatic = QueryEntry()
+        automatic.id = "linked-minimax"
+        automatic.nativeID = "minimax"
+        automatic.mode = .automatic
+        try catalog.save(automatic, secrets: nil)
+
+        let ids = catalog.automaticEntryIDs(for: "minimax")
+        #expect(ids == ["linked-minimax"])
+        var manualDeepSeek = QueryEntry()
+        manualDeepSeek.id = "manual-deepseek"
+        manualDeepSeek.nativeID = "deepseek"
+        manualDeepSeek.template = .custom
+        manualDeepSeek.code = "return []"
+        try catalog.save(manualDeepSeek, secrets: nil)
+        #expect(catalog.automaticEntryIDs(for: "deepseek").isEmpty)
+        var automaticDeepSeek = QueryEntry()
+        automaticDeepSeek.id = "linked-deepseek"
+        automaticDeepSeek.nativeID = "deepseek"
+        automaticDeepSeek.mode = .automatic
+        try catalog.save(automaticDeepSeek, secrets: nil)
+        #expect(catalog.automaticEntryIDs(for: "deepseek") == [automaticDeepSeek.id])
+        let store = UsageStore(providers: catalog.providers(), archive: UsageArchive(defaults: defaults),
+                               disconnected: ["manual-minimax", "manual-deepseek", "linked-deepseek"])
+        defer { store.stop() }
+        for id in ids { store.providerAuthenticationChanged(providerID: id) }
+        await store.refresh(providerID: automatic.id)?.value
+        #expect(await native.calls == 1)
+        #expect(store.snapshots.map(\.id) == [automatic.id])
+        #expect(store.snapshots.first?.hasReading == true)
+    }
+
+    @Test func miniMaxRegionChangeInvalidatesArchivedAndInFlightReadings() async throws {
+        let suite = "MiniMaxRegionSync.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let archive = UsageArchive(defaults: defaults)
+        let native = SyncRegionalMiniMax()
+        let store = UsageStore(providers: [native], archive: archive)
+        defer { store.stop() }
+        await store.refresh(providerID: native.id)?.value
+        #expect(store.snapshots.first?.windows.first?.id == "international")
+
+        await native.slowNextFetch()
+        let old = store.refresh(providerID: native.id)
+        for _ in 0..<100 {
+            if await native.calls == 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(await native.calls == 2)
+        store.invalidateUsageSource(providerID: native.id)
+        #expect(store.snapshots.first?.hasReading == false)
+        #expect(archive.load()[native.id] == nil)
+
+        await native.changeRegion()
+        await store.refresh(providerID: native.id)?.value
+        await old?.value
+        #expect(store.snapshots.first?.windows.first?.id == "china")
+        store.stop()
+        #expect(archive.load()[native.id]?.snapshot.windows.first?.id == "china")
+    }
+
+    @Test func miniMaxRegionChangeClearsNativeRateLimit() async {
+        let suite = "MiniMaxRateLimitSync.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let archive = UsageArchive(defaults: defaults)
+        archive.saveBackoffUntil(Date().addingTimeInterval(300), providerID: "minimax")
+        let native = MiniMaxProvider(region: .china, archive: archive,
+            loadAPIKey: { nil }, loadCookieHeader: { nil })
+        do {
+            _ = try await native.fetchSnapshot()
+            Issue.record("the saved rate limit should block the first attempt")
+        } catch UsageProviderError.rateLimited {} catch {
+            Issue.record("unexpected error: \(error)")
+        }
+        await native.regionDidChange()
+        #expect(archive.loadBackoffUntil(providerID: "minimax") == nil)
+        do {
+            _ = try await native.fetchSnapshot()
+            Issue.record("a missing credential should still require sign-in")
+        } catch UsageProviderError.needsAuth {} catch {
+            Issue.record("old region backoff survived the switch: \(error)")
+        }
+    }
+
     @Test func rolloutCacheReusesNilAndInvalidatesAfterFileChanges() throws {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: url) }
@@ -171,6 +273,30 @@ private struct SyncRuntime: UsageProvider {
             status: .ok, windows: [], kind: kind,
             localRuntime: LocalRuntimeReading(models: [.init(name: "qwen3:8b", memoryBytes: nil,
                 contextLength: nil, quantizationLevel: nil)]))
+    }
+}
+
+private actor SyncRegionalMiniMax: UsageProvider {
+    nonisolated let id = "minimax"
+    nonisolated let displayName = "MiniMax"
+    nonisolated let glyph = ProviderGlyph.minimax
+    private(set) var calls = 0
+    private var region = "international"
+    private var slow = false
+
+    func slowNextFetch() { slow = true }
+    func changeRegion() { region = "china" }
+
+    func fetchSnapshot() async throws -> ProviderSnapshot {
+        calls += 1
+        let source = region
+        if slow {
+            slow = false
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph,
+            fidelity: .official, status: .ok,
+            windows: [LimitWindow(id: source, label: source, usedFraction: 0.25)])
     }
 }
 
