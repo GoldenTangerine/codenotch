@@ -26,6 +26,7 @@ struct UsageAlertEvent: Equatable {
     let previousFraction: Double
     let currentFraction: Double
     let resetsAt: Date?
+    let windowID: String?
 
     init(
         kind: UsageAlertKind = .reset,
@@ -35,7 +36,8 @@ struct UsageAlertEvent: Equatable {
         glyph: ProviderGlyph,
         previousFraction: Double,
         currentFraction: Double,
-        resetsAt: Date?
+        resetsAt: Date?,
+        windowID: String? = nil
     ) {
         self.kind = kind
         self.providerID = providerID
@@ -45,6 +47,7 @@ struct UsageAlertEvent: Equatable {
         self.previousFraction = previousFraction
         self.currentFraction = currentFraction
         self.resetsAt = resetsAt
+        self.windowID = windowID
     }
 }
 

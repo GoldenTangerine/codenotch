@@ -27,6 +27,10 @@ final class Preferences: ObservableObject {
     @Published var codeSwitchDisplayMode: CodeSwitchDisplayMode {
         didSet { defaults.set(codeSwitchDisplayMode.rawValue, forKey: "codeSwitchDisplayMode") }
     }
+    static let codeSwitchQuotaRatiosKey = "codeSwitchQuotaRatiosEnabled"
+    @Published var codeSwitchQuotaRatiosEnabled: Bool {
+        didSet { defaults.set(codeSwitchQuotaRatiosEnabled, forKey: Self.codeSwitchQuotaRatiosKey) }
+    }
     @Published var hiddenCodeSwitchProviders: Set<String> {
         didSet { defaults.set(hiddenCodeSwitchProviders.sorted(), forKey: "hiddenCodeSwitchProviders") }
     }
@@ -786,6 +790,7 @@ final class Preferences: ObservableObject {
         // Off by default: it swaps what Claude's ring means, and that is a
         // choice for whoever budgets their week that way.
         self.claudeDailyPaceRing = defaults.bool(forKey: Keys.claudeDailyPaceRing)
+        self.codeSwitchQuotaRatiosEnabled = defaults.bool(forKey: Self.codeSwitchQuotaRatiosKey)
         self.showCodexExtraLimits = Self.storedShowCodexExtraLimits(defaults: defaults)
         self.deepSeekPricingEnabled = defaults.object(forKey: Keys.deepSeekPricingEnabled) as? Bool ?? true
         if let data = defaults.data(forKey: Keys.deepSeekPricingSchedule),

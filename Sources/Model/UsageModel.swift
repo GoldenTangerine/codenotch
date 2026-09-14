@@ -97,15 +97,21 @@ enum ProviderStatus: Equatable {
 /// a percent and still add up: 0.3% used is 99.7% left. A tenth of nothing
 /// says so rather than pretending to be zero.
 enum Percent {
+    static func roundedValue(for fraction: Double) -> Int? {
+        guard fraction >= 0 else { return nil }
+        return Int(exactly: (fraction * 100).rounded())
+    }
+
     /// The two halves of a used-fraction, as display text.
     static func halves(for fraction: Double) -> (used: String, left: String) {
+        guard let rounded = roundedValue(for: fraction) else { return ("—", "—") }
         let value = fraction * 100
         let fractional = (value > 0 && value < 1) || (value > 99 && value < 100)
         guard fractional else {
             // The left half derives from the *rounded* used half, not from the
             // raw value — 9.5% used is "10% Used · 90% left", because that is
             // how the dashboard the user is comparing against does the maths.
-            let used = Int(value.rounded())
+            let used = rounded
             return ("\(used)", "\(max(0, 100 - used))")
         }
         let left = max(0, 100 - value)
@@ -116,8 +122,9 @@ enum Percent {
 
     /// One percentage, as display text — the ring's label.
     static func text(for fraction: Double) -> String {
+        guard let rounded = roundedValue(for: fraction) else { return "—" }
         let value = fraction * 100
-        guard value > 0, value < 1 else { return "\(Int(value.rounded()))" }
+        guard value > 0, value < 1 else { return "\(rounded)" }
         return small(value)
     }
 
@@ -346,6 +353,16 @@ struct ProviderSnapshot: Identifiable, Equatable {
     }
 
     var usedFraction: Double? { headline?.usedFraction }
+
+    // 联动提醒按真实窗口独立监测，不受主环、细环或来源顺序影响。
+    var linkedAlertWindows: [LimitWindow] {
+        guard linked != nil else { return [] }
+        let groups = Dictionary(grouping: windows, by: \.id)
+        return windows.filter {
+            groups[$0.id]?.count == 1 && $0.quantity?.unlimited != true
+                && $0.usedFraction.flatMap { Percent.roundedValue(for: $0) } != nil
+        }
+    }
 
     /// The window the second ring draws, when one is switched on.
     ///

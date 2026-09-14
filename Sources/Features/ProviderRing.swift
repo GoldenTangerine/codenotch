@@ -268,16 +268,24 @@ struct ProviderCell: View {
     var activity: ActivitySummary?
     var isRefreshing: Bool = false
     var weeklyRing: WeeklyRing = .off
+    var codeSwitchQuotaRatiosEnabled: Bool = false
 
     /// A dash, not "0%": nothing read is not the same as nothing used.
-    private var readingText: String {
-        snapshot.hasReading ? snapshot.headlineText : "—"
+    private func makeReadingText(ratios: CodeSwitchQuotaRings?) -> String {
+        if snapshot.hasReading, let fraction = ratios?.main.fraction {
+            return Percent.text(for: fraction) + "%"
+        }
+        return snapshot.hasReading ? snapshot.headlineText : "—"
     }
 
     var body: some View {
+        let ratios = CodeSwitchQuotaRings.reading(for: snapshot, enabled: codeSwitchQuotaRatiosEnabled)
+        let readingText = makeReadingText(ratios: ratios)
+        let ringText = makeRingText(ratios: ratios)
         VStack(spacing: NotchLayout.ringLabelGap) {
             ProviderRing(
-                usedFraction: snapshot.localModel == nil && snapshot.hasReading ? snapshot.ringFraction : nil,
+                usedFraction: snapshot.localModel == nil && snapshot.hasReading
+                    ? (ratios?.main.fraction ?? snapshot.ringFraction) : nil,
                 glyph: snapshot.glyph,
                 isStale: snapshot.status.isStale || !snapshot.hasReading,
                 isBlocked: snapshot.block != nil,
@@ -285,7 +293,8 @@ struct ProviderCell: View {
                 isRefreshing: isRefreshing, icon: snapshot.icon,
                 localPerformance: snapshot.localPerformance,
                 localContextFraction: snapshot.localContextFraction,
-                weeklyFraction: snapshot.hasReading ? snapshot.secondaryWindow?.usedFraction : nil,
+                weeklyFraction: snapshot.hasReading
+                    ? (ratios?.secondary.fraction ?? snapshot.secondaryWindow?.usedFraction) : nil,
                 weeklyRing: weeklyRing
             )
             Text(readingText)
@@ -303,19 +312,35 @@ struct ProviderCell: View {
                 .animation(NotchMotion.reading, value: readingText)
         }
         .frame(height: NotchLayout.cellExtent)
-        .help(quotaRingText ?? snapshot.headline?.summary ?? snapshot.statusMessage ?? snapshot.displayName)
+        .help(ringText ?? snapshot.headline?.summary ?? snapshot.statusMessage ?? snapshot.displayName)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText)
+        .accessibilityLabel(makeAccessibilityText(ringText: ringText, readingText: readingText))
     }
 
     /// Everything the cell says, as one sentence for VoiceOver and the tests.
     var accessibilityText: String {
+        let ratios = CodeSwitchQuotaRings.reading(for: snapshot, enabled: codeSwitchQuotaRatiosEnabled)
+        return makeAccessibilityText(ringText: makeRingText(ratios: ratios), readingText: makeReadingText(ratios: ratios))
+    }
+
+    private func makeAccessibilityText(ringText: String?, readingText: String) -> String {
         snapshot.localModel.map {
             "\($0.brand.map { "\($0.displayName), " } ?? "")\($0.name), \(snapshot.displayName) local, \(snapshot.showsLocalPerformance ? (snapshot.localPerformance.map { "Last generation speed \($0.speedText), \($0.band.label)" } ?? "Speed not measured") : "Loaded"), \($0.detail)\(localActivityText)\(localLedgerText)"
-        } ?? "\(snapshot.displayName), \(quotaRingText ?? readingText)"
+        } ?? "\(snapshot.displayName), \(ringText ?? readingText)"
     }
 
     var quotaRingText: String? {
+        makeRingText(ratios: CodeSwitchQuotaRings.reading(for: snapshot, enabled: codeSwitchQuotaRatiosEnabled))
+    }
+
+    private func makeRingText(ratios: CodeSwitchQuotaRings?) -> String? {
+        if let ratios, snapshot.hasReading {
+            let main = "\(L10n.t("Main ring")): \(ratios.main.summary)"
+            guard weeklyRing != .off,
+                  !(weeklyRing == .inside && activity != nil && activity?.state != .idle) else { return main }
+            let position = weeklyRing == .inside ? L10n.t("Inner ring") : L10n.t("Outer ring")
+            return "\(main); \(position): \(ratios.secondary.summary)"
+        }
         guard weeklyRing != .off, snapshot.hasReading,
               let secondary = snapshot.secondaryWindow else { return nil }
         if weeklyRing == .inside, let activity, activity.state != .idle { return nil }

@@ -26,6 +26,7 @@ final class UsageLimitWatcher {
     }
 
     private var states: [String: ProviderLimitState] = [:]
+    private var linkedStates: [String: [String: TrackedLimit]] = [:]
     private let isMuted: (String) -> Bool
     private let deliver: (UsageAlertEvent) -> Void
 
@@ -44,6 +45,10 @@ final class UsageLimitWatcher {
     }
 
     private func observe(_ snapshot: ProviderSnapshot) {
+        if snapshot.linked != nil {
+            observeLinked(snapshot)
+            return
+        }
         var state = states[snapshot.id] ?? ProviderLimitState()
         let isFirstObservation = states[snapshot.id] == nil
 
@@ -118,5 +123,30 @@ final class UsageLimitWatcher {
         }
 
         states[snapshot.id] = state
+    }
+
+    private func observeLinked(_ snapshot: ProviderSnapshot) {
+        var states = linkedStates[snapshot.id] ?? [:]
+        for window in snapshot.linkedAlertWindows {
+            guard let fraction = window.usedFraction else { continue }
+            let previous = states[window.id]
+            var state = previous ?? TrackedLimit(windowID: window.id)
+            let blocked = window.id == snapshot.headlineID && snapshot.block != nil
+            let rolled = window.resetsAt.map { next in state.resetsAt.map { next > $0 } ?? false } ?? false
+            if !blocked && (rolled || fraction < 0.95) { state.isExhausted = false }
+            let exhausted = fraction >= 1 || blocked
+            if exhausted && !state.isExhausted && previous != nil && !isMuted(snapshot.id) {
+                deliver(UsageAlertEvent(kind: window.id == "weekly" ? .weeklyLimitReached : .sessionLimitReached,
+                    providerID: snapshot.id, providerName: snapshot.displayName, windowLabel: window.label,
+                    glyph: snapshot.glyph, previousFraction: state.fraction, currentFraction: fraction,
+                    resetsAt: window.resetsAt, windowID: window.id))
+            }
+            // 静音期间的耗尽也记入状态，取消静音后不补发旧通知。
+            if exhausted { state.isExhausted = true }
+            state.fraction = fraction
+            state.resetsAt = window.resetsAt
+            states[window.id] = state
+        }
+        linkedStates[snapshot.id] = states
     }
 }

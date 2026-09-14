@@ -71,6 +71,7 @@ struct UsageResetCard: View {
         case .reset:
             return L10n.t("Quota is available (0% used)")
         case .sessionLimitReached:
+            if event.windowID != nil { return L10n.t("\(event.windowLabel) limit is spent") }
             return L10n.t("Session limit reached (100% used)")
         case .weeklyLimitReached:
             return L10n.t("Weekly limit reached (100% used)")

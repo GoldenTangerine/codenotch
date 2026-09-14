@@ -18,6 +18,7 @@ struct ThresholdAlert: Equatable {
     let windowLabel: String
     let usedPercent: Int
     let resetsAt: Date?
+    var windowID: String? = nil
 }
 
 /// Watches the store's snapshots and reports the moment a provider's headline
@@ -32,6 +33,11 @@ struct ThresholdAlert: Equatable {
 /// testable without ever touching the notification centre.
 @MainActor
 final class ThresholdNotifier {
+    private struct LinkedThreshold {
+        var level: Int
+        var resetsAt: Date?
+    }
+    private var linkedCrossed: [String: [String: LinkedThreshold]] = [:]
     private var crossed: [String: Int] = [:]
     private let isMuted: (String) -> Bool
     private let deliver: (ThresholdAlert) -> Void
@@ -49,7 +55,12 @@ final class ThresholdNotifier {
     }
 
     private func observe(_ snapshot: ProviderSnapshot) {
-        guard let fraction = snapshot.usedFraction else { return }
+        if snapshot.linked != nil {
+            observeLinked(snapshot)
+            return
+        }
+        guard let fraction = snapshot.usedFraction,
+              let usedPercent = Percent.roundedValue(for: fraction) else { return }
         let percent = fraction * 100
         let level = percent >= 100 ? 100 : percent >= 80 ? 80 : 0
 
@@ -64,10 +75,30 @@ final class ThresholdNotifier {
                 providerID: snapshot.id,
                 providerName: snapshot.displayName,
                 windowLabel: headline.label,
-                usedPercent: Int((percent).rounded()),
+                usedPercent: usedPercent,
                 resetsAt: headline.resetsAt
             ))
         }
+    }
+
+    private func observeLinked(_ snapshot: ProviderSnapshot) {
+        var crossed = linkedCrossed[snapshot.id] ?? [:]
+        for window in snapshot.linkedAlertWindows {
+            guard let fraction = window.usedFraction,
+                  let usedPercent = Percent.roundedValue(for: fraction) else { continue }
+            let level = fraction >= 1 ? 100 : fraction >= 0.8 ? 80 : 0
+            let old = crossed[window.id]
+            let rolled = window.resetsAt.map { next in old?.resetsAt.map { next > $0 } ?? false } ?? false
+            let previous = rolled ? 0 : old?.level ?? 0
+            crossed[window.id] = LinkedThreshold(level: level, resetsAt: window.resetsAt)
+            guard level > previous, !isMuted(snapshot.id) else { continue }
+            for threshold in [80, 100] where threshold > previous && threshold <= level {
+                deliver(ThresholdAlert(threshold: threshold, providerID: snapshot.id,
+                    providerName: snapshot.displayName, windowLabel: window.label,
+                    usedPercent: usedPercent, resetsAt: window.resetsAt, windowID: window.id))
+            }
+        }
+        linkedCrossed[snapshot.id] = crossed
     }
 }
 
@@ -96,7 +127,7 @@ enum ThresholdAlerts {
             content.threadIdentifier = alert.providerID
 
             let request = UNNotificationRequest(
-                identifier: "\(alert.providerID).\(alert.threshold).\(Int(Date().timeIntervalSince1970))",
+                identifier: "\(alert.providerID).\(alert.windowID ?? "headline").\(alert.threshold).\(UUID().uuidString)",
                 content: content, trigger: nil)
             center.add(request)
         }
@@ -132,7 +163,7 @@ enum UsageAlertNotifications {
             // The kind rather than the window label: the label is display text
             // and changes with the language, and an identifier should not.
             let request = UNNotificationRequest(
-                identifier: "\(event.providerID).\(event.kind).\(Int(Date().timeIntervalSince1970))",
+                identifier: "\(event.providerID).\(event.windowID ?? "headline").\(event.kind).\(UUID().uuidString)",
                 content: content, trigger: nil)
             center.add(request)
         }

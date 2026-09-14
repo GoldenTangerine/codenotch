@@ -40,6 +40,15 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.36",
+            headline: L10n.t("Code Switch R period ratio rings"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Optionally show daily use against weekly limits and weekly use against monthly limits")),
+                ReleaseNote.Change(title: L10n.t("Get alerts for each linked quota using its actual limit")),
+                ReleaseNote.Change(title: L10n.t("Handle invalid quota values safely and reduce repeated ring calculations"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.35",
             headline: L10n.t("MiniMax plans and upstream updates with Code Switch R preserved."),
             changes: [

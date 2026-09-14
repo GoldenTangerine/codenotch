@@ -1,6 +1,94 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Optionally show daily use against weekly limits and weekly use against monthly limits": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选显示日用量占周额度、周用量占月额度"
+          }
+        }
+      }
+    },
+    "Get alerts for each linked quota using its actual limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "各联动周期按真实额度独立提醒"
+          }
+        }
+      }
+    },
+    "Handle invalid quota values safely and reduce repeated ring calculations": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修复异常额度值引起的崩溃，减少圆环重复计算"
+          }
+        }
+      }
+    },
+    "Show notification for session and other limits": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示会话及其他额度提醒（日、月等）"
+          }
+        }
+      }
+    },
+    "Code Switch R period ratio rings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Code Switch R 周期比例环"
+          }
+        }
+      }
+    },
+    "Show daily use against the weekly limit and weekly use against the monthly limit. With only two periods, the thin ring keeps the longer period's usage rate. Alerts use actual quota limits.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示日用量占周额度、周用量占月额度的比例。只有两个周期时，细环保留较长周期的额度使用率。提醒仍按真实额度触发。"
+          }
+        }
+      }
+    },
+    "Daily used / Weekly limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日用量 / 周额度"
+          }
+        }
+      }
+    },
+    "Weekly used / Monthly limit": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "周用量 / 月额度"
+          }
+        }
+      }
+    },
     "MiniMax plans and upstream updates with Code Switch R preserved.": {
       "extractionState": "manual",
       "localizations": {

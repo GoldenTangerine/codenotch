@@ -663,6 +663,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Toggle(L10n.t("Code Switch R period ratio rings"), isOn: $preferences.codeSwitchQuotaRatiosEnabled)
+                Text(L10n.t("Show daily use against the weekly limit and weekly use against the monthly limit. With only two periods, the thin ring keeps the longer period's usage rate. Alerts use actual quota limits."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Picker(L10n.t("Show"), selection: $preferences.notchVisibility) {
                     ForEach(NotchVisibility.allCases) { Text($0.title).tag($0) }
                 }
@@ -1001,7 +1007,7 @@ struct SettingsView: View {
             }
 
             Section(L10n.t("When a limit is reached")) {
-                Toggle(L10n.t("Show notification for session limit"), isOn: $preferences.announceSessionLimitReached)
+                Toggle(L10n.t("Show notification for session and other limits"), isOn: $preferences.announceSessionLimitReached)
 
                 Toggle(L10n.t("Show notification for weekly limit"), isOn: $preferences.announceWeeklyLimitReached)
 

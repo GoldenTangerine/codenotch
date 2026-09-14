@@ -11,6 +11,7 @@ import SwiftUI
 
 struct NotchRootView: View {
     @ObservedObject var model: NotchViewModel
+    @AppStorage(Preferences.codeSwitchQuotaRatiosKey) private var codeSwitchQuotaRatiosEnabled = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.codenotchReduceTransparency) private var reduceTransparency
 
@@ -311,7 +312,8 @@ struct NotchRootView: View {
                 snapshot: snapshot,
                 activity: model.activity(for: snapshot),
                 isRefreshing: model.isRefreshing(snapshot),
-                weeklyRing: model.weeklyRing
+                weeklyRing: model.weeklyRing,
+                codeSwitchQuotaRatiosEnabled: codeSwitchQuotaRatiosEnabled
             )
                 // Pinned to what the cell claims along the stack, or the drawn
                 // rings stop lining up with the centres `ringCenter` hands to

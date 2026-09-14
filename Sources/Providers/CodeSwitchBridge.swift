@@ -151,6 +151,8 @@ struct CodeSwitchQuota: Codable, Equatable {
     var hasWindow: Bool {
         active && ["progress", "balance"].contains(displayKind) && invalidMessage?.isEmpty != false
             && used.isFinite && total.isFinite && used >= 0 && total >= 0
+            && (displayKind == "balance" || unlimited == true || total == 0
+                || Percent.roundedValue(for: used / total) != nil)
     }
 
     var duration: TimeInterval? {
