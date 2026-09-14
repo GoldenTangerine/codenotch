@@ -54,13 +54,9 @@ final class MiniMaxWebSessionTests: XCTestCase {
         XCTAssertFalse(site.script.contains("https://api.minimax.io/"))
         XCTAssertFalse(site.script.contains("https://www.minimax.io/v1/"))
         XCTAssertTrue(site.script.contains("credentials: 'same-origin'"))
-        XCTAssertTrue(site.script.contains("status === 1004 || Number(code) === 1004"))
-        XCTAssertTrue(site.script.contains("status = 401"))
         let probe = try! XCTUnwrap(site.authProbeScript)
         XCTAssertTrue(probe.contains("fetch('/v1/api/openplatform/coding_plan/remains'"))
         XCTAssertTrue(probe.contains("credentials: 'same-origin'"))
-        XCTAssertTrue(probe.contains("status === 1004 || Number(code) === 1004"))
-        XCTAssertTrue(probe.contains("status = 401"))
         XCTAssertTrue(site.authFingerprintScript?.contains("localStorage.getItem('access_token')") == true)
     }
 
@@ -79,7 +75,6 @@ final class MiniMaxWebSessionTests: XCTestCase {
         XCTAssertTrue(site.script.contains("credentials: 'include'"))
         let probe = try! XCTUnwrap(site.authProbeScript)
         XCTAssertTrue(probe.contains("https://www.minimaxi.com/v1/api/openplatform/coding_plan/remains"))
-        XCTAssertTrue(probe.contains("status === 1004 || Number(code) === 1004"))
     }
 
     func testAProbeMeansOpeningTheSheetIsNotYetASignIn() {

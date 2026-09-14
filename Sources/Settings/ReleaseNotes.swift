@@ -40,7 +40,7 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
-            version: "1.6.34",
+            version: "1.6.35",
             headline: L10n.t("MiniMax plans and upstream updates with Code Switch R preserved."),
             changes: [
                 ReleaseNote.Change(title: L10n.t("Read MiniMax plans using a saved key, Cookie or in-app sign-in")),

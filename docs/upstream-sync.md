@@ -86,3 +86,9 @@
 - MiniMax 设置页接入区域、密钥及 Cookie；失效密钥可回退到 Cookie/WebView，切换凭据或区域时废弃旧读数与限流。网页及 API 都检查内外层认证、限流状态，额度正文不再进入公开日志。
 - 应用源码临时模块构建及 108 项 Swift Testing 回归通过，包含 Code Switch R 和实际执行的 MiniMax 网站脚本；977 项中文目录翻译与参数检查通过。
 - 本机只有 Command Line Tools，无法执行完整 XCTest、正式 DMG 构建或真实账户 WebView 联调；`v1.6.34` 发布工作流将在打包前运行完整 XCTest。
+
+### v1.6.35 发布修复
+
+- `v1.6.34` 发布工作流的 116 项 Swift Testing 通过，但 MiniMax WebSession XCTest 的 3 处断言仍匹配旧状态码表达式，导致测试阶段失败、未生成安装包。
+- 移除与脚本写法绑定的断言；`MiniMaxSiteScriptTests` 继续实际运行国际和中国大陆区域的额度、登录脚本，验证嵌套 1004、2045 和 429 状态映射。
+- 保留失败的 `v1.6.34` 标签，将应用版本递增为 `1.6.35` / build `277`；该版本包含 v1.6.34 的全部变更，完整 XCTest 和打包仍需发布工作流验证。
