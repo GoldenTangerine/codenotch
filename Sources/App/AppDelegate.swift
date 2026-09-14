@@ -16,6 +16,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notchFleet: NotchFleet?
     private var store: UsageStore?
     private var codeSwitch: CodeSwitchBridge?
+    var phoneLinkServer: PhoneLinkServer?
+    var phoneLinkServerStatus: PhoneLinkServerStatus?
+    var phoneLinkPairing: PhoneLinkPairing?
+    var phoneLinkRegistry: PhoneLinkRegistry?
     private var monitors: [String: any AgentActivityMonitor] = [:]
     private var ollamaRelay: OllamaActivityRelay?
     private var lmstudioMetrics: LMStudioMetrics?
@@ -25,6 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Held for the life of the app: releasing it stops the scheduled checks.
     private var updater: Updater?
     private var thresholdNotifier: ThresholdNotifier?
+    private var resetWatcher: UsageResetWatcher?
+    private var limitWatcher: UsageLimitWatcher?
     private var statusItem: StatusItemController?
     /// Keeps the Claude keychain token from ageing out on a Mac where the CLI
     /// is never run by hand. See `ClaudeTokenRefresher`.
@@ -145,7 +151,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     + codexProfiles.map { CodexLocalProvider(profile: $0) }
                     + [AntigravityProvider(),
                        GLMProvider(), GrokLocalProvider(), DevinLocalProvider(), OpenCodeProvider(),
-                       CommandCodeProvider(), GitHubCopilotProvider(),
+                       CommandCodeProvider(), GitHubCopilotProvider(), KimiProvider(), KiroProvider(),
                        OllamaLocalProvider(endpoint: URL(string: preferences.ollamaEndpoint)!),
                        LMStudioLocalProvider(endpoint: URL(string: preferences.lmstudioEndpoint)!),
                        OllamaProvider(),
@@ -156,20 +162,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                            Preferences.storedGeminiAPIMonthlyTokenBudget()
                        })]
                     + webProviders
-            let catalog = QueryCatalog(providers: nativeProviders, disconnected: preferences.disconnectedProviders)
+            preferences.reconcile(discoveredIDs: nativeProviders.map(\.id))
+            let catalog = QueryCatalog(providers: nativeProviders,
+                disconnected: preferences.disconnectedIDs(among: nativeProviders.map(\.id)))
+            preferences.reconcileCatalog(catalog.entries)
             let store = UsageStore(
                 providers: catalog.providers(),
-                disconnected: Set(catalog.entries.filter { !$0.enabled }.map(\.id)).union(preferences.disconnectedProviders), configured: true,
+                disconnected: preferences.disconnectedIDs(among: catalog.entries.map(\.id)), configured: true,
                 order: preferences.providerOrder
             )
             let applyCatalog: (Set<String>) -> Void = { [weak self, weak catalog, weak store, weak fleet, weak preferences] invalidated in
-                guard let catalog, let store else { return }
-                let disconnected = Set(catalog.entries.filter { !$0.enabled }.map(\.id))
-                    .union((preferences?.disconnectedProviders ?? []).subtracting(catalog.entries.map(\.id)))
+                guard let catalog, let store, let preferences else { return }
+                preferences.reconcileCatalog(catalog.entries)
+                let disconnected = preferences.disconnectedIDs(among: catalog.entries.map(\.id) + store.knownIDs)
                 store.reconfigure(providers: catalog.providers(), disconnected: disconnected, invalidated: invalidated)
                 store.order = catalog.entries.map(\.id)
-                    + (preferences?.providerOrder ?? []).filter { id in !catalog.entries.contains { $0.id == id } }
-                preferences?.disconnectedProviders = disconnected
+                    + preferences.providerOrder.filter { id in !catalog.entries.contains { $0.id == id } }
                 fleet?.setActivitySourceIDs(Dictionary(uniqueKeysWithValues:
                     catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) }))
                 self?.activitySources = Dictionary(uniqueKeysWithValues:
@@ -181,9 +189,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) }))
             activitySources = Dictionary(uniqueKeysWithValues:
                 catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) })
-            preferences.disconnectedProviders.formUnion(catalog.entries.filter { !$0.enabled }.map(\.id))
             deepSeek.onAuthenticated = { [weak store] in
-                store?.refresh(providerID: "deepseek")
+                store?.providerAuthenticationChanged(providerID: "deepseek")
             }
 
             // The stored edge goes in before the panel is ever put up. The
@@ -208,11 +215,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.ollamaRelay = relay
             // A single publisher chain exceeds Swift's type-checking time limit.
             let relayPreferences = Publishers.CombineLatest3(
-                preferences.$disconnectedProviders,
+                preferences.$connectedProviders,
                 preferences.$ollamaEndpoint,
                 preferences.$ollamaMetricsEnabled)
             let relayConfiguration = relayPreferences.map { values in
-                (enabled: !values.0.contains("ollama-local") && values.2, endpoint: values.1)
+                (enabled: values.0.contains("ollama-local") && values.2, endpoint: values.1)
             }.eraseToAnyPublisher()
             relayConfiguration
                 .removeDuplicates { $0.enabled == $1.enabled && $0.endpoint == $1.endpoint }
@@ -246,9 +253,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.lmstudioMetrics = lmstudio
             // Split like the relay's chain above, and for the same reason.
             let lmstudioPreferences = Publishers.CombineLatest(
-                preferences.$disconnectedProviders, preferences.$lmstudioEndpoint)
+                preferences.$connectedProviders, preferences.$lmstudioEndpoint)
             let lmstudioConfiguration = lmstudioPreferences.map { values in
-                (enabled: !values.0.contains(LMStudioMetrics.providerID), endpoint: values.1)
+                (enabled: values.0.contains(LMStudioMetrics.providerID), endpoint: values.1)
             }.eraseToAnyPublisher()
             lmstudioConfiguration
                 .removeDuplicates { $0.enabled == $1.enabled && $0.endpoint == $1.endpoint }
@@ -272,6 +279,68 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.setLedger($0) }
                 .store(in: &cancellables)
+
+            let dir: URL
+            if NSClassFromString("XCTestCase") != nil {
+                dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            } else {
+                let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+                dir = appSupport.appendingPathComponent("Codenotch/phone-link", isDirectory: true)
+            }
+            let phoneSecretStore: PhoneLinkSecretStore = NSClassFromString("XCTestCase") != nil
+                ? InMemoryPhoneLinkSecretStore()
+                : PhoneLinkKeychainSecretStore()
+            let phoneRegistry = PhoneLinkRegistry(directory: dir, secretStore: phoneSecretStore)
+            let phonePairing = PhoneLinkPairing()
+            let serverStatus = PhoneLinkServerStatus()
+            self.phoneLinkRegistry = phoneRegistry
+            self.phoneLinkPairing = phonePairing
+
+            let server = PhoneLinkServer(
+                pairing: phonePairing,
+                registry: phoneRegistry,
+                status: serverStatus,
+                getSnapshot: { @Sendable [weak store, weak fleet, weak preferences] in
+                    guard let store, let fleet, let preferences else { return nil }
+                    let snap = await MainActor.run {
+                        PhoneLinkSnapshotBuilder.build(
+                            snapshots: DailyPace.apply(to: store.snapshots,
+                                                       enabled: preferences.claudeDailyPaceRing),
+                            sessions: Array(fleet.sessions.values.flatMap { $0 }),
+                            disconnected: store.disconnected,
+                            order: preferences.providerOrder,
+                            serverName: PhoneLinkNetwork.getComputerName(),
+                            serverVersion: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0.0",
+                            now: Date()
+                        )
+                    }
+                    return try? JSONEncoder().encode(snap)
+                },
+                refreshAndGetSnapshot: { @Sendable [weak store, weak fleet, weak preferences] in
+                    guard let store, let fleet, let preferences else { return nil }
+                    await MainActor.run { store.refreshNow() }
+                    for _ in 0..<20 {
+                        let isRef = await MainActor.run { !store.refreshing.isEmpty }
+                        if !isRef { break }
+                        try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    }
+                    let snap = await MainActor.run {
+                        PhoneLinkSnapshotBuilder.build(
+                            snapshots: DailyPace.apply(to: store.snapshots,
+                                                       enabled: preferences.claudeDailyPaceRing),
+                            sessions: Array(fleet.sessions.values.flatMap { $0 }),
+                            disconnected: store.disconnected,
+                            order: preferences.providerOrder,
+                            serverName: PhoneLinkNetwork.getComputerName(),
+                            serverVersion: (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "1.0.0",
+                            now: Date()
+                        )
+                    }
+                    return try? JSONEncoder().encode(snap)
+                }
+            )
+            self.phoneLinkServerStatus = serverStatus
+            self.phoneLinkServer = server
 
             let settings = SettingsWindowController(
                 preferences: preferences,
@@ -297,11 +366,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     fleet?.apply(alongOffset: 0)
                 },
                 catalog: catalog, hooks: hookSettings, codeSwitch: codeSwitch,
-                usageStore: store, ollamaRelay: relay, lmstudioMetrics: lmstudio
+                quit: { NSApp.terminate(nil) },
+                previewResetAlert: { [weak self] in
+                    self?.previewUsageResetAlert()
+                },
+                previewSessionLimitAlert: { [weak self] in
+                    self?.previewSessionLimitAlert()
+                },
+                previewWeeklyLimitAlert: { [weak self] in
+                    self?.previewWeeklyLimitAlert()
+                },
+                usageStore: store, ollamaRelay: relay, lmstudioMetrics: lmstudio,
+                phoneLinkPairing: phonePairing, phoneLinkRegistry: phoneRegistry, phoneLinkServerStatus: serverStatus
             )
             // The gear toggles; everything else that opens settings opens it.
-            // 两端按钮已隐藏，右键菜单的设置入口始终打开窗口。
             fleet.onOpenSettings = { [weak settings] in settings?.show() }
+            // A session row answers where it runs by taking you there.
+            fleet.onFocusSession = { pid in
+                Task { _ = await SessionFocus.focus(pid: pid) }
+            }
             self.settings = settings
 
             // What changed, once per version — including on a fresh install,
@@ -351,6 +434,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.$notchTriggerHeight
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(notchTriggerHeight: $0) }
+                .store(in: &cancellables)
+
+            preferences.$foldsForFullScreen
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(foldsForFullScreen: $0) }
+                .store(in: &cancellables)
+
+            preferences.$deepSeekPricingEnabled
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(deepSeekPricingEnabled: $0) }
+                .store(in: &cancellables)
+
+            preferences.$deepSeekPricingSchedule
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(deepSeekPricingSchedule: $0) }
                 .store(in: &cancellables)
 
             preferences.$notchEdge
@@ -460,11 +558,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(surfaceStyle: $0) }
                 .store(in: &cancellables)
 
-            preferences.$disconnectedProviders
+            Publishers.CombineLatest(preferences.$connectedProviders, preferences.$disabledModels)
                 .receive(on: RunLoop.main)
-                .sink { [weak store, weak catalog] disconnected in
-                    store?.disconnected = disconnected
-                    guard let catalog else { return }
+                .sink { [weak store, weak preferences, weak catalog] _, _ in
+                    guard let store, let preferences, let catalog else { return }
+                    let disconnected = preferences.disconnectedIDs(among: store.knownIDs)
+                    store.disconnected = disconnected
                     for entry in catalog.entries where entry.enabled == disconnected.contains(entry.id) {
                         catalog.setEnabled(!disconnected.contains(entry.id), id: entry.id)
                     }
@@ -519,13 +618,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             self.thresholdNotifier = notifier
 
-            store.$notchSnapshots.combineLatest(codeSwitch.$snapshots)
+            let resetWatcher = UsageResetWatcher(
+                isMuted: { [weak preferences] in preferences?.isMutedAlerts(for: $0) ?? false },
+                deliver: { [weak self] event in
+                    MainActor.assumeIsolated {
+                        self?.announceUsageReset(event: event)
+                    }
+                }
+            )
+            self.resetWatcher = resetWatcher
+
+            let limitWatcher = UsageLimitWatcher(
+                isMuted: { [weak preferences] in preferences?.isMutedAlerts(for: $0) ?? false },
+                deliver: { [weak self] event in
+                    MainActor.assumeIsolated {
+                        self?.announceUsageLimit(event: event)
+                    }
+                }
+            )
+            self.limitWatcher = limitWatcher
+
+            store.$notchSnapshots.combineLatest(codeSwitch.$snapshots, preferences.$claudeDailyPaceRing)
                 .receive(on: RunLoop.main)
-                .sink { [weak self] local, linked in
+                .sink { [weak self] local, linked, paced in
+                    let local = DailyPace.apply(to: local, enabled: paced)
                     let snapshots = local + linked.filter { self?.preferences?.hiddenCodeSwitchProviders.contains($0.id) != true }
                     self?.localSnapshots = local
                     self?.updateActivity()
                     notifier.observe(snapshots)
+                    resetWatcher.observe(snapshots)
+                    limitWatcher.observe(snapshots)
                 }
                 .store(in: &cancellables)
             codeSwitch.$displayedSnapshots.dropFirst().receive(on: RunLoop.main)
@@ -580,6 +702,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             "gemini": AntigravityActivityMonitor(),
             "grok": GrokActivityMonitor(),
             "gemini-api": GeminiAPIActivityMonitor(),
+            "kimi": KimiActivityMonitor(),
         ]
         var claudeMonitors: [ClaudeSessionMonitor] = []
         for profile in claudeProfiles {
@@ -591,7 +714,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             monitors[profile.id] = monitor
         }
         for profile in codexProfiles {
-            monitors[profile.id] = CodexActivityMonitor(profile: profile)
+            monitors[profile.id] = CodexActivityMonitor(profile: profile,
+                usesRolloutCompletion: { [weak preferences = self.preferences] in
+                    preferences?.codexRolloutCompletionEnabled ?? false
+                })
         }
 
         // Renewing the token runs the Claude command, which registers a session
@@ -667,6 +793,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // doing exactly nothing. `fleet.show()`'s own reconcile only ever
         // repositions an existing controller — it does not re-copy them —
         // so this has to be the very last thing that can create one.
+
+        preferences.$phoneLinkEnabled
+            .receive(on: RunLoop.main)
+            .sink { [weak self] enabled in
+                guard let self = self, let srv = self.phoneLinkServer else { return }
+                Task { @MainActor in
+                    if enabled {
+                        self.phoneLinkServerStatus?.state = .starting
+                        do {
+                            let prefPort = self.preferences?.phoneLinkPort ?? 8788
+                            let port = try await srv.start(port: prefPort)
+                            self.preferences?.phoneLinkPort = port
+                            self.phoneLinkServerStatus?.state = .ready(port: port)
+                        } catch {
+                            self.phoneLinkServerStatus?.state = .failed(error.localizedDescription)
+                        }
+                    } else {
+                        await srv.stop()
+                        self.phoneLinkServerStatus?.state = .off
+                    }
+                }
+            }
+            .store(in: &cancellables)
         fleet.apply(displayPreference: preferences.displayPreference)
         fleet.apply(alongOffset: preferences.offset(for: preferences.notchEdge))
         fleet.apply(scale: preferences.notchScale)
@@ -677,7 +826,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(weeklyRing: preferences.weeklyRing)
         fleet.apply(showsMoveHandle: preferences.showsMoveHandle)
         fleet.apply(showsSettingsHandle: preferences.showsSettingsHandle)
+        fleet.apply(foldsForFullScreen: preferences.foldsForFullScreen)
         fleet.apply(surfaceStyle: preferences.notchSurfaceStyle)
+        fleet.apply(deepSeekPricingEnabled: preferences.deepSeekPricingEnabled)
+        fleet.apply(deepSeekPricingSchedule: preferences.deepSeekPricingSchedule)
         fleet.show()
     }
 
@@ -760,6 +912,104 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         waitingProtection = .init(event: event, presented: displayed || played, duration: settings.duration)
     }
 
+    /// Open the notch and show a usage reset notification modal when a limit resets.
+    @MainActor
+    private func announceUsageReset(event: UsageResetEvent) {
+        guard let preferences, let fleet = notchFleet else { return }
+        Log.usage.info("usage reset for \(event.providerName, privacy: .public) (\(event.windowLabel, privacy: .public))")
+
+        if preferences.usageResetSound {
+            SessionChime.play(preferences.usageResetSoundName, volume: preferences.sessionSoundVolume)
+        }
+        guard preferences.announceUsageReset else { return }
+        if !fleet.showResetAlert(event, duration: 5.0) {
+            UsageAlertNotifications.deliver(event)
+        }
+    }
+
+    @MainActor
+    private func previewUsageResetAlert() {
+        guard let preferences, let fleet = notchFleet else { return }
+        let demo = UsageResetEvent(
+            providerID: "claude",
+            providerName: "Claude",
+            windowLabel: "5-hour limit",
+            glyph: .claude,
+            previousFraction: 0.95,
+            currentFraction: 0.00,
+            resetsAt: Date().addingTimeInterval(5 * 3600)
+        )
+        if preferences.usageResetSound {
+            SessionChime.play(preferences.usageResetSoundName, volume: preferences.sessionSoundVolume)
+        }
+        fleet.showResetAlert(demo, duration: 5.0)
+    }
+
+    /// Open the notch and show a usage limit reached notification modal when a limit is exhausted.
+    @MainActor
+    private func announceUsageLimit(event: UsageAlertEvent) {
+        guard let preferences, let fleet = notchFleet else { return }
+
+        let isAnnounceEnabled: Bool
+        switch event.kind {
+        case .sessionLimitReached:
+            isAnnounceEnabled = preferences.announceSessionLimitReached
+        case .weeklyLimitReached:
+            isAnnounceEnabled = preferences.announceWeeklyLimitReached
+        case .reset:
+            isAnnounceEnabled = preferences.announceUsageReset
+        }
+
+        guard isAnnounceEnabled else { return }
+
+        Log.usage.info("usage limit reached for \(event.providerName, privacy: .public) (\(event.windowLabel, privacy: .public))")
+
+        if preferences.limitReachedSound {
+            SessionChime.play(preferences.limitReachedSoundName, volume: preferences.sessionSoundVolume)
+        }
+        if !fleet.showResetAlert(event, duration: 6.0) {
+            UsageAlertNotifications.deliver(event)
+        }
+    }
+
+    @MainActor
+    private func previewSessionLimitAlert() {
+        guard let preferences, let fleet = notchFleet else { return }
+        let demo = UsageAlertEvent(
+            kind: .sessionLimitReached,
+            providerID: "claude",
+            providerName: "Claude",
+            windowLabel: "5-hour",
+            glyph: .claude,
+            previousFraction: 0.95,
+            currentFraction: 1.00,
+            resetsAt: Date().addingTimeInterval(45 * 60)
+        )
+        if preferences.limitReachedSound {
+            SessionChime.play(preferences.limitReachedSoundName, volume: preferences.sessionSoundVolume)
+        }
+        fleet.showResetAlert(demo, duration: 6.0)
+    }
+
+    @MainActor
+    private func previewWeeklyLimitAlert() {
+        guard let preferences, let fleet = notchFleet else { return }
+        let demo = UsageAlertEvent(
+            kind: .weeklyLimitReached,
+            providerID: "claude",
+            providerName: "Claude",
+            windowLabel: "Weekly",
+            glyph: .claude,
+            previousFraction: 0.98,
+            currentFraction: 1.00,
+            resetsAt: Date().addingTimeInterval(3 * 86400)
+        )
+        if preferences.limitReachedSound {
+            SessionChime.play(preferences.limitReachedSoundName, volume: preferences.sessionSoundVolume)
+        }
+        fleet.showResetAlert(demo, duration: 6.0)
+    }
+
     /// Closing the settings window must not take the app with it.
     ///
     /// The default for a Dock app is to quit once its last window closes, which
@@ -782,6 +1032,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @MainActor func openSettings() { settings?.show() }
+    @MainActor func openConnectPhone() {
+        guard let pairing = phoneLinkPairing, let registry = phoneLinkRegistry, let status = phoneLinkServerStatus else { return }
+        if preferences?.phoneLinkEnabled == false { preferences?.phoneLinkEnabled = true }
+        PhoneLinkWindowController.shared.show(pairing: pairing, registry: registry, port: preferences?.phoneLinkPort ?? 8788, serverStatus: status)
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         announcementWork?.cancel()
@@ -793,6 +1048,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store?.stop()
         monitors.values.forEach { $0.stop() }
         notchFleet?.stop()
+        Task { await phoneLinkServer?.stop() }
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {

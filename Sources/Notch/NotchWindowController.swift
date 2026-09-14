@@ -125,6 +125,11 @@ final class NotchWindowController {
     private var visibility: NotchVisibility = .onHover
     /// Whether we have pushed the pointing hand onto the cursor stack.
     private var isPointing = false
+    /// Option-drag moves the whole notch under the pointer. Hovering rings
+    /// while that happens is accidental — the pointer necessarily crosses
+    /// them as the panel follows it — so cursor tracking is suspended until
+    /// the drag ends.
+    private var isOptionDragging = false
 
     /// Determines whether a full-screen application window is active on this notch's display.
     /// Default implementation queries WindowServer and NSWorkspace; overridable for testing.
@@ -132,10 +137,15 @@ final class NotchWindowController {
         FullScreenDetector.isFullScreenAppFrontmost(on: self?.currentScreen())
     }
 
+    /// Whether a frontmost full-screen app may fold the notch at all. A
+    /// setting rather than a rule: on a screen kept full-screen all day the
+    /// fold reads as the notch refusing to stay put, not as it tidying up.
+    var foldsForFullScreen = true
+
     /// When a full-screen app is active on the current space, auto-folds the notch.
     /// When returning to a desktop space with `isAlwaysOn`, restores the unfolded state.
     func handleActiveSpaceOrAppChange() {
-        if isFullScreenActive() {
+        if foldsForFullScreen && isFullScreenActive() {
             if let panel {
                 let local = localCursor(in: panel.frame)
                 let overTooltip = model.hoveredIndex
@@ -167,6 +177,14 @@ final class NotchWindowController {
         }
         setPointing(false)
         updateInteractiveRects()
+    }
+
+    /// Re-evaluated on the spot rather than on the next cursor poll, so the
+    /// notch answers the setting in the same beat: switched off under a
+    /// frontmost full-screen app, an always-on notch comes straight back.
+    func apply(foldsForFullScreen: Bool) {
+        self.foldsForFullScreen = foldsForFullScreen
+        handleActiveSpaceOrAppChange()
     }
 
     func show() {
@@ -213,6 +231,12 @@ final class NotchWindowController {
 
         model.$hoveredIndex
             .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateInteractiveRects() }
+            }
+            .store(in: &cancellables)
+
+        model.$activeResetAlert
             .sink { [weak self] _ in
                 MainActor.assumeIsolated { self?.updateInteractiveRects() }
             }
@@ -345,6 +369,7 @@ final class NotchWindowController {
             let hosting = NotchHostingView(rootView: NotchRootView(model: model))
             panel.contextMenuProvider = { [weak self] in self?.contextMenu() }
             panel.onClick = { [weak self] point in self?.handleClick(at: point) }
+            panel.onDragStart = { [weak self] in self?.beginOptionDrag() }
             panel.onControlMouseDown = { [weak self] in self?.handleControlClick(at: $0) ?? false }
             panel.positionEventHandler = { [weak self] in self?.handlePositionEvent($0) ?? false }
             panel.onDrag = { [weak self] dx, dy in self?.dragged(dx: dx, dy: dy) }
@@ -352,6 +377,7 @@ final class NotchWindowController {
                 guard let self else { return }
                 if let position = self.savedPosition { self.onPositionCommitted?(position) }
                 else { self.onReposition?(self.model.alongOffset) }
+                self.endOptionDrag()
             }
 
             // The hosting view goes *inside* a plain container rather than
@@ -421,6 +447,26 @@ final class NotchWindowController {
         }
         model.alongOffset += model.edge.isVertical ? dy : dx
         relocate()
+    }
+
+    private func beginOptionDrag() {
+        guard !isOptionDragging else { return }
+        isOptionDragging = true
+        clearHoverWork?.cancel()
+        clearHoverWork = nil
+        foldWork?.cancel()
+        foldWork = nil
+        model.hoveredIndex = nil
+        model.isHoveringSettings = false
+        model.isHoveringMove = false
+        setPointing(false)
+        updateInteractiveRects()
+    }
+
+    private func endOptionDrag() {
+        guard isOptionDragging else { return }
+        isOptionDragging = false
+        cursorMoved()
     }
 
     // MARK: - Hit regions
@@ -536,8 +582,24 @@ final class NotchWindowController {
         )
     }
 
+    private func resetCardRect(event: UsageResetEvent) -> CGRect? {
+        let index = model.resetAlertIndex(for: event) ?? 0
+        let cardAcross = model.edge.isVertical ? NotchLayout.cardWidth : UsageResetCard.cardHeight
+        let cardAlong = model.edge.isVertical ? UsageResetCard.cardHeight : NotchLayout.cardWidth
+        let centre = model.tooltipAlong(index: index, length: cardAlong)
+        return placement.rect(
+            along: centre - cardAlong / 2,
+            across: model.notchDrawnDepth,
+            length: cardAlong,
+            depth: NotchLayout.tailGap + NotchLayout.tailLength + cardAcross
+        )
+    }
+
     private func updateInteractiveRects() {
         var rects = liveRects
+        if model.isExpanded, let event = model.activeResetAlert, let card = resetCardRect(event: event) {
+            rects.append(card)
+        }
         if model.isExpanded, let index = model.hoveredIndex, let card = tooltipRect(index: index) {
             rects.append(card)
         }
@@ -604,12 +666,13 @@ final class NotchWindowController {
 
     private func cursorMoved() {
         guard !model.isEditingPosition else { updateInteractiveRects(); return }
-        guard let panel else { return }
+        guard let panel, !isOptionDragging else { return }
         let local = localCursor(in: panel.frame)
         let overTooltip = model.hoveredIndex
             .flatMap(tooltipRect(index:))
             .map { model.isExpanded && $0.contains(local) } ?? false
-        setExpanded(isInLiveRegion(local) || overTooltip, ignoreAlwaysOn: isFullScreenActive())
+        setExpanded(isInLiveRegion(local) || overTooltip,
+                    ignoreAlwaysOn: foldsForFullScreen && isFullScreenActive())
 
         var target: Int?
         if model.isExpanded, notchRect.contains(local) {
@@ -765,6 +828,13 @@ final class NotchWindowController {
             updateInteractiveRects()
             return
         }
+        // Clicks on the tooltip card belong to whatever is drawn there — the
+        // session rows take their own taps — and must not fall through to the
+        // cell refetch or the pin toggle underneath.
+        if model.isExpanded, let index = model.hoveredIndex,
+           let card = tooltipRect(index: index), card.contains(local) {
+            return
+        }
         guard model.isExpanded else {
             // Opens it, the same as the pointer arriving would — it must not
             // also pin it. The pill's hot zone is deliberately generous, since
@@ -813,17 +883,22 @@ final class NotchWindowController {
     /// because `@Published` fires in `willSet` — a sink here would recompute
     /// the panel from the size that is being replaced. `apply(edge:)` is the
     /// same shape for the same reason.
-    func apply(alongOffset: CGFloat) {
-        guard model.alongOffset != alongOffset else { return }
-        model.alongOffset = alongOffset
-        relocate()
-    }
-
+    /// Recomputes the click-through region at once. The handle's hit points
+    /// vanish with it, but the window only learns which of its pixels take the
+    /// mouse when those regions are rebuilt; without this the spot where the
+    /// handle was would keep catching clicks until something else moved.
     /// Rebuild immediately so the hidden handle also stops intercepting clicks.
     func apply(showsMoveHandle: Bool) {
         guard model.showsMoveHandle != showsMoveHandle else { return }
         model.showsMoveHandle = showsMoveHandle
         if !showsMoveHandle { model.isHoveringMove = false }
+        relocate()
+        updateInteractiveRects()
+    }
+
+    func apply(alongOffset: CGFloat) {
+        guard model.alongOffset != alongOffset else { return }
+        model.alongOffset = alongOffset
         relocate()
     }
 
@@ -1105,6 +1180,33 @@ final class NotchWindowController {
         return true
     }
 
+    /// Open the notch and show a usage reset notification modal card.
+    ///
+    /// Returns whether the card was actually shown: a hidden notch has nowhere
+    /// to put it, and the caller owes the user another way of hearing about it.
+    @discardableResult
+    func showResetAlert(_ event: UsageResetEvent, duration: TimeInterval = 5.0) -> Bool {
+        guard visibility != .hidden, let panel else {
+            Log.usage.debug("reset alert skipped: notch hidden")
+            return false
+        }
+        model.activeResetAlert = event
+        peek(for: duration, focusing: nil)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if self.model.activeResetAlert == event {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        self.model.activeResetAlert = nil
+                    }
+                    self.updateInteractiveRects()
+                }
+            }
+        }
+        return true
+    }
+
     /// How long after a peek folds a click still counts as answering it. Covers
     /// the reach for the mouse that started while the notch was still open.
     private static let focusGrace: TimeInterval = 2
@@ -1117,7 +1219,9 @@ final class NotchWindowController {
         }
         pendingFocus = nil
         guard let actual = HookSocket.process(pending.pid)?.started, abs(actual - pending.started) < 0.01 else { return false }
-        return SessionFocus.activateApp(owning: pending.pid)
+        // The same exact-tab jump a session row gives, not just the app.
+        Task { _ = await SessionFocus.focus(pid: pending.pid) }
+        return true
     }
 
     /// Tear down a controller whose display is gone: hide first so no panel

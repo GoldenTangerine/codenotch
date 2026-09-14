@@ -40,6 +40,17 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.32",
+            headline: L10n.t("More providers and reliable alerts, with Code Switch R integration preserved."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Add Kimi, Kiro and phone link; new Kimi and Kiro accounts start disabled")),
+                ReleaseNote.Change(title: L10n.t("Get quota reset and limit alerts, plus Claude daily pace for multiple accounts")),
+                ReleaseNote.Change(title: L10n.t("Keep hooks as the default for Codex completion, with optional background log detection")),
+                ReleaseNote.Change(title: L10n.t("Preserve Code Switch R session links, saved account choices and hidden models")),
+                ReleaseNote.Change(title: L10n.t("Fix repeated alerts and shared sound volume, while keeping free positioning and independent handles"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.31",
             headline: L10n.t("Freely position the capsule with clearer center guides."),
             changes: [
@@ -725,6 +736,86 @@ enum ReleaseNotes {
     ] }
     private static var upstream: [ReleaseNote] {
         [
+            ReleaseNote(
+                version: "1.10.0",
+                headline: L10n.t("Tells you when a limit resets or runs out, speaks Russian, and reads Kimi."),
+                changes: [
+                    ReleaseNote.Change(
+                        title: L10n.t("A card when a limit resets, and when one runs out"),
+                        detail: L10n.t("The notch slides out a card the moment a provider's limit rolls over, and again when a session or weekly limit reaches 100%. Notifications in Settings chooses which of those you want, with an optional chime.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Kimi"),
+                        detail: L10n.t("Its weekly and 5-hour limits, the sessions it is running, and clicking one now raises the exact terminal tab it is in rather than only the app.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Русский"),
+                        detail: L10n.t("A fifth language, on the Mac and on Windows.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Quit from Settings"),
+                        detail: L10n.t("A quit action in the Settings sidebar, for when the menu bar icon is switched off.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("A web page cannot reach Codenotch's local servers"),
+                        detail: L10n.t("The Ollama relay and the Windows event server now refuse browser requests from other sites, and raw responses are kept out of the system log. Reading DeepSeek also checks the page's address exactly, where a lookalike domain could have passed before.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Windows"),
+                        detail: L10n.t("Diagnostics print the shape of a value rather than the value, so nothing sensitive lands in a report, and the port's build is checked on every change.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Smaller fixes"),
+                        detail: L10n.t("The move handle lines up with the camera housing, and more of Settings is translated into Simplified Chinese.")
+                    ),
+                ]
+            ),
+            ReleaseNote(
+                version: "1.9.0",
+                headline: L10n.t("LM Studio, DeepSeek and Devin, Japanese and Portuguese, and no more keychain password on a timer."),
+                changes: [
+                    ReleaseNote.Change(
+                        title: L10n.t("LM Studio"),
+                        detail: L10n.t("Loaded models, whether each is thinking or queued, generation speed, how full its context is, and a daily ledger of the tokens it used. Read from LM Studio on this Mac.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("DeepSeek and Devin"),
+                        detail: L10n.t("DeepSeek's platform balance and spend, with a card of daily usage, and Devin's usage.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("日本語 and Português (Brasil)"),
+                        detail: L10n.t("Two more languages, and the language picker is now a menu so all of them fit.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("The keychain password stops coming back"),
+                        detail: L10n.t("Claude Code and Antigravity recreate their saved logins in a way macOS will not let an Always Allow outlast, so the password dialogue kept returning. Background refreshes no longer show it at all; Allow access in Settings is the one place it can still appear.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Carry the notch to another edge"),
+                        detail: L10n.t("Hold the arc above the notch and drop it on any edge. Appearance can hide the arc if you would rather not see it.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("More on the hover card"),
+                        detail: L10n.t("The account's plan under the title, and Codex rate-limit resets you have not used yet.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("A Claude login that Claude Code empties keeps its reading"),
+                        detail: L10n.t("After Claude Code updates itself it can clear every profile's saved login at once. The last numbers now stay, dimmed, instead of vanishing.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Antigravity reads the same numbers from every source"),
+                        detail: L10n.t("Its local server and Google's own endpoint are read by one parser, so the ring does not change depending on which answered. In automatic mode an exhausted limit only leads when every limit is exhausted.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Gemini API counts OpenCode and Hermes"),
+                        detail: L10n.t("Turns made through OpenCode and Hermes now count toward the Gemini API ring.")
+                    ),
+                    ReleaseNote.Change(
+                        title: L10n.t("Smaller fixes"),
+                        detail: L10n.t("Recentre moves the notch at once; full-screen auto-fold accounts for the camera housing; and a rate-limit wait no longer costs a whole extra refresh.")
+                    ),
+                ]
+            ),
             ReleaseNote(
                 version: "1.8.0",
                 headline: L10n.t("A second ring for the week, Liquid Glass, French, and Claude Desktop read straight from its own cache."),

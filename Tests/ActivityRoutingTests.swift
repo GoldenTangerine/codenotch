@@ -367,7 +367,7 @@ import SQLite3
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: dir) }
         let rollout = dir.appendingPathComponent("opaque-filename.jsonl")
-        try Data().write(to: rollout)
+        try Data(#"{"type":"event_msg","payload":{"type":"task_complete"}}"#.utf8).write(to: rollout)
         try FileManager.default.setAttributes([.modificationDate: now], ofItemAtPath: rollout.path)
         let store = dir.appendingPathComponent("state.sqlite")
         var db: OpaquePointer?
@@ -382,7 +382,12 @@ import SQLite3
         #expect(sqlite3_exec(db, sql, nil, nil, nil) == SQLITE_OK)
         let absent = dir.appendingPathComponent("absent.sqlite")
         let cli = CodexActivityMonitor.read(stateStore: store, desktopStore: absent, staleAfter: 8, now: now)
+        #expect(cli.first?.state == .busy)
         #expect(cli.first?.nativeSessionKey == HookEvent.sessionKey(tool: "codex", id: "session-1"))
+        let completed = CodexActivityMonitor.read(stateStore: store, desktopStore: absent,
+            staleAfter: 8, now: now, usesRolloutCompletion: true)
+        #expect(completed.first?.state == .success)
+        #expect(completed.first?.nativeSessionKey == cli.first?.nativeSessionKey)
         let desktop = CodexActivityMonitor.read(stateStore: absent, desktopStore: store, staleAfter: 8,
                                                now: now.addingTimeInterval(1))
         #expect(desktop.first?.nativeSessionKey == HookEvent.sessionKey(tool: "codex", id: "session-2"))

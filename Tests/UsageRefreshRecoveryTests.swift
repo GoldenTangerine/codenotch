@@ -89,6 +89,31 @@ import Testing
         try await waitUntil { await probe.calls == 3 }
     }
 
+    @Test(arguments: [true, false])
+    func configuredRolloverRefreshHonorsAutomaticRefresh(enabled: Bool) async throws {
+        let suite = "ConfiguredRolloverTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var now = Date(timeIntervalSince1970: 2_000_000_000)
+        let probe = RolloverScheduleProbe(reset: now.addingTimeInterval(10))
+        var entry = QueryEntry()
+        entry.id = probe.id
+        entry.mode = .automatic
+        entry.schedule.enabled = enabled
+        entry.schedule.activeSeconds = 300
+        entry.schedule.idleSeconds = 300
+        let provider = ConfiguredUsageProvider(entry: entry, automatic: probe, secrets: RecoverySecrets())
+        let store = UsageStore(providers: [provider], archive: UsageArchive(defaults: defaults), pollingNow: { now })
+        defer { store.stop() }
+        await store.refresh(providerID: probe.id)?.value
+        now = now.addingTimeInterval(11)
+        store.refreshDue()
+        try await waitUntil { store.refreshing.isEmpty }
+        #expect(await probe.calls == (enabled ? 2 : 1))
+        store.refreshDue()
+        #expect(store.refreshing.isEmpty, "A stale reset time must not cause another refresh")
+    }
+
     @Test func credentialReadTimeoutReleasesRefreshAndPreservesRetry() async throws {
         let suite = "UsageRefreshRecoveryTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
@@ -305,6 +330,21 @@ private actor RecoveryProbe: UsageProvider {
         return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph,
                                 fidelity: .official, status: .ok,
                                 windows: [LimitWindow(id: "session", label: "Session", usedFraction: value)])
+    }
+}
+
+private actor RolloverScheduleProbe: UsageProvider {
+    nonisolated let id = "rollover-fixture"
+    nonisolated let displayName = "Rollover fixture"
+    nonisolated let glyph = ProviderGlyph.third
+    let reset: Date
+    var calls = 0
+    init(reset: Date) { self.reset = reset }
+    func fetchSnapshot() async throws -> ProviderSnapshot {
+        calls += 1
+        return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph,
+            fidelity: .official, status: .ok,
+            windows: [LimitWindow(id: "session", label: "Session", usedFraction: 0.2, resetsAt: reset)])
     }
 }
 

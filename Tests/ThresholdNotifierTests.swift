@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · ThresholdNotifierTests
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Tests/ThresholdNotifierTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -95,5 +104,28 @@ final class ThresholdNotifierTests: XCTestCase {
         ])
         XCTAssertEqual(alerts.map(\.providerID), ["cursor", "claude"])
         XCTAssertEqual(alerts.last?.threshold, 80)
+    }
+
+    /// Spark at 100% is not a headline crossing. The notifier reads
+    /// `usedFraction`, which is the declared headline window.
+    func testCodexExtrasDoNotCountAsAHeadlineCrossing() {
+        func snap(primary: Double, spark: Double) -> ProviderSnapshot {
+            ProviderSnapshot(
+                id: "codex", displayName: "Codex", glyph: .openai,
+                fidelity: .official, status: .ok,
+                windows: [
+                    LimitWindow(id: "primary", label: "5h limit", usedFraction: primary),
+                    LimitWindow(id: "spark", group: "Spark", label: "5h limit",
+                                usedFraction: spark)
+                ],
+                headlineID: "primary"
+            )
+        }
+        notifier.observe([snap(primary: 0.50, spark: 0.50)])
+        notifier.observe([snap(primary: 0.50, spark: 1.00)])
+        XCTAssertTrue(alerts.isEmpty, "Spark hitting 100% is not the Codex session")
+        notifier.observe([snap(primary: 0.85, spark: 1.00)])
+        XCTAssertEqual(alerts.map(\.threshold), [80])
+        XCTAssertEqual(alerts[0].windowLabel, "5h limit")
     }
 }

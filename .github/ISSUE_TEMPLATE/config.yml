@@ -1,0 +1,12 @@
+# @name: 上游同步 · config
+# @Descripttion: 保留上游功能实现并兼容本地扩展。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-14 09:43:04
+# @LastEditTime: 2026-09-14 09:43:04
+# @FilePath: .github/ISSUE_TEMPLATE/config.yml
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question or discuss ideas
+    url: https://github.com/vinzdg/codenotch/discussions
+    about: Ask questions, share ideas, and engage with the community.

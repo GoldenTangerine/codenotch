@@ -25,8 +25,10 @@
 	<array>
 		<string>en</string>
 		<string>fr</string>
+		<string>de</string>
 		<string>ja</string>
 		<string>pt-BR</string>
+		<string>ru</string>
 		<string>zh-Hans</string>
 	</array>
 	<key>CFBundleName</key>
@@ -39,6 +41,8 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>26.0</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Codenotch answers your phone on this network so it can show your usage.</string>
 	<key>SUAutomaticallyUpdate</key>
 	<true/>
 	<key>SUEnableAutomaticChecks</key>

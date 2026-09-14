@@ -174,7 +174,7 @@ final class QueryCatalog: ObservableObject {
                 entry.id = provider.id
                 entry.name = provider.displayName
                 entry.icon.value = provider.glyph.rawValue
-                entry.enabled = !disconnected.contains(provider.id)
+                entry.enabled = !disconnected.contains(provider.id) && !["kimi", "kiro"].contains(provider.id)
                 entry.mode = .automatic
                 entry.nativeID = provider.id
                 return entry
@@ -185,7 +185,7 @@ final class QueryCatalog: ObservableObject {
             // Import newly supported sources once; a later deletion must stay deleted.
             let key = "upstreamAutomaticProviders.v1"
             let known = Set(defaults.stringArray(forKey: key) ?? [])
-            let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio"]
+            let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio", "kimi", "kiro"]
             for provider in providers where !known.contains(provider.id)
                 && (introduced.contains(provider.id) || CodexProfile.slug(fromProviderID: provider.id) != nil) {
                 guard !entries.contains(where: { $0.usesLocalAccount && $0.nativeID == provider.id }) else { continue }
@@ -193,7 +193,7 @@ final class QueryCatalog: ObservableObject {
                 entry.id = provider.id
                 entry.name = provider.displayName
                 entry.icon.value = provider.glyph.rawValue
-                entry.enabled = !disconnected.contains(provider.id)
+                entry.enabled = !disconnected.contains(provider.id) && !["kimi", "kiro"].contains(provider.id)
                 entry.mode = .automatic
                 entry.nativeID = provider.id
                 entries.append(entry)

@@ -34,6 +34,10 @@ final class UsageStore: ObservableObject {
     /// reading went unnoticed for twelve hours. Reading it off the snapshot
     /// would reproduce the bug.
     @Published private(set) var needsRenewal: Set<String> = []
+    /// Bumped when a provider's authentication state changes. Settings listens
+    /// to this separately from usage snapshots so it can re-read account
+    /// summaries without re-reading every credential on every polling pass.
+    @Published private(set) var providerAccountRevision = 0
 
     private var providers: [UsageProvider]
     private var attempts: [String: Date] = [:]
@@ -45,6 +49,11 @@ final class UsageStore: ObservableObject {
     /// Providers the user has switched off. They are not fetched at all — their
     /// credential is never read, which is the whole point of switching one off.
     /// Filtering the results afterwards would still touch the keychain.
+
+    /// Provider ids plus any model cells currently on screen.
+    var knownIDs: [String] {
+        Array(Set(providers.map(\.id) + snapshots.map(\.id) + localModelSummaries.map(\.id)))
+    }
     /// Provider IDs block fetching before credential access. Model IDs only hide
     /// their cells so disabling one model does not stop the shared runtime.
     @Published var disconnected: Set<String> = [] {
@@ -328,23 +337,47 @@ final class UsageStore: ObservableObject {
     /// Decides whether this tick is worth a request at all.
     private func tick() {
         if usesConfiguredSchedule { refreshDue(); return }
-        let waited = lastAttempt.map { pollingNow().timeIntervalSince($0) } ?? .greatestFiniteMagnitude
+        let now = pollingNow()
+        let waited = lastAttempt.map { now.timeIntervalSince($0) } ?? .greatestFiniteMagnitude
         guard Self.shouldRefresh(
             isBusy: isBusy(),
             sinceLastAttempt: waited,
-            idleInterval: idleRefreshInterval
+            idleInterval: idleRefreshInterval,
+            resetDue: Self.hasWindowRolledOver(in: snapshots, since: lastAttempt, at: now)
         ) else { return }
         refreshNow()
     }
 
-    /// Poll at full rate while something is running; otherwise wait out the
-    /// idle interval. Pure, so the schedule can be tested without a clock.
+    /// True when a window's `resetsAt` fell between the last attempt and now.
+    ///
+    /// That boundary is the one moment the numbers are certain to have moved,
+    /// and it is the moment a reset alert is owed — waiting out the idle
+    /// interval there is what made the alert arrive minutes late. It fires once
+    /// per rollover: the refresh it asks for puts `lastAttempt` past the
+    /// boundary, so the next tick no longer sees it.
+    ///
+    /// Pure, for the reason `shouldRefresh` is: the boundary it looks for is a
+    /// date, and a test of it should not need a store or a clock.
+    static func hasWindowRolledOver(in snapshots: [ProviderSnapshot], since last: Date?, at now: Date) -> Bool {
+        guard let last else { return false }
+        return snapshots.contains { snapshot in
+            snapshot.windows.contains { window in
+                guard let resetsAt = window.resetsAt else { return false }
+                return resetsAt > last && resetsAt <= now
+            }
+        }
+    }
+
+    /// Poll at full rate while something is running or a window has just rolled
+    /// over; otherwise wait out the idle interval. Pure, so the schedule can be
+    /// tested without a clock.
     static func shouldRefresh(
         isBusy: Bool,
         sinceLastAttempt: TimeInterval,
-        idleInterval: TimeInterval
+        idleInterval: TimeInterval,
+        resetDue: Bool = false
     ) -> Bool {
-        isBusy || sinceLastAttempt >= idleInterval
+        isBusy || resetDue || sinceLastAttempt >= idleInterval
     }
 
     func refreshNow() {
@@ -572,6 +605,13 @@ final class UsageStore: ObservableObject {
         }
 
         return openAccountSource(providerID: providerID)
+    }
+
+    /// Tell consumers that a provider has just confirmed authentication. The
+    /// refresh updates the notch; the revision updates Settings' account row.
+    func providerAuthenticationChanged(providerID: String) {
+        providerAccountRevision &+= 1
+        refresh(providerID: providerID)
     }
 
     /// Say that a provider's saved login needs renewing by hand.
@@ -866,11 +906,14 @@ final class UsageStore: ObservableObject {
         refreshDue()
     }
 
-    func refreshDue(now: Date = Date()) {
+    func refreshDue(now: Date? = nil) {
+        let now = now ?? pollingNow()
         for case let provider as ConfiguredUsageProvider in providers where provider.kind == .usage {
             let schedule = provider.entry.schedule
             guard provider.entry.enabled, schedule.enabled,
-                  now.timeIntervalSince(attempts[provider.id] ?? .distantPast) >= schedule.interval(busy: isBusy()) else { continue }
+                  now.timeIntervalSince(attempts[provider.id] ?? .distantPast) >= schedule.interval(busy: isBusy())
+                    || Self.hasWindowRolledOver(in: snapshots.filter { $0.id == provider.id },
+                                               since: attempts[provider.id], at: now) else { continue }
             refresh(providerID: provider.id)
         }
     }

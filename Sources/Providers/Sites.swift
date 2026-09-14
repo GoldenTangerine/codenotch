@@ -102,7 +102,11 @@ enum Sites {
             const token = extract(JSON.parse(raw)) || raw.trim();
             if (!token) return false;
             const response = await fetch('/api/v0/users/get_user_summary', {
-                credentials: 'include', headers: { 'Accept': 'application/json', 'Authorization': token.startsWith('Bearer ') ? token : 'Bearer ' + token }
+                credentials: 'include', headers: {
+                    'Accept': 'application/json',
+                    'x-client-platform': 'web',
+                    'Authorization': token.startsWith('Bearer ') ? token : 'Bearer ' + token
+                }
             });
             if (response.status < 200 || response.status >= 300) {
                 return JSON.stringify({ authenticated: false });
@@ -120,7 +124,7 @@ enum Sites {
             let reading = try DeepSeekUsage.reading(fromJSON: payload.summary)
             var windows = [LimitWindow(
                 id: "spend",
-                label: "Account usage (\(reading.currency))",
+                label: L10n.t("Account usage (\(reading.currency))"),
                 usedFraction: reading.usedFraction,
                 money: UsageMoneyBreakdown(currency: reading.currency,
                                            spent: reading.spent,

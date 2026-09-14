@@ -511,14 +511,17 @@ final class OllamaLifecycleTests: XCTestCase {
         let defaults = isolatedDefaults(), local = RuntimeStub(), cloud = QuotaStub()
         let preferences = Preferences(defaults: defaults)
         preferences.setConnected(true, for: "ollama-local")
+        preferences.setConnected(true, for: cloud.id)
         local.models = try OllamaLocalUsage.parse(Data(#"{"models":[{"name":"qwen3:8b"},{"name":"llama3.1:8b"}]}"#.utf8)).models
         let store = UsageStore(providers: [cloud, local], archive: UsageArchive(defaults: defaults))
         await store.refresh()
         let llama = "ollama-local:model:llama3.1:8b", qwen = "ollama-local:model:qwen3:8b"
+        preferences.setConnected(true, for: llama)
+        preferences.setConnected(true, for: qwen)
         preferences.setProviderOrder([qwen, cloud.id, llama])
         store.order = preferences.providerOrder
         preferences.setConnected(false, for: qwen)
-        store.disconnected = preferences.disconnectedProviders
+        store.disconnected = preferences.disconnectedIDs(among: store.knownIDs)
         XCTAssertEqual(store.notchSnapshots.map(\.id), [cloud.id, llama])
         XCTAssertTrue(store.localModelSummaries.contains { $0.id == qwen }, "Hidden models remain available in Not connected")
         XCTAssertTrue(preferences.isConnected("ollama-local"))
@@ -528,13 +531,13 @@ final class OllamaLifecycleTests: XCTestCase {
 
         let restored = Preferences(defaults: defaults)
         let relaunched = UsageStore(providers: [cloud, local], archive: UsageArchive(defaults: defaults),
-                                    disconnected: restored.disconnectedProviders, order: restored.providerOrder)
+                                    disconnected: restored.disconnectedIDs(among: [cloud.id, local.id, llama, qwen]), order: restored.providerOrder)
         await relaunched.refresh()
         XCTAssertEqual(relaunched.notchSnapshots.map(\.id), [cloud.id, llama])
         restored.setConnected(true, for: qwen)
         restored.setProviderOrder(ProviderOrder.joiningConnected(qwen, in: restored.providerOrder,
                                                                  isConnected: restored.isConnected))
-        relaunched.disconnected = restored.disconnectedProviders
+        relaunched.disconnected = restored.disconnectedIDs(among: [cloud.id, local.id, llama, qwen])
         relaunched.order = restored.providerOrder
         XCTAssertEqual(relaunched.notchSnapshots.map(\.id), [cloud.id, llama, qwen])
         relaunched.disconnected.insert("ollama-local")
@@ -818,11 +821,11 @@ final class OllamaRenderTests: XCTestCase {
         let preferences = Preferences(defaults: defaults)
         let local = RuntimeStub(), cloud = QuotaStub()
         let store = UsageStore(providers: [cloud, local], archive: UsageArchive(defaults: defaults),
-                               disconnected: preferences.disconnectedProviders)
+                               disconnected: preferences.disconnectedIDs(among: [cloud.id, local.id]))
         let content = SettingsView(preferences: preferences, providers: { store.providerSummaries },
             signOut: { store.signOut(providerID: $0) }, signIn: { store.signIn(providerID: $0) },
             switchAccount: { _ in false }, retry: { store.refresh(providerID: $0) },
-            resetPosition: {}, updater: Updater(), usageStore: store)
+            resetPosition: {}, quit: {}, updater: Updater(), usageStore: store)
             .frame(width: SettingsView.width, height: SettingsView.height)
             .background(Color(nsColor: .windowBackgroundColor))
         let hosting = NSHostingView(rootView: content)
@@ -845,7 +848,7 @@ final class OllamaRenderTests: XCTestCase {
         }
         try await capture("off")
         preferences.setConnected(true, for: "ollama-local")
-        store.disconnected = preferences.disconnectedProviders
+        store.disconnected = preferences.disconnectedIDs(among: store.knownIDs)
         await store.refresh()
         try await capture("empty")
         local.models = try OllamaLocalUsage.parse(Data(#"{"models":[{"name":"qwen3:8b","size":6442450944},{"name":"llama3.1:8b","size":4831838208}]}"#.utf8)).models
@@ -856,7 +859,7 @@ final class OllamaRenderTests: XCTestCase {
         store.order = preferences.providerOrder
         try await capture("reordered")
         preferences.setConnected(false, for: qwen)
-        store.disconnected = preferences.disconnectedProviders
+        store.disconnected = preferences.disconnectedIDs(among: store.knownIDs)
         try await capture("hidden")
         local.models = []
         await store.refresh(providerID: "ollama-local")?.value
@@ -917,10 +920,10 @@ final class OllamaRenderTests: XCTestCase {
         defer { defaults.removePersistentDomain(forName: domain) }
         let preferences = Preferences(defaults: defaults)
         let store = UsageStore(providers: [RuntimeStub()], archive: UsageArchive(defaults: defaults),
-                               disconnected: preferences.disconnectedProviders)
+                               disconnected: preferences.disconnectedIDs(among: ["ollama-local"]))
         for enabled in [false, true] {
             preferences.setConnected(enabled, for: "ollama-local")
-            store.disconnected = preferences.disconnectedProviders
+            store.disconnected = preferences.disconnectedIDs(among: store.knownIDs)
             if enabled { await store.refresh() }
             let content = OllamaSettingsRow(preferences: preferences, store: store, relay: OllamaActivityRelay())
                 .padding(20).frame(width: 460).background(Color(nsColor: .windowBackgroundColor))

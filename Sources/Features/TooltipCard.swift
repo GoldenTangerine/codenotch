@@ -14,7 +14,7 @@ import SwiftUI
 /// Its shoulders leave the card tangent to the card's edge. That continuous
 /// tangent is what makes the two pieces read as one moulded silhouette rather
 /// than a triangle pasted onto a rounded rectangle.
-private struct TooltipTail: Shape {
+struct TooltipTail: Shape {
     /// Which way the card sits relative to the notch — the tip points back the
     /// other way, at the cell.
     let direction: NotchEdge.TooltipDirection
@@ -571,9 +571,9 @@ private struct MoneyBreakdownView: View {
             .padding(.top, NotchLayout.labelToBar)
 
             HStack(spacing: NotchLayout.blockSpacing) {
-                MoneyStat(label: "Spent", value: amount(money.spent), color: accentColor)
-                MoneyStat(label: "Remaining", value: amount(money.remaining), color: Palette.textSecondary)
-                MoneyStat(label: "Funded", value: amount(money.funded), color: Palette.textPrimary)
+                MoneyStat(label: L10n.t("Spent"), value: amount(money.spent), color: accentColor)
+                MoneyStat(label: L10n.t("Remaining"), value: amount(money.remaining), color: Palette.textSecondary)
+                MoneyStat(label: L10n.t("Funded"), value: amount(money.funded), color: Palette.textPrimary)
             }
             .frame(width: NotchLayout.cardTextWidth)
             .padding(.top, NotchLayout.moneyBarToStats)
@@ -922,22 +922,22 @@ private struct CodexUsageSection: View {
     }
 
     private var todayText: String {
-        usage.usageToday(now: now).map { UsageFormat.tokens($0) } ?? "Pending"
+        usage.usageToday(now: now).map { UsageFormat.tokens($0) } ?? L10n.t("Pending")
     }
 
     private var metrics: [CodexMetric] {
         let summary = usage.summary
         return [
             CodexMetric(id: "lifetime", value: UsageFormat.tokens(summary?.lifetimeTokens),
-                        label: "Lifetime tokens"),
+                        label: L10n.t("Lifetime tokens")),
             CodexMetric(id: "peak", value: UsageFormat.tokens(summary?.peakDailyTokens),
-                        label: "Peak tokens"),
+                        label: L10n.t("Peak tokens")),
             CodexMetric(id: "longest", value: UsageFormat.duration(
-                seconds: summary?.longestRunningTurnSeconds), label: "Longest chat"),
+                seconds: summary?.longestRunningTurnSeconds), label: L10n.t("Longest chat")),
             CodexMetric(id: "current-streak", value: UsageFormat.days(
-                summary?.currentStreakDays), label: "Current streak"),
+                summary?.currentStreakDays), label: L10n.t("Current streak")),
             CodexMetric(id: "longest-streak", value: UsageFormat.days(
-                summary?.longestStreakDays), label: "Longest streak")
+                summary?.longestStreakDays), label: L10n.t("Longest streak"))
         ]
     }
 
@@ -956,9 +956,9 @@ private struct CodexUsageSection: View {
                 .fill(Palette.ringTrack)
                 .frame(height: NotchLayout.hairline)
 
-            SplitRow(leading: "Today", trailing: todayText)
+            SplitRow(leading: L10n.t("Today"), trailing: todayText)
                 .padding(.top, NotchLayout.blockSpacing)
-            SplitRow(leading: "30-day tokens",
+            SplitRow(leading: L10n.t("30-day tokens"),
                      trailing: UsageFormat.tokens(usage.usageInLast30Days(now: now)))
                 .padding(.top, NotchLayout.codexUsageRowGap)
             CodexDailyUsageChart(buckets: buckets, maximum: maximum)
@@ -993,6 +993,8 @@ private struct BlockedRow: View {
 private struct SessionRow: View {
     let session: AgentSession
     let now: Date
+    /// Set when rows can be clicked to jump to the session's terminal.
+    var onFocus: ((pid_t) -> Void)? = nil
     @Environment(\.codenotchAccentColor) private var accentColor
 
     private var stateColor: Color {
@@ -1034,6 +1036,13 @@ private struct SessionRow: View {
             )
             .padding(.top, NotchLayout.sessionRowGap)
         }
+        // Sessions that publish a pid can be jumped to; the rest are text,
+        // and a gesture on them would promise something it cannot do.
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard let pid = session.processID else { return }
+            onFocus?(pid)
+        }
     }
 }
 
@@ -1044,6 +1053,7 @@ private struct SessionList: View {
     let now: Date
     /// How many rows this screen has room for; the rest are counted.
     let cap: Int
+    var onFocus: ((pid_t) -> Void)? = nil
 
     /// Busy sessions first, so what is hidden is what matters least.
     private var ordered: [AgentSession] {
@@ -1111,6 +1121,11 @@ struct TooltipCard: View {
     var resolvedHeight: CGFloat?
     var onHeightChange: ((CGFloat) -> Void)?
     @State private var naturalHeight: CGFloat = 0
+    var deepSeekPricingEnabled: Bool = true
+    var deepSeekPricingSchedule: DeepSeekPricing.Schedule = .current
+    /// A tap on a session row jumps to that session's terminal — nil leaves
+    /// the rows as plain text.
+    var onFocusSession: ((pid_t) -> Void)? = nil
     @AppStorage(Preferences.showUsagePaceKey) private var showUsagePace = false
 
     /// The phase a local model is in, and the queue behind it, for the header.
@@ -1139,7 +1154,8 @@ struct TooltipCard: View {
             localModelName: snapshot.localModel?.name,
             showsLocalPerformance: snapshot.showsLocalPerformance,
                 localLedgerRows: snapshot.localLedgerRowCount,
-            compactRowCount: snapshot.compactRowCount
+            compactRowCount: snapshot.compactRowCount,
+            showsDeepSeekPricing: deepSeekPricingEnabled
         )
     }
 
@@ -1196,7 +1212,9 @@ struct TooltipCard: View {
                     CodexUsageSection(usage: tokenUsage, now: now)
                 }
                 if let usageDetail = snapshot.usageDetail, usageDetail.hasUsage {
-                    DeepSeekUsageDetail(detail: usageDetail)
+                    DeepSeekUsageDetail(detail: usageDetail, now: now,
+                                        schedule: deepSeekPricingSchedule,
+                                        showsPricing: deepSeekPricingEnabled)
                 }
                 if let activity, snapshot.localModel == nil {
                     SessionList(summary: activity, now: now,

@@ -53,6 +53,7 @@ final class ConfiguredUsageProvider: UsageProvider {
             localRuntimeMeasuresSpeed: snapshot.localRuntimeMeasuresSpeed,
             sourceProviderID: snapshot.sourceProviderID, tokenUsage: snapshot.tokenUsage,
             plan: snapshot.plan, resetCredits: snapshot.resetCredits, usageDetail: snapshot.usageDetail)
+        result.nativeProviderID = entry.usesLocalAccount || entry.template == .native ? entry.nativeID : nil
         if entry.usesLocalAccount && snapshot.kind == .localRuntime { result.icon = nil }
         return result
     }

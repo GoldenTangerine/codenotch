@@ -32,11 +32,12 @@ mod watcher;
 use std::sync::Mutex;
 use tauri::{AppHandle, Emitter, Manager};
 
-/// Logical size of the notch window: the 70 pt pill column on the right plus room for the hover card on the left.
-pub const NOTCH_W: f64 = 340.0;
+/// Logical size of the notch window: the 70 pt pill column on the right plus room for the hover card
+/// and its tail on the left. `fitZoom` in ui/notch.html divides by the same width.
+pub const NOTCH_W: f64 = 360.0;
 /// Hand-bumped build tag, written to run.log at startup so a log can always be matched to the exe that wrote it.
 pub const BUILD: &str = "r31";
-pub const NOTCH_H: f64 = 460.0; // 300 clipped the card once it held three window blocks plus the session list
+pub const NOTCH_H: f64 = 520.0; // 300 clipped the card once it held three window blocks plus the session list; 460 clipped Antigravity's two model groups once the reading was stale and an agent was working
 
 pub struct AppState {
     pub store: Mutex<state::Store>,
@@ -603,23 +604,75 @@ fn set_scale(app: AppHandle, scale: f64) {
 
 // ---------------- tray icon readings ----------------
 
-/// The headline percentage of a reading: its fullest window, as a whole number 0-100.
-///
-/// Deliberately the same rule as `headlineOf` in ui/notch.html, so the tray icon and the ring can
-/// never disagree: consider only metered windows — a `count` window (Antigravity's requests today,
-/// say) has no published denominator, so its `used` is not a share of anything and averaging or
-/// maximising over it would invent a number.
-fn headline_pct(s: &usage::UsageSnapshot) -> Option<u32> {
-    let top = s
-        .windows
-        .iter()
+/// The tightest metered window, ties going to the lower id so the choice never flickers. A `count`
+/// window (Antigravity's requests today) has no published denominator, so it is never a candidate.
+fn tightest<'a>(
+    windows: impl Iterator<Item = &'a usage::LimitWindow>,
+) -> Option<&'a usage::LimitWindow> {
+    windows
         .filter(|w| w.count.is_none())
-        .map(|w| w.used)
-        .fold(f64::NAN, f64::max);
-    if top.is_nan() {
-        return None;
+        .max_by(|a, b| a.used.total_cmp(&b.used).then_with(|| b.id.cmp(&a.id)))
+}
+
+/// The window a provider's ring shows, declared per provider as the macOS providers declare
+/// `headlineID`: a window dropping out of a reply shows a dash instead of promoting another one
+/// into its place. `headlineOf` in ui/notch.html is the same rule, so the ring and the tray agree.
+fn ring_window<'a>(
+    provider: &str,
+    windows: &'a [usage::LimitWindow],
+    antigravity_limit: &str,
+    antigravity_model: &str,
+) -> Option<&'a usage::LimitWindow> {
+    let by_id = |id: &str| windows.iter().find(|w| w.id == id);
+    match provider {
+        "claude" => by_id("session"),
+        "codex" => windows.first(),
+        "cursor" => by_id("included").or_else(|| by_id("api")),
+        _ => antigravity_lane(windows, antigravity_limit, antigravity_model),
     }
-    Some((top * 100.0).round().clamp(0.0, 100.0) as u32)
+}
+
+/// Antigravity's lane, chosen as the Mac app's "Notch reads" and "Model data" choose it: within the
+/// model family (or every lane, if none belongs to it), the tightest lane of the chosen cadence; on
+/// Automatic, the tightest lane that still has room, or the tightest of all once every one is spent.
+fn antigravity_lane<'a>(
+    windows: &'a [usage::LimitWindow],
+    limit: &str,
+    model: &str,
+) -> Option<&'a usage::LimitWindow> {
+    let family: Vec<_> = windows.iter().filter(|w| lane_family(w) == model).collect();
+    let lanes = if family.is_empty() { windows.iter().collect() } else { family };
+    if limit != "automatic" {
+        if let Some(w) = tightest(lanes.iter().copied().filter(|w| lane_is(w, limit))) {
+            return Some(w);
+        }
+    }
+    tightest(lanes.iter().copied().filter(|w| w.used < 1.0))
+        .or_else(|| tightest(lanes.iter().copied()))
+        .or_else(|| lanes.first().copied())
+}
+
+/// "gemini" or "3p", from the language server's `gemini-5h` ids or the CLI's "Gemini Models …" ones
+fn lane_family(w: &usage::LimitWindow) -> &'static str {
+    let id = w.id.to_lowercase();
+    if id.starts_with("gemini") {
+        "gemini"
+    } else if id.starts_with("3p") || id.starts_with("claude") {
+        "3p"
+    } else {
+        ""
+    }
+}
+
+/// Whether a lane is the 5-hour or the weekly one, by the words the Mac app looks for
+fn lane_is(w: &usage::LimitWindow, limit: &str) -> bool {
+    let text = format!("{} {}", w.id, w.label).to_lowercase();
+    match limit {
+        "weekly" => text.contains("weekly"),
+        _ => ["5h", "5-hour", "five hour", "five-hour", "hourly", "session"]
+            .iter()
+            .any(|k| text.contains(k)),
+    }
 }
 
 /// Ids match the ones the page uses, so the tray, the settings window and the notch all agree.
@@ -633,41 +686,34 @@ fn snapshot_of(app: &AppHandle, id: &str) -> usage::UsageSnapshot {
     }
 }
 
-/// What one half of the icon should show. An empty (or "top") window id means "whichever of this
-/// provider's windows is fullest", which is the notch's own rule and the only choice that survives
-/// a provider adding or renaming its windows.
-fn reading_for_slot(app: &AppHandle, slot: &config::TraySlot) -> Option<u32> {
-    let snap = snapshot_of(app, &slot.provider);
+/// A provider's ring as a whole percentage, for the tray icon and the settings picker. A count
+/// window has no percentage to draw, so it is a dash.
+fn ring_pct(app: &AppHandle, provider: &str) -> Option<u32> {
+    let snap = snapshot_of(app, provider);
     if snap.status == "absent" {
         return None;
     }
-    if slot.window.is_empty() || slot.window == "top" {
-        return headline_pct(&snap);
-    }
-    // A pinned window missing from this snapshot falls back to the fullest one, which is what the
-    // notch does in the same situation. Without this a provider that renamed or dropped a window
-    // would leave the icon showing a dash while the notch still showed a number.
-    snap.windows
-        .iter()
-        .find(|w| w.id == slot.window && w.count.is_none())
+    let (limit, model) = {
+        let st = app.state::<AppState>();
+        let c = st.cfg.lock().unwrap();
+        (c.antigravity_limit.clone(), c.antigravity_model.clone())
+    };
+    ring_window(provider, &snap.windows, &limit, &model)
+        .filter(|w| w.count.is_none())
         .map(|w| (w.used * 100.0).round().clamp(0.0, 100.0) as u32)
-        .or_else(|| headline_pct(&snap))
 }
 
-/// One provider and the windows it currently reports, for the settings window's pickers. Built
-/// from live readings rather than a hard-coded table, so a provider that gains a window shows it.
+/// What one half of the icon shows: that provider's ring.
+fn reading_for_slot(app: &AppHandle, slot: &config::TraySlot) -> Option<u32> {
+    ring_pct(app, &slot.provider)
+}
+
+/// One provider and its ring's current number, for the settings window's picker.
 #[derive(serde::Serialize)]
 struct TrayOption {
     id: String,
     label: String,
     status: String,
-    windows: Vec<TrayWindowOption>,
-}
-
-#[derive(serde::Serialize)]
-struct TrayWindowOption {
-    id: String,
-    label: String,
     used: Option<u32>,
 }
 
@@ -675,23 +721,11 @@ struct TrayWindowOption {
 fn get_tray_options(app: AppHandle) -> Vec<TrayOption> {
     TRAY_PROVIDER_IDS
         .iter()
-        .map(|id| {
-            let snap = snapshot_of(&app, id);
-            TrayOption {
-                id: (*id).to_string(),
-                label: provider_label(id).to_string(),
-                status: snap.status.clone(),
-                windows: snap
-                    .windows
-                    .iter()
-                    .filter(|w| w.count.is_none()) // a count window has no percentage to draw
-                    .map(|w| TrayWindowOption {
-                        id: w.id.clone(),
-                        label: w.label.clone(),
-                        used: Some((w.used * 100.0).round().clamp(0.0, 100.0) as u32),
-                    })
-                    .collect(),
-            }
+        .map(|id| TrayOption {
+            id: (*id).to_string(),
+            label: provider_label(id).to_string(),
+            status: snapshot_of(&app, id).status,
+            used: ring_pct(&app, id),
         })
         .collect()
 }
@@ -737,8 +771,41 @@ fn get_tray_preview(app: AppHandle, cfg: TrayConfig) -> Option<String> {
     trayicon::to_data_url(&rgba)
 }
 
-/// What each ring on the notch shows: the provider, and which of its windows. An empty list means
-/// every provider, each showing whichever window is fullest — the original behaviour.
+/// Antigravity's "Notch reads" and "Model data", as the Mac app has them.
+#[derive(serde::Serialize)]
+struct AntigravityPrefs {
+    limit: String,
+    model: String,
+}
+
+#[tauri::command]
+fn get_antigravity_prefs(app: AppHandle) -> AntigravityPrefs {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    AntigravityPrefs { limit: c.antigravity_limit.clone(), model: c.antigravity_model.clone() }
+}
+
+/// Unknown values are refused rather than stored. The notch draws its own rings, so it is told.
+#[tauri::command]
+fn set_antigravity_prefs(app: AppHandle, limit: String, model: String) -> AntigravityPrefs {
+    let prefs = {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        if ["automatic", "5h", "weekly"].contains(&limit.as_str()) {
+            c.antigravity_limit = limit;
+        }
+        if ["gemini", "3p"].contains(&model.as_str()) {
+            c.antigravity_model = model;
+        }
+        config::save(&c);
+        AntigravityPrefs { limit: c.antigravity_limit.clone(), model: c.antigravity_model.clone() }
+    };
+    let _ = app.emit("antigravity_prefs", &prefs);
+    repaint_tray(&app);
+    prefs
+}
+
+/// Which providers get a ring on the notch. An empty list means every provider.
 #[tauri::command]
 fn get_notch_slots(app: AppHandle) -> Vec<config::TraySlot> {
     let st = app.state::<AppState>();
@@ -826,6 +893,15 @@ fn get_lang(app: AppHandle) -> String {
     let st = app.state::<AppState>();
     let c = st.cfg.lock().unwrap();
     c.lang.clone()
+}
+
+/// The settings WebView must use the same Windows locale as the tray. WebView2's
+/// navigator.language can describe the browser runtime rather than the user locale.
+#[tauri::command]
+fn get_lang_resolved(app: AppHandle) -> String {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    resolved_lang(&c.lang)
 }
 
 #[tauri::command]
@@ -1091,10 +1167,13 @@ fn main() {
             get_tray_preview,
             get_notch_slots,
             set_notch_slots,
+            get_antigravity_prefs,
+            set_antigravity_prefs,
             get_app_icon,
             get_ui_flags,
             set_ui_flags,
             get_lang,
+            get_lang_resolved,
             get_autostart,
             set_autostart,
             get_hooks_installed,
@@ -1173,7 +1252,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{cursor_in_hot, HOT_PAD};
+    use super::{cursor_in_hot, ring_window, HOT_PAD};
+    use crate::usage::LimitWindow;
 
     /// Real values from the run.log in #106: a 2560×1600 display at 150 %.
     const PILL: [f64; 4] = [405.0, 183.5, 105.0, 323.0];
@@ -1203,13 +1283,21 @@ mod tests {
     }
 
     #[test]
-    fn the_shipped_pill_and_card_have_no_cold_strip_between_them() {
-        // The 15 px gap is narrower than the 20 px the two pads bring, so the pads already bridge
-        // it and the bounding box never fires for the shipped layout. Pinned: if that stops being
-        // true the crossing starts depending on the bounding box, and the card blinks out mid-travel.
-        let x = (CARD[0] + CARD[2] + PILL[0]) / 2.0;
-        assert!(cursor_in_hot(&[PILL, CARD], x, 250.0, WINDOW));
-        const { assert!(PILL[0] - (CARD[0] + CARD[2]) < 2.0 * HOT_PAD) };
+    fn the_tail_leaves_no_cold_strip_between_the_pill_and_the_card() {
+        // The shipped layout at 150 %, from the CSS: the card stops 100 px from the edge and the
+        // tail spans the rest, its tip under the pill's edge. A pointer crossing along the tail is
+        // hot on one rectangle alone at every step, so it never leans on the bounding box.
+        const WIDE: Option<(f64, f64)> = Some((540.0, 690.0));
+        const WIDE_PILL: [f64; 4] = [435.0, 183.5, 105.0, 323.0];
+        const TAIL: [f64; 4] = [388.5, 318.0, 48.0, 54.0];
+        let y = TAIL[1] + TAIL[3] / 2.0;
+        for x in (CARD[0] + CARD[2]) as i32..WIDE_PILL[0] as i32 {
+            let x = x as f64;
+            assert!(
+                [WIDE_PILL, TAIL, CARD].iter().any(|r| cursor_in_hot(&[*r], x, y, WIDE)),
+                "cold at x={x}"
+            );
+        }
     }
 
     /// Far enough apart that the pads do not meet — the case the bounding box exists for.
@@ -1242,5 +1330,76 @@ mod tests {
     fn an_unreadable_window_size_falls_back_to_the_rectangles() {
         assert!(cursor_in_hot(&[PILL], 450.0, 300.0, None));
         assert!(!cursor_in_hot(&[PILL], 100.0, 300.0, None));
+    }
+
+    fn win(id: &str, used: f64) -> LimitWindow {
+        LimitWindow { id: id.into(), used, ..Default::default() }
+    }
+
+    fn pick<'a>(provider: &str, windows: &'a [LimitWindow]) -> Option<&'a str> {
+        ring_window(provider, windows, "automatic", "gemini").map(|w| w.id.as_str())
+    }
+
+    fn lane<'a>(windows: &'a [LimitWindow], limit: &str, model: &str) -> Option<&'a str> {
+        ring_window("gemini", windows, limit, model).map(|w| w.id.as_str())
+    }
+
+    /// The four lanes Antigravity's language server reported on a real machine
+    fn bridge() -> [LimitWindow; 4] {
+        [win("gemini-weekly", 0.03), win("gemini-5h", 0.0), win("3p-weekly", 0.5), win("3p-5h", 0.9)]
+    }
+
+    #[test]
+    fn claude_means_the_session_even_when_the_week_is_fuller() {
+        assert_eq!(pick("claude", &[win("session", 0.10), win("weekly_all", 0.60)]), Some("session"));
+    }
+
+    #[test]
+    fn a_missing_declared_window_is_a_dash_not_a_stand_in() {
+        assert_eq!(pick("claude", &[win("weekly_all", 0.60)]), None);
+    }
+
+    #[test]
+    fn codex_means_its_first_window_and_cursor_its_included_usage() {
+        assert_eq!(pick("codex", &[win("primary", 0.2), win("secondary", 0.9)]), Some("primary"));
+        assert_eq!(pick("cursor", &[win("included", 0.3), win("api", 0.9)]), Some("included"));
+        assert_eq!(pick("cursor", &[win("api", 0.9), win("on_demand", 0.95)]), Some("api"));
+    }
+
+    #[test]
+    fn antigravity_reads_only_gemini_lanes_unless_told_otherwise() {
+        assert_eq!(lane(&bridge(), "automatic", "gemini"), Some("gemini-weekly"));
+        assert_eq!(lane(&bridge(), "automatic", "3p"), Some("3p-5h"));
+    }
+
+    #[test]
+    fn notch_reads_picks_the_five_hour_or_the_weekly_lane() {
+        assert_eq!(lane(&bridge(), "5h", "gemini"), Some("gemini-5h"));
+        assert_eq!(lane(&bridge(), "weekly", "3p"), Some("3p-weekly"));
+    }
+
+    #[test]
+    fn the_cli_names_its_lanes_differently_and_still_matches() {
+        let cli = [
+            win("Gemini Models Weekly Limit", 0.2),
+            win("Gemini Models Five Hour Limit", 0.1),
+            win("Claude and GPT models Five Hour Limit", 0.7),
+        ];
+        assert_eq!(lane(&cli, "5h", "gemini"), Some("Gemini Models Five Hour Limit"));
+        assert_eq!(lane(&cli, "automatic", "3p"), Some("Claude and GPT models Five Hour Limit"));
+    }
+
+    #[test]
+    fn a_spent_lane_leads_only_once_every_lane_is_spent() {
+        let one_spent = [win("gemini-5h", 1.0), win("gemini-weekly", 0.4)];
+        assert_eq!(lane(&one_spent, "automatic", "gemini"), Some("gemini-weekly"));
+        let all_spent = [win("gemini-weekly", 1.0), win("gemini-5h", 1.0)];
+        assert_eq!(lane(&all_spent, "automatic", "gemini"), Some("gemini-5h"));
+    }
+
+    #[test]
+    fn a_request_count_still_leads_when_it_is_all_there_is() {
+        let requests = LimitWindow { id: "requests".into(), count: Some(79), ..Default::default() };
+        assert_eq!(pick("gemini", std::slice::from_ref(&requests)), Some("requests"));
     }
 }

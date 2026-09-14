@@ -41,6 +41,29 @@ Download this fork from [Releases](https://github.com/GoldenTangerine/codenotch/
 
 A Windows port — Rust/Tauri 2, same design and providers — lives in [`windows/`](windows/README.md).
 
+## Connect your phone
+
+The Codenotch phone app (iOS and Android) can show the same usage
+percentages, reset times and session states as the notch on your Mac.
+It reads only what the notch already displays — never tokens, credentials
+or raw API responses.
+
+To pair, open **Settings › Phone › Connect a Phone…** (or the menu item)
+on your Mac. A QR code appears with a five-minute countdown; scan it with
+the Codenotch phone app, or copy the link and paste it into the app. The
+Mac and phone must be on the same Wi-Fi network — the server answers only
+local-network addresses and rejects anything routed over the internet.
+
+Each code is single-use and expires after five minutes. Reopening the
+window always mints a fresh one.
+
+To remove a paired phone, open **Settings › Phone**, find the device in
+the list and click **Remove**. Its credentials are deleted immediately and
+any subsequent request from that phone is rejected.
+
+See [docs/phone-link-protocol.md](docs/phone-link-protocol.md) for the
+wire-level details.
+
 ## What it reads
 
 ### Code Switch R integration
@@ -132,6 +155,12 @@ thread ID from its existing database index, so it can resolve the same supplier
 and merge with hooks without reading rollout contents. An empty local Codex
 placeholder is suppressed beside linked suppliers; accounts with readings,
 authentication problems or query errors remain visible.
+**Settings → Notifications → Codex activity** optionally enables completion
+detection from recent local Codex log events. It is off by default, so hooks
+remain the default completion source. Enabling it reads at most the final
+256 KiB of a rollout and uses turn lifecycle events; both modes retain database
+thread IDs and Code Switch R session associations. The choice is saved and
+takes effect on the next activity poll.
 The same event is announced once even if its supplier changes. Older snapshots keep the
 existing request spinner without guessing which supplier a question belongs to.
 
@@ -141,7 +170,7 @@ existing request spinner without guessing which supplier a question belongs to.
 |---|---|---|
 | **Claude Code** | official | Claude Desktop's own cached usage response, where Desktop is running and signed into the same account. Then Claude Code's own `/usage`, asked of the installed `claude`. Then the OAuth token in the login keychain, against the endpoint that command uses. |
 | **Cursor** | official | The editor's signed-in session in its local SQLite state, or the `cursor-agent` login in the keychain — no separate sign-in. |
-| **Codex** | official | ChatGPT's usage endpoint, using the local Codex sign-in. Shows the 5-hour and weekly limits when available. |
+| **Codex** | official | Using the local Codex sign-in. Shows the 5-hour and weekly limits when available, plus extra limit windows when the account has them. |
 | **DeepSeek Platform** | derived from official Platform responses | Explicit sign-in in Codenotch's own WKWebView, then the Platform account summary and API-key/model usage endpoints. Shows funded/spent balance, 30-day tokens/cost, requests and API-key count. |
 | **Antigravity** | official where licensed, otherwise a request count | Antigravity's local language server first, then Google's quota endpoint; a plain count when neither will answer for the account. |
 | **GLM** | official | Z.ai's Coding Plan monitor endpoint, with a key borrowed from whichever coding tool already holds one — Claude Code's `settings.json`, ZCode, or OpenCode. |
@@ -152,6 +181,8 @@ existing request spinner without guessing which supplier a question belongs to.
 | **Command Code** | official | The GOAT plan's `/alpha` billing endpoints, with the key the Command Code app writes to `~/.commandcode/auth.json`. |
 | **GitHub Copilot** | official | GitHub's Copilot quota endpoint, authenticated with the GitHub CLI session already on the Mac (`gh auth login`). |
 | **Gemini API** | local token usage | Token usage from Gemini CLI, OpenCode and Hermes, with an optional monthly token budget in Settings. |
+| **Kimi** | official | The Kimi Code CLI session in `~/.kimi-code/credentials/kimi-code.json`, against the same `/usages` endpoint the CLI's `/usage` asks. Shows the 5-hour rate window and the weekly quota. |
+| **Kiro** | official | The kiro-cli session already on this Mac, against the same `/usage` that command prints. Shows monthly credits. |
 
 Codenotch supports automatic credentials from local tools and independent manual
 credentials. Settings → Accounts lets you add multiple accounts for the same
@@ -161,6 +192,8 @@ entries stay deleted; new local profiles can be added from the editor.
 Existing configurations can add GitHub Copilot or Gemini API through
 **Add provider → Automatic → Local provider**. Drag a provider's handle to
 reorder it.
+Kimi and Kiro are added once with their switches off. Existing account choices
+are preserved, and deleting either new entry keeps it deleted after relaunch.
 
 Manual queries accept the credential required by the selected endpoint: for
 example, Claude's OAuth access token, Cursor's Cookie, or a GLM API key. Manual

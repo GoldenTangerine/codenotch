@@ -35,13 +35,15 @@ extension View {
 /// crossing-and-notification machinery it switches is Notifications' to
 /// explain.
 private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case accounts, codeSwitch, ollama, lmstudio, appearance, notifications, general
+    case accounts, codeSwitch, phone, deepseek, ollama, lmstudio, appearance, notifications, general
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .accounts:      return L10n.t("Accounts")
+        case .phone:         return L10n.t("Phone")
+        case .deepseek:      return "DeepSeek"
         case .ollama:        return "Ollama"   // a product name, the same in every language
         case .lmstudio:      return "LM Studio"
         case .appearance:    return L10n.t("Appearance")
@@ -55,6 +57,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .accounts:      return "person.crop.circle.fill"
         case .codeSwitch:    return "arrow.triangle.2.circlepath"
+        case .phone:         return "iphone"
+        case .deepseek:      return "chart.line.uptrend.xyaxis"
         case .ollama:        return "desktopcomputer"
         case .lmstudio:      return "cpu"
         case .appearance:    return "paintbrush.fill"
@@ -70,6 +74,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         switch self {
         case .accounts:      return .blue
         case .codeSwitch:    return .green
+        case .phone:         return .green
+        case .deepseek:      return .orange
         case .ollama:        return .teal
         case .lmstudio:      return .purple
         case .appearance:    return .indigo
@@ -144,6 +150,10 @@ private struct SidebarIcon: View {
 struct SettingsView: View {
     @ObservedObject var preferences: Preferences
     let providers: () -> [ProviderSummary]
+    var phoneLinkPairing: PhoneLinkPairing?
+    var phoneLinkRegistry: PhoneLinkRegistry?
+    var phoneLinkServerStatus: PhoneLinkServerStatus?
+
     /// Re-read whenever the sheet comes forward. Switching account happens in
     /// another app, so the user is always coming *back* here to see it — which
     /// makes returning focus the exact moment the old value is wrong.
@@ -172,6 +182,10 @@ struct SettingsView: View {
     /// A gesture for this sitting, not a setting: the sidebar comes back on
     /// the next open, the same way a window's own sidebar toggle behaves.
     @State private var isSidebarVisible = true
+    /// A short-lived acknowledgement for the recenter action. The notch may
+    /// already be centred, in which case the action has no visible movement;
+    /// the acknowledgement keeps the button from feeling inert.
+    @State private var didRecentre = false
     /// Switching off has to reach the store's archive, not just the preference
     /// — see `UsageStore.signOut(providerID:)`.
     let signOut: (String) -> Void
@@ -187,6 +201,7 @@ struct SettingsView: View {
     /// nothing would tell the notch to move, and the setting would only take
     /// effect the next time the edge changed.
     let resetPosition: () -> Void
+    let quit: () -> Void
     @ObservedObject var updater: Updater
     var ollamaRelay: OllamaActivityRelay? = nil
     var lmstudioMetrics: LMStudioMetrics? = nil
@@ -195,6 +210,9 @@ struct SettingsView: View {
     var usageStore: UsageStore? = nil
     var hooks: HookSettings? = nil
     var codeSwitch: CodeSwitchBridge? = nil
+    var previewResetAlert: (() -> Void)? = nil
+    var previewSessionLimitAlert: (() -> Void)? = nil
+    var previewWeeklyLimitAlert: (() -> Void)? = nil
 
     var body: some View {
         // A plain HStack rather than `NavigationSplitView`: the sidebar here
@@ -281,6 +299,14 @@ struct SettingsView: View {
                 }
                 accounts = ProviderOrder.arrange(updated, by: preferences.providerOrder, id: \.id)
             }
+        .onReceive((usageStore?.$providerAccountRevision.eraseToAnyPublisher()
+                    ?? Empty<Int, Never>().eraseToAnyPublisher())
+            .receive(on: RunLoop.main)) { _ in
+                // Authentication can finish in a separate WebView window while
+                // this pane remains alive. Re-read only the account summaries
+                // for that explicit event, not on every usage poll.
+                accounts = providers()
+            }
     }
 
     /// The subject list, drawn as a card floating inside the window rather
@@ -321,6 +347,22 @@ struct SettingsView: View {
             }
             .padding(.trailing, 14)
             .frame(height: SettingsView.headerHeight - SettingsView.sidebarInset)
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            Button(role: .destructive, action: quit) {
+                Label {
+                    Text(L10n.t("Quit Codenotch"))
+                } icon: {
+                    SidebarIcon(systemName: "power", tint: .red)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
         }
         .frame(width: SettingsView.sidebarWidth)
         // Liquid Glass, the way System Settings draws its own floating
@@ -437,6 +479,8 @@ struct SettingsView: View {
     private func paneContent(for section: SettingsSection) -> some View {
         switch section {
         case .accounts:      accountsPane
+        case .phone:         phonePane
+        case .deepseek:      DeepSeekPricingSettingsView(preferences: preferences)
         case .ollama:
             if let usageStore {
                 Form {
@@ -552,7 +596,8 @@ struct SettingsView: View {
         .formStyle(.grouped)
         // A row switched off jumps from one group to the other. Scoped to that
         // one value so nothing else on the page inherits an animation.
-        .animation(.snappy(duration: 0.25), value: preferences.disconnectedProviders)
+        .animation(.snappy(duration: 0.25), value: preferences.connectedProviders)
+        .animation(.snappy(duration: 0.25), value: preferences.disabledModels)
     }
 
     // One pane, because they are one question: what Codenotch looks like and
@@ -582,12 +627,29 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Toggle(L10n.t("Show Spark and code review"), isOn: $preferences.showCodexExtraLimits)
+                    .onChange(of: preferences.showCodexExtraLimits) { _ in
+                        for account in providers() where CodexProfile.isCodex(providerID: account.id) {
+                            usageStore?.refresh(providerID: account.id)
+                        }
+                    }
+                Text(L10n.t("The ring still follows the main Codex window. Spark and code review stay in the hover card."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Picker(L10n.t("Secondary quota ring"), selection: $preferences.weeklyRing) {
                     ForEach(WeeklyRing.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
 
                 Text(preferences.weeklyRing.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle(L10n.t("Claude daily pace ring"), isOn: $preferences.claudeDailyPaceRing)
+                Text(L10n.t("Claude's main ring shows today's share of the weekly limit — a seventh a day, counted from the weekly reset — instead of the session. The session moves to the thin ring and the card; alerts follow the daily ring."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -608,6 +670,12 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Toggle(L10n.t("Fold for full-screen apps"), isOn: $preferences.foldsForFullScreen)
+                Text(L10n.t("The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Picker("Tooltip height", selection: $preferences.tooltipHeightMode) {
                     ForEach(TooltipHeightMode.allCases) { Text($0.title).tag($0) }
                 }
@@ -617,7 +685,7 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Picker("Edge", selection: $preferences.notchEdge) {
+                Picker(L10n.t("Edge"), selection: $preferences.notchEdge) {
                     ForEach(NotchEdge.allCases) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.segmented)
@@ -698,8 +766,26 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     Spacer()
-                    Button(L10n.t("Recentre"), action: resetPosition)
-                        .controlSize(.small)
+                    Button {
+                        resetPosition()
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            didRecentre = true
+                        }
+                        Task { @MainActor in
+                            try? await Task.sleep(nanoseconds: 1_200_000_000)
+                            guard !Task.isCancelled else { return }
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                didRecentre = false
+                            }
+                        }
+                    } label: {
+                        Label(
+                            L10n.t("Recentre"),
+                            systemImage: didRecentre ? "checkmark" : "arrow.counterclockwise"
+                        )
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
                 }
 
                 // The arc above the notch. Hiding it loses nothing that cannot
@@ -802,6 +888,13 @@ struct SettingsView: View {
     private var notificationsPane: some View {
         Form {
             if let hooks { HookSettingsView(hooks: hooks) }
+            Section(L10n.t("Codex activity")) {
+                Toggle(L10n.t("Use local logs to detect completion"), isOn: $preferences.codexRolloutCompletionEnabled)
+                Text(L10n.t("Off uses hooks. On also reads recent Codex log events to detect completed turns. Code Switch R session links remain available in both modes."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Section("When a turn starts") {
                 Toggle("Open the notch for a moment", isOn: $preferences.announceSessionStart)
 
@@ -895,6 +988,54 @@ struct SettingsView: View {
                 Text(L10n.t("The sound plays on the ordinary output, not the interface sound-effects channel — so it is still heard with \u{201C}Play user interface sound effects\u{201D} switched off in System Settings → Sound."))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section(L10n.t("When a limit is reached")) {
+                Toggle(L10n.t("Show notification for session limit"), isOn: $preferences.announceSessionLimitReached)
+
+                Toggle(L10n.t("Show notification for weekly limit"), isOn: $preferences.announceWeeklyLimitReached)
+
+                Toggle(L10n.t("Play a sound"), isOn: $preferences.limitReachedSound)
+
+                SoundRow(label: L10n.t("Alert sound"), name: $preferences.limitReachedSoundName,
+                         available: availableSounds, volume: preferences.sessionSoundVolume, preview: previewSound)
+
+                if let previewSessionLimitAlert {
+                    Button(L10n.t("Preview session limit alert")) {
+                        previewSessionLimitAlert()
+                    }
+                }
+
+                if let previewWeeklyLimitAlert {
+                    Button(L10n.t("Preview weekly limit alert")) {
+                        previewWeeklyLimitAlert()
+                    }
+                }
+
+                Text(L10n.t("Displays a notification card from the side of the notch when a provider's session or weekly usage limit is reached."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section(L10n.t("When a limit resets")) {
+                Toggle(L10n.t("Show notification from notch"), isOn: $preferences.announceUsageReset)
+
+                Toggle(L10n.t("Play a sound"), isOn: $preferences.usageResetSound)
+
+                SoundRow(label: L10n.t("Reset sound"), name: $preferences.usageResetSoundName,
+                         available: availableSounds, volume: preferences.sessionSoundVolume, preview: previewSound)
+
+                if let previewResetAlert {
+                    Button(L10n.t("Preview notification")) {
+                        previewResetAlert()
+                    }
+                }
+
+                Text(L10n.t("Displays a notification card from the side of the notch when a provider's usage limit resets."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -1117,7 +1258,7 @@ struct SettingsView: View {
     /// this, sees four blank rings and concludes it is broken — and the
     /// distinction that catches them out is Claude *Code*, not the Claude app.
     static var setupCopy: String {
-        L10n.t("Codenotch reads usage from tools already signed in on this Mac — it never asks for your password. Install and sign in to any of Claude Code (the terminal tool, not the Claude app), Cursor (the editor or cursor-agent), Codex, Antigravity, GLM, Grok, OpenCode, Command Code, GitHub Copilot or a Gemini API key (via Gemini CLI, OpenCode or Hermes), and its ring appears in the notch.")
+        L10n.t("Codenotch reads usage from tools already signed in on this Mac — it never asks for your password. Install and sign in to any of Claude Code (the terminal tool, not the Claude app), Cursor (the editor or cursor-agent), Codex, Antigravity, GLM, Grok, OpenCode, Command Code, GitHub Copilot, Kimi Code, Kiro or a Gemini API key (via Gemini CLI, OpenCode or Hermes), and its ring appears in the notch.")
     }
 
     /// Said before it happens rather than after. A system dialogue asking to
@@ -1867,4 +2008,128 @@ private struct AccountRow: View {
         )
     }
 
+}
+
+extension SettingsView {
+    @ViewBuilder
+    private var phonePane: some View {
+        if let pairing = phoneLinkPairing, let registry = phoneLinkRegistry, let status = phoneLinkServerStatus {
+            PhoneSettingsPane(preferences: preferences, pairing: pairing, registry: registry, serverStatus: status)
+        } else {
+            Text("Phone linking is not available.")
+        }
+    }
+}
+
+struct PhoneSettingsPane: View {
+    @ObservedObject var preferences: Preferences
+    @ObservedObject var pairing: PhoneLinkPairing
+    @ObservedObject var registry: PhoneLinkRegistry
+    @ObservedObject var serverStatus: PhoneLinkServerStatus
+
+    @State private var deviceToRemove: PairedDevice?
+
+    private func lastSeenText(for device: PairedDevice) -> String {
+        let diff = Date().timeIntervalSince(device.lastSeenAt)
+        if diff < 60 {
+            return "Active now"
+        }
+        if device.lastSeenAt == device.pairedAt {
+            let df = DateFormatter()
+            df.dateStyle = .medium
+            df.timeStyle = .none
+            return "Paired \(df.string(from: device.pairedAt))"
+        }
+        let rf = RelativeDateTimeFormatter()
+        rf.unitsStyle = .full
+        return "Last seen \(rf.localizedString(for: device.lastSeenAt, relativeTo: Date()))"
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle(isOn: $preferences.phoneLinkEnabled) {
+                    Text(L10n.t("Allow phones on this network"))
+                    Text(L10n.t("Your phone reads usage from this Mac over your Wi-Fi. Nothing leaves your network."))
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                }
+
+                HStack {
+                    switch serverStatus.state {
+                    case .off:
+                        Circle().fill(Color.gray).frame(width: 8, height: 8)
+                        Text(L10n.t("Off"))
+                    case .starting:
+                        Circle().fill(Color.orange).frame(width: 8, height: 8)
+                        Text(L10n.t("Starting…"))
+                    case .ready(let port):
+                        let hosts = PhoneLinkNetwork.getHosts()
+                        let hasIP = hosts.first(where: { PhoneLinkNetwork.isPrivateIPv4($0) }) != nil
+                        if hasIP {
+                            Circle().fill(Color.green).frame(width: 8, height: 8)
+                            Text(L10n.t("Ready on \(hosts.first ?? ""):\(String(port))"))
+                        } else {
+                            Circle().fill(Color.orange).frame(width: 8, height: 8)
+                            Text(L10n.t("This Mac isn't on a local network"))
+                        }
+                    case .failed(let err):
+                        Circle().fill(Color.red).frame(width: 8, height: 8)
+                        Text(err)
+                    }
+                }
+
+                Button(L10n.t("Connect a Phone…")) {
+                    if !preferences.phoneLinkEnabled {
+                        preferences.phoneLinkEnabled = true
+                    }
+                    PhoneLinkWindowController.shared.show(pairing: pairing, registry: registry, port: preferences.phoneLinkPort, serverStatus: serverStatus)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+            }
+
+            Section(L10n.t("Paired phones")) {
+                if registry.discardedLegacyDevices {
+                    Text(L10n.t("Re-pair your phone after updating"))
+                        .foregroundColor(.orange)
+                }
+                if registry.devices.isEmpty {
+                    Text(L10n.t("No phones yet."))
+                        .foregroundColor(.secondary)
+                } else {
+                    ForEach(registry.devices) { device in
+                        HStack {
+                            Image(systemName: device.platform == "ios" ? "iphone" : "smartphone")
+                                .font(.title2)
+                            VStack(alignment: .leading) {
+                                Text(device.name)
+                                Text(lastSeenText(for: device))
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            Spacer()
+                            Button(L10n.t("Remove")) {
+                                deviceToRemove = device
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .alert(item: Binding<PairedDevice?>(
+            get: { deviceToRemove },
+            set: { deviceToRemove = $0 }
+        )) { device in
+            Alert(
+                title: Text(L10n.t("Remove “\(device.name)”?")),
+                message: Text(L10n.t("It will need to scan a new code to connect again.")),
+                primaryButton: .destructive(Text(L10n.t("Remove"))) {
+                    registry.remove(deviceId: device.deviceId)
+                },
+                secondaryButton: .cancel()
+            )
+        }
+    }
 }

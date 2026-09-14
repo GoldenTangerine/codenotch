@@ -237,6 +237,39 @@ final class PreferencesMigrationTests: XCTestCase {
         }
     }
 
+    func testSavedQueryCatalogPreservesEnabledAccountsAndHiddenModels() {
+        let (defaults, _) = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "kiro"])
+        let model = "ollama-local:model:test"
+        preferences.setConnected(false, for: model)
+        var manual = QueryEntry()
+        manual.id = "manual-account"
+        manual.enabled = true
+        var claude = QueryEntry()
+        claude.id = "claude"
+        claude.enabled = false
+        preferences.reconcileCatalog([manual, claude])
+
+        let restored = Preferences(defaults: defaults)
+        restored.reconcile(discoveredIDs: ["claude", "codex", "kiro", "kimi"])
+        XCTAssertTrue(restored.isConnected(manual.id))
+        XCTAssertFalse(restored.isConnected("claude"))
+        XCTAssertFalse(restored.isConnected("kiro"))
+        XCTAssertFalse(restored.isConnected("kimi"))
+        XCTAssertFalse(restored.isConnected(model))
+    }
+
+    func testCodexCompletionDefaultsToHooksAndPersistsLogOptIn() {
+        let (defaults, _) = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertFalse(preferences.codexRolloutCompletionEnabled)
+        preferences.codexRolloutCompletionEnabled = true
+        XCTAssertTrue(Preferences(defaults: defaults).codexRolloutCompletionEnabled)
+        preferences.codexRolloutCompletionEnabled = false
+        XCTAssertFalse(Preferences(defaults: defaults).codexRolloutCompletionEnabled)
+    }
+
     private func makeDefaults() -> (UserDefaults, String) {
         let name = "PreferencesTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -261,7 +294,8 @@ final class PreferencesMigrationTests: XCTestCase {
         Preferences.migrateFromPreviousName(into: fresh, from: oldName)
 
         let preferences = Preferences(defaults: fresh)
-        XCTAssertEqual(preferences.disconnectedProviders, ["glm"])
+        XCTAssertFalse(preferences.isConnected("glm"))
+        XCTAssertTrue(preferences.isConnected("claude"))
         XCTAssertEqual(preferences.notchVisibility, .alwaysShow)
     }
 
@@ -295,10 +329,186 @@ final class PreferencesMigrationTests: XCTestCase {
         let preferences = Preferences(defaults: fresh)
         XCTAssertTrue(preferences.isFirstLaunch)
         XCTAssertEqual(preferences.notchVisibility, .onHover)
+        XCTAssertTrue(preferences.foldsForFullScreen)
         XCTAssertEqual(preferences.appPresence, .dock)
         XCTAssertEqual(preferences.notchEdge, .right)
         XCTAssertEqual(preferences.notchSize, .medium)
         XCTAssertEqual(preferences.weeklyRing, .off)
+        XCTAssertTrue(preferences.isConnected("claude"))
+        XCTAssertTrue(preferences.isConnected("codex"))
+        XCTAssertTrue(preferences.isConnected("claude-work"))
+        XCTAssertFalse(preferences.isConnected("cursor"))
+        XCTAssertFalse(preferences.isConnected("glm"))
+        XCTAssertFalse(preferences.isConnected("kiro"))
+        XCTAssertTrue(preferences.deepSeekPricingEnabled)
+        XCTAssertEqual(preferences.deepSeekPricingSchedule, .current)
+    }
+
+    /// Kiro is discovered like everyone else, and stays off until switched on.
+    /// Claude and Codex are the only families that default on.
+    func testKiroStaysOffAfterReconcile() {
+        let (fresh, name) = makeDefaults()
+        let preferences = Preferences(defaults: fresh)
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "kiro"])
+        XCTAssertFalse(preferences.isConnected("kiro"))
+        XCTAssertTrue(preferences.isConnected("claude"))
+
+        let again = Preferences(defaults: UserDefaults(suiteName: name)!)
+        again.reconcile(discoveredIDs: ["claude", "codex", "cursor", "glm", "kiro", "deepseek"])
+        XCTAssertFalse(again.isConnected("kiro"))
+        XCTAssertFalse(again.isConnected("cursor"))
+        XCTAssertFalse(again.isConnected("deepseek"))
+        XCTAssertTrue(again.isConnected("claude"))
+    }
+
+    func testAFirstLaunchSeedsClaudeAndCodexOnceDiscovered() {
+        let (fresh, name) = makeDefaults()
+        let preferences = Preferences(defaults: fresh)
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "cursor", "glm", "kiro", "claude-work"])
+        XCTAssertEqual(preferences.connectedProviders, ["claude", "codex", "claude-work"])
+        XCTAssertFalse(preferences.isConnected("cursor"))
+        XCTAssertFalse(preferences.isConnected("kiro"))
+
+        let again = Preferences(defaults: UserDefaults(suiteName: name)!)
+        again.reconcile(discoveredIDs: ["claude", "codex", "cursor", "glm", "kiro", "claude-work", "deepseek"])
+        XCTAssertFalse(again.isConnected("cursor"))
+        XCTAssertFalse(again.isConnected("kiro"))
+        XCTAssertFalse(again.isConnected("deepseek"))
+        XCTAssertTrue(again.isConnected("claude"))
+    }
+
+    func testHiddenProvidersInvertAgainstWhatThisMacHas() {
+        let (fresh, _) = makeDefaults()
+        fresh.set(["glm", "cursor"], forKey: "hiddenProviders")
+        let preferences = Preferences(defaults: fresh)
+        XCTAssertFalse(preferences.isConnected("glm"))
+        XCTAssertTrue(preferences.isConnected("claude"))
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "cursor", "glm"])
+        XCTAssertEqual(preferences.connectedProviders, ["claude", "codex"])
+        XCTAssertFalse(preferences.isConnected("cursor"))
+        XCTAssertTrue(preferences.isConnected("claude"))
+    }
+
+    func testANewClaudeProfileTurnsOnWithoutReopeningCursor() {
+        let (fresh, name) = makeDefaults()
+        let preferences = Preferences(defaults: fresh)
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "cursor"])
+        XCTAssertFalse(preferences.isConnected("cursor"))
+
+        let later = Preferences(defaults: UserDefaults(suiteName: name)!)
+        later.reconcile(discoveredIDs: ["claude", "codex", "cursor", "claude-work"])
+        XCTAssertTrue(later.isConnected("claude-work"))
+        XCTAssertFalse(later.isConnected("cursor"))
+    }
+
+    /// A 1.9 install with nothing hidden still shows each loaded model after
+    /// the invert. Model cells are not providers: they are absent from the
+    /// on-list, and absence there must not mean off.
+    func testAnUpgradeDoesNotHideLoadedModels() {
+        let (fresh, _) = makeDefaults()
+        fresh.set([String](), forKey: "hiddenProviders")
+        let preferences = Preferences(defaults: fresh)
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "ollama-local"])
+        let model = "ollama-local:model:qwen3:8b"
+        XCTAssertFalse(preferences.disconnectedIDs(among: [
+            "claude", "codex", "ollama-local", model
+        ]).contains(model))
+        XCTAssertTrue(preferences.isConnected(model))
+        XCTAssertTrue(preferences.isConnected("ollama-local"))
+        XCTAssertTrue(preferences.disabledModels.isEmpty)
+    }
+
+    /// Model ids on the old off-list stay off. They are not inverted onto
+    /// `connectedProviders`.
+    func testAHiddenModelStaysHiddenAfterTheOnListInvert() {
+        let (fresh, name) = makeDefaults()
+        fresh.set(["glm", "ollama-local:model:qwen3"], forKey: "hiddenProviders")
+        let preferences = Preferences(defaults: fresh)
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "glm", "ollama-local"])
+        XCTAssertFalse(preferences.isConnected("glm"))
+        XCTAssertTrue(preferences.isConnected("ollama-local"))
+        XCTAssertFalse(preferences.isConnected("ollama-local:model:qwen3"))
+        XCTAssertEqual(preferences.disabledModels, ["ollama-local:model:qwen3"])
+        XCTAssertFalse(preferences.connectedProviders.contains { Preferences.isModelCell($0) })
+
+        let again = Preferences(defaults: UserDefaults(suiteName: name)!)
+        XCTAssertFalse(again.isConnected("ollama-local:model:qwen3"))
+        XCTAssertTrue(again.isConnected("ollama-local"))
+    }
+
+    /// An invert that already wrote `connectedProviders` still left model ids
+    /// on `hiddenProviders`. Those hides must not be forgotten.
+    func testModelHidesSurviveAPreviousInvertThatDroppedThem() {
+        let (fresh, _) = makeDefaults()
+        fresh.set(["claude", "codex", "ollama-local"], forKey: "connectedProviders")
+        fresh.set(["claude", "codex", "ollama-local"], forKey: "seenProviders")
+        fresh.set(["ollama-local:model:qwen3"], forKey: "hiddenProviders")
+        let preferences = Preferences(defaults: fresh)
+        XCTAssertFalse(preferences.isConnected("ollama-local:model:qwen3"))
+        XCTAssertTrue(preferences.isConnected("ollama-local"))
+        XCTAssertEqual(preferences.disabledModels, ["ollama-local:model:qwen3"])
+    }
+
+    /// Recomputing the store off-list after a provider toggle must not hide
+    /// models that nobody hid.
+    func testSwitchingAProviderDoesNotHideLoadedModels() {
+        let (fresh, _) = makeDefaults()
+        let preferences = Preferences(defaults: fresh)
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "cursor", "ollama-local"])
+        let model = "ollama-local:model:qwen3:8b"
+        XCTAssertTrue(preferences.isConnected(model))
+        preferences.setConnected(true, for: "cursor")
+        XCTAssertTrue(preferences.isConnected(model))
+        XCTAssertFalse(preferences.disconnectedIDs(among: [
+            "claude", "codex", "cursor", "ollama-local", model
+        ]).contains(model))
+        XCTAssertTrue(preferences.disabledModels.isEmpty)
+    }
+
+    /// A newly loaded model is on until hidden, and hiding it does not put it
+    /// on the provider on-list.
+    func testALoadedModelStaysOffTheProviderOnList() {
+        let (fresh, name) = makeDefaults()
+        let preferences = Preferences(defaults: fresh)
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "ollama-local"])
+        let model = "ollama-local:model:qwen3:8b"
+        XCTAssertTrue(preferences.isConnected(model))
+        preferences.setConnected(false, for: model)
+        XCTAssertEqual(preferences.disabledModels, [model])
+        XCTAssertFalse(preferences.connectedProviders.contains(model))
+        XCTAssertFalse(preferences.seenProviders.contains(model))
+
+        let hidden = Preferences(defaults: UserDefaults(suiteName: name)!)
+        XCTAssertFalse(hidden.isConnected(model))
+        hidden.setConnected(true, for: model)
+        XCTAssertTrue(hidden.disabledModels.isEmpty)
+
+        let shown = Preferences(defaults: UserDefaults(suiteName: name)!)
+        XCTAssertTrue(shown.isConnected(model))
+        XCTAssertFalse(shown.connectedProviders.contains(model))
+    }
+
+    func testDeepSeekPricingSettingsSurviveARelaunchAndCanBeReset() {
+        let (fresh, name) = makeDefaults()
+        let preferences = Preferences(defaults: fresh)
+        preferences.deepSeekPricingEnabled = false
+        preferences.deepSeekPricingSchedule = DeepSeekPricing.Schedule(
+            peakWeekdays: [2],
+            windows: [
+                .init(startMinute: 120, endMinute: 180),
+                .init(startMinute: 360, endMinute: 420),
+                .init(startMinute: 900, endMinute: 960)
+            ]
+        )
+
+        let reloaded = Preferences(defaults: UserDefaults(suiteName: name)!)
+        XCTAssertFalse(reloaded.deepSeekPricingEnabled)
+        XCTAssertEqual(reloaded.deepSeekPricingSchedule.peakWeekdays, [2])
+        XCTAssertEqual(reloaded.deepSeekPricingSchedule.windows.count, 3)
+        XCTAssertEqual(reloaded.deepSeekPricingSchedule.windows[2].startMinute, 900)
+
+        reloaded.resetDeepSeekPricingSchedule()
+        XCTAssertEqual(reloaded.deepSeekPricingSchedule, .current)
     }
 
     /// Off by default, and it has to stay chosen once it is chosen: an extra

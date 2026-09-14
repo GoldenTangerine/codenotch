@@ -70,7 +70,10 @@ final class NotchFleet {
     private var weeklyRing: WeeklyRing = .off
     private var showsMoveHandle = false
     private var showsSettingsHandle = false
+    private var foldsForFullScreen = true
     private var surfaceStyle: NotchSurfaceStyle = .glass
+    private var deepSeekPricingEnabled = true
+    private var deepSeekPricingSchedule = DeepSeekPricing.Schedule.current
     /// The ⌥-drag nudge along the current edge. One value for the whole
     /// fleet, the same as `edge` itself — displays do not each get their own
     /// edge, so they do not each get their own nudge either.
@@ -84,6 +87,7 @@ final class NotchFleet {
     var onToggleKeepOpen: (() -> Void)?
     var onRefreshProvider: ((String) async -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onFocusSession: ((pid_t) -> Void)?
     var signInItems: [(title: String, action: () -> Void)] = []
     /// An ⌥-drag on any one panel settled at a new offset. Persisting it is
     /// Preferences' job, same division `apply(edge:)` already keeps.
@@ -208,6 +212,13 @@ final class NotchFleet {
         }
     }
 
+    func apply(foldsForFullScreen: Bool) {
+        self.foldsForFullScreen = foldsForFullScreen
+        for controller in controllers.values {
+            controller.apply(foldsForFullScreen: foldsForFullScreen)
+        }
+    }
+
     func apply(weeklyRing: WeeklyRing) {
         self.weeklyRing = weeklyRing
         for controller in controllers.values {
@@ -233,6 +244,20 @@ final class NotchFleet {
         self.surfaceStyle = surfaceStyle
         for controller in controllers.values {
             controller.model.surfaceStyle = surfaceStyle
+        }
+    }
+
+    func apply(deepSeekPricingEnabled: Bool) {
+        self.deepSeekPricingEnabled = deepSeekPricingEnabled
+        for controller in controllers.values {
+            controller.model.deepSeekPricingEnabled = deepSeekPricingEnabled
+        }
+    }
+
+    func apply(deepSeekPricingSchedule: DeepSeekPricing.Schedule) {
+        self.deepSeekPricingSchedule = deepSeekPricingSchedule
+        for controller in controllers.values {
+            controller.model.deepSeekPricingSchedule = deepSeekPricingSchedule
         }
     }
 
@@ -323,6 +348,18 @@ final class NotchFleet {
             }
         }
         return displayed
+    }
+
+    /// Shows a usage reset notification modal on every panel.
+    /// Returns whether at least one notch had somewhere to show the card. With
+    /// every notch hidden the alert would otherwise vanish without a trace.
+    @discardableResult
+    func showResetAlert(_ event: UsageResetEvent, duration: TimeInterval = 5.0) -> Bool {
+        var shown = false
+        for controller in controllers.values {
+            shown = controller.showResetAlert(event, duration: duration) || shown
+        }
+        return shown
     }
 
     func setRefreshing(_ ids: Set<String>) {
@@ -440,6 +477,7 @@ final class NotchFleet {
         let controller = NotchWindowController()
         controller.assignedScreen = scope == .allDisplays ? screen : nil
         controller.displayPreference = displayPreference
+        controller.foldsForFullScreen = foldsForFullScreen
         controller.model.edge = edge
         controller.restore(position: savedPosition)
         controller.model.activitySourceIDs = activitySourceIDs
@@ -460,10 +498,13 @@ final class NotchFleet {
         controller.model.showsMoveHandle = showsMoveHandle
         controller.model.showsSettingsHandle = showsSettingsHandle
         controller.model.surfaceStyle = surfaceStyle
+        controller.model.deepSeekPricingEnabled = deepSeekPricingEnabled
+        controller.model.deepSeekPricingSchedule = deepSeekPricingSchedule
         controller.onRefresh = onRefresh
         controller.onRefreshProvider = onRefreshProvider
         controller.onOpenSettings = onOpenSettings
         controller.model.onOpenSettings = onOpenSettings
+        controller.model.onFocusSession = onFocusSession
         controller.onReposition = onReposition
         controller.onMoveToEdge = onMoveToEdge
         controller.onToggleKeepOpen = onToggleKeepOpen

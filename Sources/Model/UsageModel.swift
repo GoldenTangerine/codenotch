@@ -261,7 +261,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
     let glyph: ProviderGlyph
     let fidelity: Fidelity
     var status: ProviderStatus
-    let windows: [LimitWindow]
+    var windows: [LimitWindow]
     /// Which window the ring means, declared by the provider rather than left to
     /// position. Without it the headline is "whichever window happens to be
     /// first", and a window dropping out of the response silently promotes
@@ -297,6 +297,8 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// A model cell has its own display preference, but polling belongs to the
     /// runtime that supplied it.
     var sourceProviderID: String?
+    /// Account identity remains the refresh key; native features use this type.
+    var nativeProviderID: String? = nil
 
     var providerID: String { sourceProviderID ?? id }
 
@@ -452,6 +454,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
         case "copilot":    return L10n.t("Sign in with GitHub CLI to read your Copilot usage", locale: locale)
         case "opencode":   return L10n.t("Connect the Go plan in OpenCode to read your usage", locale: locale)
         case "commandcode": return L10n.t("Sign in with the Command Code app to read your usage", locale: locale)
+        case "kiro":       return L10n.t("Sign in with kiro-cli to read your usage", locale: locale)
         // Two Ollamas, and they are stuck for different reasons: the hosted
         // one wants a key, the local one wants the daemon running.
         case "ollama":       return L10n.t("Enter an Ollama API key in Settings, or export OLLAMA_API_KEY", locale: locale)

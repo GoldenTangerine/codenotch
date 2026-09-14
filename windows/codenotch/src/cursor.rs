@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · cursor
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: windows/codenotch/src/cursor.rs
+ */
 //! Cursor usage adapter, implemented from the upstream Codenotch's documented behaviour.
 //!
 //! Data path (same trade-off as upstream: borrow the editor's own session):
@@ -7,9 +16,12 @@
 //!      `WorkosCursorSessionToken=<authId>::<token>`. Non-secret identity cache:
 //!      `cursorAuth/cachedEmail`, `cursorAuth/stripeMembershipType` (only the plan is shown).
 //!   2. Endpoint: `GET https://cursor.com/api/usage-summary` (Cookie + Accept: application/json, 15 s).
-//!      Reply: { billingCycleEnd, membershipType, isUnlimited,
-//!              individualUsage: { plan: { totalPercentUsed, apiPercentUsed, used, limit, breakdown },
-//!                                 onDemand: { enabled, used, limit } } }
+//!      Reply:
+//!      ```text
+//!      { billingCycleEnd, membershipType, isUnlimited,
+//!        individualUsage: { plan: { totalPercentUsed, apiPercentUsed, used, limit, breakdown },
+//!                           onDemand: { enabled, used, limit } } }
+//!      ```
 //!      Cursor meters a percentage of the allowance, not requests: the dashboard's
 //!      "Included usage · N% used" is totalPercentUsed. On the free plan used/limit are always 0
 //!      (the allowance arrives as breakdown.bonus), so reading used/limit would report 10 % as 0 %.

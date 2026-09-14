@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · watcher
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: windows/codenotch/src/watcher.rs
+ */
 //! Transcript watcher: the fallback data source for the Claude Code **desktop app**.
 //! Background: on Windows the desktop app has a known bug (2026-05) where settings.json hooks do
 //! not fire, so the appends to ~/.claude/projects/**/*.jsonl are watched instead and the session
@@ -5,6 +14,7 @@
 //!   - the file is being appended                              → running
 //!   - last line = plain assistant text, quiet for > 2.5 s     → done
 //!   - last line = assistant tool_use, quiet for > 20 s        → attention (waiting for approval; inferred, a slow tool can be misread)
+//!
 //! Arbitration: a session with fresh hook data in state.rs (within 5 min) ignores this inference
 //! (the CLI's hooks are more accurate).
 
@@ -103,7 +113,7 @@ pub fn roots() -> Vec<PathBuf> {
 
 /// Accept only real session transcripts: inside a .claude tree, excluding audit logs and sub-agents
 pub fn is_session_jsonl(p: &Path) -> bool {
-    if p.extension().map(|e| e == "jsonl").unwrap_or(false) == false {
+    if !p.extension().map(|e| e == "jsonl").unwrap_or(false) {
         return false;
     }
     let name = p.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();

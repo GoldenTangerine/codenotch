@@ -45,7 +45,8 @@ final class NotchViewModel: ObservableObject {
             hasTokenUsage: snapshot.tokenUsage != nil, hasPlan: snapshot.plan != nil,
             hasResetCredits: snapshot.resetCredits != nil, localModelName: snapshot.localModel?.name,
             showsLocalPerformance: snapshot.showsLocalPerformance,
-            localLedgerRows: snapshot.localLedgerRowCount, compactRowCount: snapshot.compactRowCount)
+            localLedgerRows: snapshot.localLedgerRowCount, compactRowCount: snapshot.compactRowCount,
+            showsDeepSeekPricing: deepSeekPricingEnabled)
         guard tooltipHeightMode == .full else { return standard }
         return TooltipSizing.height(natural: standard, limit: fullTooltipHeightLimit)
     }
@@ -153,6 +154,13 @@ final class NotchViewModel: ObservableObject {
     @Published var now: Date = Date()
     @Published var resetTimeFormat: ResetTimeFormat = .automatic
 
+    /// Active usage reset notification event to present beside the notch.
+    @Published var activeResetAlert: UsageResetEvent?
+
+    func resetAlertIndex(for event: UsageResetEvent) -> Int? {
+        snapshots.firstIndex { $0.id == event.providerID }
+    }
+
     /// Whether the notch is open or folded away to its pill.
     @Published var isExpanded = false
     /// Clicked open, so it stays open until clicked shut again. A gesture,
@@ -222,6 +230,9 @@ final class NotchViewModel: ObservableObject {
     /// the one action people actually get stuck without a second, ordinary
     /// route that only needs SwiftUI's own gesture recognition to work.
     var onOpenSettings: (() -> Void)?
+    /// A tap on a session row in the tooltip: jump to the terminal tab the
+    /// session runs in. Takes the session's pid; wired to `SessionFocus`.
+    var onFocusSession: ((pid_t) -> Void)?
     /// Which screen edge the notch is welded to. Everything geometric reads
     /// this through `placement` rather than assuming an axis.
     @Published var edge: NotchEdge = .right
@@ -257,6 +268,11 @@ final class NotchViewModel: ObservableObject {
     /// Mirrors the persisted Appearance choice so the separate notch window
     /// redraws immediately when Settings changes it.
     @Published var surfaceStyle: NotchSurfaceStyle = .glass
+    /// Whether DeepSeek's billing phase rows are visible in its usage card.
+    @Published var deepSeekPricingEnabled = true
+    /// The rule used by the DeepSeek card, mirrored from Preferences so a
+    /// settings change is reflected in every notch immediately.
+    @Published var deepSeekPricingSchedule = DeepSeekPricing.Schedule.current
     /// The display's own notch, when this edge has to share the bezel with one.
     ///
     /// Set by the window controller from the screen the panel is on, because
@@ -682,7 +698,8 @@ final class NotchViewModel: ObservableObject {
                 localModelName: snapshot.localModel?.name,
                 showsLocalPerformance: snapshot.showsLocalPerformance,
                 localLedgerRows: snapshot.localLedgerRowCount,
-                compactRowCount: snapshot.compactRowCount)
+                compactRowCount: snapshot.compactRowCount,
+                showsDeepSeekPricing: deepSeekPricingEnabled)
         }.max() ?? 0
     }
 

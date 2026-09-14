@@ -15,6 +15,9 @@ import os
 /// What the user has chosen, kept in `UserDefaults`.
 @MainActor
 final class Preferences: ObservableObject {
+    @Published var codexRolloutCompletionEnabled: Bool {
+        didSet { defaults.set(codexRolloutCompletionEnabled, forKey: "codexRolloutCompletionEnabled") }
+    }
     @Published var tooltipHeightMode: TooltipHeightMode {
         didSet { defaults.set(tooltipHeightMode.rawValue, forKey: "tooltipHeightMode") }
     }
@@ -41,10 +44,30 @@ final class Preferences: ObservableObject {
     /// so its credential is never read at all.
     static let showUsagePaceKey = "showUsagePace"
 
-    /// Disabled model IDs hide cells without stopping their shared runtime.
-    @Published var disconnectedProviders: Set<String> {
-        didSet { defaults.set(Array(disconnectedProviders), forKey: Keys.disconnected) }
+    /// Provider IDs that currently have a ring. Stored as the ones that are
+    /// on, so a provider added later stays off until someone switches it on —
+    /// Claude and Codex excepted, which still default on as a family.
+    @Published var connectedProviders: Set<String> {
+        didSet { defaults.set(Array(connectedProviders), forKey: Keys.connected) }
     }
+
+    /// Every provider id this copy has already decided on, so a later version's
+    /// new provider is recognised as new rather than as "never chosen".
+    @Published private(set) var seenProviders: Set<String> {
+        didSet { defaults.set(Array(seenProviders), forKey: Keys.seen) }
+    }
+
+    /// Loaded-model cells hide without stopping the shared runtime. Stored as
+    /// the ones that are off: a model Ollama or LM Studio loads later stays
+    /// visible until someone hides it. Providers cannot share this list —
+    /// their on-list treats absence as off.
+    @Published private(set) var disabledModels: Set<String> {
+        didSet { defaults.set(Array(disabledModels), forKey: Keys.disabledModels) }
+    }
+
+    /// The old hidden-providers list, kept only until `reconcile` can invert it
+    /// against the ids actually on this Mac.
+    private var pendingHidden: Set<String>?
 
     @Published var ollamaMetricsEnabled: Bool {
         didSet { defaults.set(ollamaMetricsEnabled, forKey: Keys.ollamaMetricsEnabled) }
@@ -56,13 +79,22 @@ final class Preferences: ObservableObject {
 
     /// Where LM Studio's server answers. Defaults to the port LM Studio's own
     /// settings name, so a server moved off 1234 is found without typing.
+    @Published var phoneLinkEnabled: Bool {
+        didSet { defaults.set(phoneLinkEnabled, forKey: Keys.phoneLinkEnabled) }
+    }
+
+    @Published var phoneLinkPort: Int {
+        didSet { defaults.set(phoneLinkPort, forKey: Keys.phoneLinkPort) }
+    }
+
+
     @Published var lmstudioEndpoint: String {
         didSet { defaults.set(lmstudioEndpoint, forKey: Keys.lmstudioEndpoint) }
     }
 
     /// Providers whose threshold alerts are muted. Stored as the muted set so
-    /// a provider added later alerts by default — the same reasoning as
-    /// `disconnectedProviders`.
+    /// a provider added later alerts by default. Connection is stored the
+    /// other way: the ones that are on.
     @Published var mutedAlertProviders: Set<String> {
         didSet { defaults.set(Array(mutedAlertProviders), forKey: Keys.mutedAlerts) }
     }
@@ -93,6 +125,11 @@ final class Preferences: ObservableObject {
             if notchTriggerHeight != clamped { notchTriggerHeight = clamped }
             defaults.set(notchTriggerHeight, forKey: Keys.triggerHeight)
         }
+    }
+
+    /// Whether a frontmost full-screen app folds the notch away.
+    @Published var foldsForFullScreen: Bool {
+        didSet { defaults.set(foldsForFullScreen, forKey: Keys.foldsForFullScreen) }
     }
 
     /// Which screen edge the notch is welded to.
@@ -203,6 +240,45 @@ final class Preferences: ObservableObject {
 
     @Published var showUsagePace: Bool {
         didSet { defaults.set(showUsagePace, forKey: Self.showUsagePaceKey) }
+    }
+
+    /// Whether Claude's big ring shows the day's share of the weekly limit
+    /// instead of the session. See `DailyPace`.
+    @Published var claudeDailyPaceRing: Bool {
+        didSet { defaults.set(claudeDailyPaceRing, forKey: Keys.claudeDailyPaceRing) }
+    }
+
+    /// Whether Spark and code-review Codex windows appear in the hover card.
+    /// On by default so a first launch shows them; the ring still follows
+    /// the main Codex window either way.
+    @Published var showCodexExtraLimits: Bool {
+        didSet { defaults.set(showCodexExtraLimits, forKey: Keys.showCodexExtraLimits) }
+    }
+
+    /// Whether DeepSeek's current peak/off-peak billing phase is shown in its
+    /// usage card. Enabled by default because the card's pricing rows are
+    /// useful only when the rule is visible and understood.
+    @Published var deepSeekPricingEnabled: Bool {
+        didSet { defaults.set(deepSeekPricingEnabled, forKey: Keys.deepSeekPricingEnabled) }
+    }
+
+    /// The locally maintained DeepSeek billing rule. It is stored as one
+    /// Codable value so adding another rule field does not scatter more keys
+    /// through the preferences store.
+    @Published var deepSeekPricingSchedule: DeepSeekPricing.Schedule {
+        didSet {
+            let normalized = deepSeekPricingSchedule.normalized
+            if normalized != deepSeekPricingSchedule {
+                deepSeekPricingSchedule = normalized
+                return
+            }
+            guard let data = try? JSONEncoder().encode(deepSeekPricingSchedule) else { return }
+            defaults.set(data, forKey: Keys.deepSeekPricingSchedule)
+        }
+    }
+
+    func resetDeepSeekPricingSchedule() {
+        deepSeekPricingSchedule = .current
     }
 
     /// Whether the weekly limit gets a ring of its own, and where it sits.
@@ -334,6 +410,41 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(sessionBlockedSoundName, forKey: Keys.sessionBlockedSoundName) }
     }
 
+    /// Show a notification modal from the notch when a provider's limit resets.
+    @Published var announceUsageReset: Bool {
+        didSet { defaults.set(announceUsageReset, forKey: Keys.announceUsageReset) }
+    }
+
+    /// Sound an alert alongside the usage reset notification modal.
+    @Published var usageResetSound: Bool {
+        didSet { defaults.set(usageResetSound, forKey: Keys.usageResetSound) }
+    }
+
+    /// Which sound a usage reset notification makes.
+    @Published var usageResetSoundName: String {
+        didSet { defaults.set(usageResetSoundName, forKey: Keys.usageResetSoundName) }
+    }
+
+    /// Show a notification modal from the notch when a provider's session limit is reached.
+    @Published var announceSessionLimitReached: Bool {
+        didSet { defaults.set(announceSessionLimitReached, forKey: Keys.announceSessionLimitReached) }
+    }
+
+    /// Show a notification modal from the notch when a provider's weekly limit is reached.
+    @Published var announceWeeklyLimitReached: Bool {
+        didSet { defaults.set(announceWeeklyLimitReached, forKey: Keys.announceWeeklyLimitReached) }
+    }
+
+    /// Sound an alert alongside the limit reached notification modal.
+    @Published var limitReachedSound: Bool {
+        didSet { defaults.set(limitReachedSound, forKey: Keys.limitReachedSound) }
+    }
+
+    /// Which sound a limit reached notification makes.
+    @Published var limitReachedSoundName: String {
+        didSet { defaults.set(limitReachedSoundName, forKey: Keys.limitReachedSoundName) }
+    }
+
     /// The ceiling the Gemini API ring fills against, counted in tokens.
     ///
     /// In tokens rather than money because a bare `GEMINI_API_KEY` publishes no
@@ -372,9 +483,15 @@ final class Preferences: ObservableObject {
 
     private let defaults: UserDefaults
     private enum Keys {
-        /// The old name. Kept so existing choices survive the rename.
+        /// The old off-list. Kept so a 1.9 install can invert it once.
         static let disconnected = "hiddenProviders"
+        static let connected = "connectedProviders"
+        static let seen = "seenProviders"
+        static let disabledModels = "disabledModels"
         static let ollamaEndpoint = "ollamaEndpoint"
+        static let phoneLinkEnabled = "phoneLinkEnabled"
+        static let phoneLinkPort = "phoneLinkPort"
+
         static let lmstudioEndpoint = "lmstudioEndpoint"
         static let introducedOllama = "introducedOllama"
         static let migratedOllamaID = "migratedOllamaLocalID"
@@ -383,6 +500,7 @@ final class Preferences: ObservableObject {
         static let hasLaunched = "hasLaunchedBefore"
         static let visibility = "notchVisibility"
         static let triggerHeight = "notchTriggerHeight"
+        static let foldsForFullScreen = "foldsForFullScreen"
         static let presence = "appPresence"
         static let edge = "notchEdge"
         // A new key, so there is nothing under the old app name to migrate.
@@ -398,6 +516,7 @@ final class Preferences: ObservableObject {
         static let weeklyRing = "weeklyRing"
         static let showsMoveHandle = "showsMoveHandle"
         static let showsSettingsHandle = "showsSettingsHandle"
+        static let claudeDailyPaceRing = "claudeDailyPaceRing"
         static let notchSurfaceStyle = "notchSurfaceStyle"
         static let lastSeenVersion = "lastSeenVersion"
         static let order = "providerOrder"
@@ -411,10 +530,20 @@ final class Preferences: ObservableObject {
         static let peekDuration = "peekDuration"
         static let sessionEndSoundName = "sessionEndSoundName"
         static let sessionBlockedSoundName = "sessionBlockedSoundName"
+        static let announceUsageReset = "announceUsageReset"
+        static let usageResetSound = "usageResetSound"
+        static let usageResetSoundName = "usageResetSoundName"
+        static let announceSessionLimitReached = "announceSessionLimitReached"
+        static let announceWeeklyLimitReached = "announceWeeklyLimitReached"
+        static let limitReachedSound = "limitReachedSound"
+        static let limitReachedSoundName = "limitReachedSoundName"
         /// A new key, so there is nothing under the old app name to migrate.
         static let geminiAPIMonthlyTokenBudget = "geminiAPIMonthlyTokenBudget"
         static let antigravityHeadlineLimit = "antigravityHeadlineLimit"
         static let antigravityHeadlineModel = "antigravityHeadlineModel"
+        static let deepSeekPricingEnabled = "deepSeekPricingEnabled"
+        static let deepSeekPricingSchedule = "deepSeekPricingSchedule"
+        static let showCodexExtraLimits = "showCodexExtraLimits"
     }
 
     /// The budget read straight from disk, off the main actor.
@@ -447,6 +576,20 @@ final class Preferences: ObservableObject {
               let model = AntigravityHeadlineModel(rawValue: value)
         else { return .gemini }
         return model
+    }
+
+    /// Whether extra Codex windows (Spark, code review) are shown, read off
+    /// the main actor.
+    ///
+    /// The Codex provider is an actor and asks for this on every fetch, and
+    /// `@Published` state is main-actor-isolated where `UserDefaults` is
+    /// thread-safe — so the provider reads the store, not the object. Absent
+    /// means on: a first launch should show them. `bool(forKey:)` cannot stand
+    /// in for that default — it answers false for a key that was never written.
+    nonisolated static func storedShowCodexExtraLimits(
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        defaults.object(forKey: Keys.showCodexExtraLimits) as? Bool ?? true
     }
 
     /// True the very first time this copy runs, and never again.
@@ -513,16 +656,64 @@ final class Preferences: ObservableObject {
             }
             defaults.set(true, forKey: Keys.migratedOllamaID)
         }
-        let disconnected = Set(defaults.stringArray(forKey: Keys.disconnected) ?? [])
-        self.disconnectedProviders = disconnected
+        let storedConnected = defaults.stringArray(forKey: Keys.connected)
+        let storedSeen = Set(defaults.stringArray(forKey: Keys.seen) ?? [])
+        let connected: Set<String>
+        let seen: Set<String>
+        let hidden: Set<String>?
+        if let storedConnected {
+            connected = Set(storedConnected)
+            seen = storedSeen.isEmpty ? connected : storedSeen
+            hidden = nil
+        } else if defaults.object(forKey: Keys.disconnected) != nil {
+            // An empty off-list is still a choice: everyone was on.
+            hidden = Set(defaults.stringArray(forKey: Keys.disconnected) ?? [])
+            connected = []
+            seen = storedSeen
+        } else if !self.isFirstLaunch || defaults.bool(forKey: Keys.introducedOllama) {
+            // Launched before this key existed, and never hid anyone.
+            hidden = []
+            connected = []
+            seen = storedSeen
+        } else {
+            hidden = nil
+            connected = []
+            seen = storedSeen
+        }
+        self.codexRolloutCompletionEnabled = defaults.bool(forKey: "codexRolloutCompletionEnabled")
+        self.connectedProviders = connected.filter { !Self.isModelCell($0) }
+        self.seenProviders = seen.filter { !Self.isModelCell($0) }
+        self.pendingHidden = hidden
+        let models: Set<String>
+        if let storedDisabled = defaults.stringArray(forKey: Keys.disabledModels) {
+            models = Set(storedDisabled)
+        } else {
+            // Model cells that lived on the old off-list stay off. Read the
+            // leftover even after `connectedProviders` exists: an earlier
+            // invert left those ids in `hiddenProviders` and then ignored them.
+            let leftover = hidden ?? Set(defaults.stringArray(forKey: Keys.disconnected) ?? [])
+            models = leftover.filter(Self.isModelCell)
+        }
+        self.disabledModels = models
+        defaults.set(Array(models), forKey: Keys.disabledModels)
+        let ollamaOn: Bool
+        if storedConnected != nil {
+            ollamaOn = connected.contains("ollama-local")
+        } else if let hidden {
+            ollamaOn = !hidden.contains("ollama-local")
+        } else {
+            ollamaOn = false
+        }
         self.ollamaMetricsEnabled = defaults.object(forKey: Keys.ollamaMetricsEnabled) as? Bool
-            ?? (defaults.bool(forKey: Keys.introducedOllama)
-                && !disconnected.contains("ollama-local"))
+            ?? (defaults.bool(forKey: Keys.introducedOllama) && ollamaOn)
         self.ollamaEndpoint = (try? OllamaEndpoint.parse(
             defaults.string(forKey: Keys.ollamaEndpoint) ?? OllamaEndpoint.defaultAddress
         ).absoluteString) ?? OllamaEndpoint.defaultAddress
         // A stored choice wins; otherwise LM Studio's own configuration file
         // says where it listens, and 1234 is what it ships with.
+        self.phoneLinkEnabled = defaults.object(forKey: Keys.phoneLinkEnabled) as? Bool ?? false
+        self.phoneLinkPort = defaults.object(forKey: Keys.phoneLinkPort) as? Int ?? 8788
+
         self.lmstudioEndpoint = (try? LMStudioEndpoint.parse(
             defaults.string(forKey: Keys.lmstudioEndpoint)
                 ?? LMStudioEndpoint.configuredAddress() ?? LMStudioEndpoint.defaultAddress
@@ -535,6 +726,9 @@ final class Preferences: ObservableObject {
             .flatMap(NotchVisibility.init(rawValue:)) ?? .onHover
         self.notchTriggerHeight = NotchTriggerHeight.clamp(
             (defaults.object(forKey: Keys.triggerHeight) as? NSNumber)?.intValue ?? NotchTriggerHeight.defaultValue)
+        // Absent means the fold that has shipped since full-screen detection
+        // exists — the setting silences it, it does not introduce it.
+        self.foldsForFullScreen = defaults.object(forKey: Keys.foldsForFullScreen) as? Bool ?? true
         // Absent means never chosen. The Dock is the default because it is the
         // findable one — a new user who cannot see the app anywhere has no way
         // to learn it is running.
@@ -565,6 +759,17 @@ final class Preferences: ObservableObject {
         self.resetTimeFormat = defaults.string(forKey: Keys.resetTimeFormat)
             .flatMap(ResetTimeFormat.init(rawValue:)) ?? .automatic
         self.showUsagePace = defaults.bool(forKey: Self.showUsagePaceKey)
+        // Off by default: it swaps what Claude's ring means, and that is a
+        // choice for whoever budgets their week that way.
+        self.claudeDailyPaceRing = defaults.bool(forKey: Keys.claudeDailyPaceRing)
+        self.showCodexExtraLimits = Self.storedShowCodexExtraLimits(defaults: defaults)
+        self.deepSeekPricingEnabled = defaults.object(forKey: Keys.deepSeekPricingEnabled) as? Bool ?? true
+        if let data = defaults.data(forKey: Keys.deepSeekPricingSchedule),
+           let schedule = try? JSONDecoder().decode(DeepSeekPricing.Schedule.self, from: data) {
+            self.deepSeekPricingSchedule = schedule.normalized
+        } else {
+            self.deepSeekPricingSchedule = .current
+        }
         // Absent means never chosen. Main display only, because that is what a
         // single-panel setup always did — all-displays on a fresh install
         // would put notches where none were expected.
@@ -629,6 +834,15 @@ final class Preferences: ObservableObject {
             ?? SessionChime.defaultFinished
         self.sessionBlockedSoundName = defaults.string(forKey: Keys.sessionBlockedSoundName)
             ?? SessionChime.defaultBlocked
+        self.announceUsageReset = defaults.object(forKey: Keys.announceUsageReset) as? Bool ?? true
+        self.usageResetSound = defaults.object(forKey: Keys.usageResetSound) as? Bool ?? true
+        self.usageResetSoundName = defaults.string(forKey: Keys.usageResetSoundName)
+            ?? SessionChime.defaultFinished
+        self.announceSessionLimitReached = defaults.object(forKey: Keys.announceSessionLimitReached) as? Bool ?? true
+        self.announceWeeklyLimitReached = defaults.object(forKey: Keys.announceWeeklyLimitReached) as? Bool ?? true
+        self.limitReachedSound = defaults.object(forKey: Keys.limitReachedSound) as? Bool ?? true
+        self.limitReachedSoundName = defaults.string(forKey: Keys.limitReachedSoundName)
+            ?? SessionChime.defaultBlocked
         self.geminiAPIMonthlyTokenBudget = Self.storedGeminiAPIMonthlyTokenBudget(defaults: defaults)
         // Read from the system rather than from our own store: the user can turn
         // this off in System Settings, and a remembered `true` would then be a lie.
@@ -665,16 +879,102 @@ final class Preferences: ObservableObject {
         }
     }
 
+    /// Claude and Codex stay on for a first install and for a newly discovered
+    /// profile. Everyone else starts off.
+    static func isDefaultOnFamily(_ providerID: String) -> Bool {
+        ClaudeProfile.isClaude(providerID: providerID)
+            || CodexProfile.isCodex(providerID: providerID)
+    }
+
+    /// Model cells are `providerID:model:…`. A new loaded model is not a new
+    /// provider, and absence on the provider on-list cannot mean on for these.
+    static func isModelCell(_ id: String) -> Bool {
+        id.contains(":model:")
+    }
+
     func isConnected(_ providerID: String) -> Bool {
-        !disconnectedProviders.contains(providerID)
+        if Self.isModelCell(providerID) {
+            return !disabledModels.contains(providerID)
+        }
+        if defaults.object(forKey: Keys.connected) != nil {
+            return connectedProviders.contains(providerID)
+        }
+        if let hidden = pendingHidden {
+            return !hidden.contains(providerID)
+        }
+        return Self.isDefaultOnFamily(providerID)
     }
 
     func setConnected(_ connected: Bool, for providerID: String) {
-        if connected {
-            disconnectedProviders.remove(providerID)
-        } else {
-            disconnectedProviders.insert(providerID)
+        if Self.isModelCell(providerID) {
+            if connected {
+                disabledModels.remove(providerID)
+            } else {
+                disabledModels.insert(providerID)
+            }
+            return
         }
+        if defaults.object(forKey: Keys.connected) == nil, let hidden = pendingHidden {
+            let next = connected ? hidden.subtracting([providerID]) : hidden.union([providerID])
+            pendingHidden = next
+            defaults.set(Array(next), forKey: Keys.disconnected)
+            seenProviders.insert(providerID)
+            return
+        }
+        if defaults.object(forKey: Keys.connected) == nil {
+            // First install: persist Claude and Codex as on, then apply this toggle.
+            connectedProviders = ["claude", "codex"]
+        }
+        if connected {
+            connectedProviders.insert(providerID)
+        } else {
+            connectedProviders.remove(providerID)
+        }
+        seenProviders.insert(providerID)
+    }
+
+    /// Fold this Mac's current provider ids into the stored on-list.
+    ///
+    /// First launch writes Claude and Codex. An upgrade from `hiddenProviders`
+    /// inverts that off-list against `discoveredIDs`. After that, only a
+    /// never-seen Claude or Codex id is added automatically. Model cells stay
+    /// on `disabledModels` and are not inverted.
+    func reconcile(discoveredIDs: [String]) {
+        let discovered = Set(discoveredIDs.filter { !Self.isModelCell($0) })
+        if defaults.object(forKey: Keys.connected) != nil {
+            connectedProviders.subtract(connectedProviders.filter(Self.isModelCell))
+            seenProviders.subtract(seenProviders.filter(Self.isModelCell))
+            let novel = discovered.subtracting(seenProviders)
+            for id in novel where Self.isDefaultOnFamily(id) {
+                connectedProviders.insert(id)
+            }
+            seenProviders.formUnion(discovered)
+            return
+        }
+        if let hidden = pendingHidden {
+            connectedProviders = discovered.subtracting(hidden.filter { !Self.isModelCell($0) })
+            seenProviders = discovered
+            pendingHidden = nil
+            return
+        }
+        connectedProviders = Set(discovered.filter(Self.isDefaultOnFamily))
+        seenProviders = discovered
+    }
+
+    /// The fork's saved query catalog owns account choices, including manual
+    /// entries. Mirror it without treating a deleted account as newly discovered.
+    func reconcileCatalog(_ entries: [QueryEntry]) {
+        let ids = Set(entries.map(\.id))
+        let connected = connectedProviders.subtracting(ids)
+            .union(entries.filter(\.enabled).map(\.id))
+        if connected != connectedProviders { connectedProviders = connected }
+        let seen = seenProviders.union(ids)
+        if seen != seenProviders { seenProviders = seen }
+    }
+
+    /// What `UsageStore` still treats as the off-list, among ids it knows.
+    func disconnectedIDs(among discovered: [String]) -> Set<String> {
+        Set(discovered.filter { !isConnected($0) }).union(disabledModels)
     }
 
     /// Record a new order, keeping the ids that are not on this Mac today.

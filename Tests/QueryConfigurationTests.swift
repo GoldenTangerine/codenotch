@@ -127,6 +127,23 @@ final class QueryConfigurationTests: XCTestCase {
         XCTAssertEqual(reopened.entries.map(\.id), ["ollama-local"])
     }
 
+    func testKimiAndKiroStartDisabledWithoutChangingSavedAccounts() throws {
+        let defaults = defaults()
+        let secrets = MemoryQuerySecrets()
+        let original = QueryCatalog(providers: [QueryProbe(id: "claude"), QueryProbe(id: "glm")],
+            disconnected: ["claude"], defaults: defaults, secrets: secrets)
+        XCTAssertEqual(original.entries.filter(\.enabled).map(\.id), ["glm"])
+        let providers = ["claude", "glm", "kimi", "kiro"].map { QueryProbe(id: $0) }
+        let migrated = QueryCatalog(providers: providers, disconnected: [], defaults: defaults, secrets: secrets)
+        XCTAssertEqual(migrated.entries.filter(\.enabled).map(\.id), ["glm"])
+        XCTAssertEqual(migrated.entries.map(\.id), ["claude", "glm", "kimi", "kiro"])
+        migrated.setEnabled(true, id: "kimi")
+        try migrated.delete("kiro")
+        let restored = QueryCatalog(providers: providers, disconnected: [], defaults: defaults, secrets: secrets)
+        XCTAssertEqual(restored.entries.filter(\.enabled).map(\.id), ["glm", "kimi"])
+        XCTAssertFalse(restored.entries.contains { $0.id == "kiro" })
+    }
+
     func testConfiguredProviderKeepsWeeklyWindowAndAccountPlan() {
         var entry = QueryEntry()
         entry.mode = .automatic
