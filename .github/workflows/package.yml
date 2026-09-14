@@ -11,16 +11,13 @@ name: Package
 # answers "can somebody run this without a Mac dev setup". Tying them together
 # would mean a failing unit test also removes the only way to try the build.
 on:
-  push:
-    branches: [main]
-  pull_request:
   # So a build can be produced from any branch on demand, without pushing to
   # main first — this is the button to press when you just want to try it.
   workflow_dispatch:
 
 jobs:
   package:
-    if: github.repository == 'vinzdg/codenotch'
+    if: github.repository == 'GoldenTangerine/codenotch'
     name: Unsigned app bundle
     # Only the preview release step writes anything; the token is read-only by
     # default on this repository, and `gh release create` fails without this.

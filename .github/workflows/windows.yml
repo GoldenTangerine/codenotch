@@ -11,19 +11,11 @@ name: Windows
 # Windows change could merge on a green check that never compiled it. Its own
 # file, so those two stay about the Mac app.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'windows/**'
-      - '.github/workflows/windows.yml'
-  pull_request:
-    paths:
-      - 'windows/**'
-      - '.github/workflows/windows.yml'
+  workflow_dispatch:
 
 jobs:
   build:
-    if: github.repository == 'vinzdg/codenotch'
+    if: github.repository == 'GoldenTangerine/codenotch'
     name: Build and test
     runs-on: windows-latest
     defaults:

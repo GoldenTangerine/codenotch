@@ -282,6 +282,14 @@ final class LocalizationTests: XCTestCase {
             ElapsedCopy.ago(since: now.addingTimeInterval(-6 * 60), now: now, locale: german),
             "vor 6 Min"
         )
+        XCTAssertEqual(
+            ElapsedCopy.ago(since: now.addingTimeInterval(-60 * 60), now: now, locale: german),
+            "vor 1 Std"
+        )
+        XCTAssertEqual(
+            ElapsedCopy.ago(since: now.addingTimeInterval(-65 * 60), now: now, locale: german),
+            "vor 1 Std 5 Min"
+        )
     }
 
     func testResetCopyUnderAnHourInGerman() {

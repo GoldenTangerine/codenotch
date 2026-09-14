@@ -40,6 +40,15 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.33",
+            headline: L10n.t("Reliable background activity and complete German elapsed times."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Keep Codex profile activity isolated during background polling")),
+                ReleaseNote.Change(title: L10n.t("Show German elapsed times correctly for minutes and hours")),
+                ReleaseNote.Change(title: L10n.t("Includes the provider, alert and Code Switch R improvements from 1.6.32"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.32",
             headline: L10n.t("More providers and reliable alerts, with Code Switch R integration preserved."),
             changes: [

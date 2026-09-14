@@ -1,6 +1,50 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Reliable background activity and complete German elapsed times.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可靠的后台活动识别与完整的德语时间显示。"
+          }
+        }
+      }
+    },
+    "Keep Codex profile activity isolated during background polling": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "后台轮询保持不同 Codex 配置目录的活动独立"
+          }
+        }
+      }
+    },
+    "Show German elapsed times correctly for minutes and hours": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正确显示德语的分钟及小时相对时间"
+          }
+        }
+      }
+    },
+    "Includes the provider, alert and Code Switch R improvements from 1.6.32": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "包含 1.6.32 的供应商、提醒和 Code Switch R 联动改进"
+          }
+        }
+      }
+    },
     "More providers and reliable alerts, with Code Switch R integration preserved.": {
       "extractionState": "manual",
       "localizations": {
@@ -21966,6 +22010,12 @@
             "state": "translated",
             "value": "há %lld h %lld min"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vor %lld Std %lld Min"
+          }
         }
       }
     },
@@ -22001,6 +22051,12 @@
             "state": "translated",
             "value": "há %lld h"
           }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vor %lld Std"
+          }
         }
       }
     },
@@ -22035,6 +22091,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "há %lld min"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vor %lld Min"
           }
         }
       }
