@@ -40,6 +40,14 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.41",
+            headline: L10n.t("Independent inner ring"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Space all three rings evenly between their edges")),
+                ReleaseNote.Change(title: L10n.t("Use the same middle layer for two rings without changing line widths"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.40",
             headline: L10n.t("Independent inner ring"),
             changes: [

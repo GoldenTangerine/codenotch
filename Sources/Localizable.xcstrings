@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Space all three rings evenly between their edges": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "统一三圈线条边缘之间的间距"
+          }
+        }
+      }
+    },
+    "Use the same middle layer for two rings without changing line widths": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "两圈沿用同一第二层位置，保持线宽不变"
+          }
+        }
+      }
+    },
     "Bring two rings closer while keeping the daily budget inside": {
       "extractionState": "manual",
       "localizations": {

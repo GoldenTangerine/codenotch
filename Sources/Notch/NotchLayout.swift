@@ -62,7 +62,11 @@ enum NotchLayout {
     static let independentRingGrowth: CGFloat = 20
     static let independentRingInset: CGFloat = 14
     static let independentRingStroke: CGFloat = 4
-    static let expandedSecondaryInsideInset: CGFloat = 8
+    // 按线条边缘平分空隙，补偿每日预算内圈更粗的线宽。
+    static var expandedSecondaryInsideInset: CGFloat {
+        (expandedSecondaryOutsideInset + independentRingInset
+            + (weeklyRingStroke - independentRingStroke) / 2) / 2
+    }
     static var expandedSecondaryOutsideInset: CGFloat { weeklyRingStroke / 2 }
     static let trackStroke   = Design.px(15.5)
     static let progressStroke = Design.px(8)

@@ -153,6 +153,17 @@ import Testing
         #expect(innerOuterEdge < middleInnerEdge)
     }
 
+    @Test func independentRingsHaveEqualEdgeClearance() {
+        let outerInnerEdge = NotchLayout.expandedSecondaryOutsideInset + NotchLayout.weeklyRingStroke / 2
+        let middleOuterEdge = NotchLayout.expandedSecondaryInsideInset - NotchLayout.weeklyRingStroke / 2
+        let middleInnerEdge = NotchLayout.expandedSecondaryInsideInset + NotchLayout.weeklyRingStroke / 2
+        let innerOuterEdge = NotchLayout.independentRingInset - NotchLayout.independentRingStroke / 2
+        let outerGap = middleOuterEdge - outerInnerEdge
+        let innerGap = innerOuterEdge - middleInnerEdge
+        #expect(outerGap > 0)
+        #expect(abs(outerGap - innerGap) < 0.000001)
+    }
+
     @Test func dailyBudgetTooltipRendersAmountAndRemainingProgress() throws {
         let raw = snapshot([weekly, quota("daily", used: 50, total: 100)])
         let budget = try #require(CodeSwitchDailyBudget.reading(for: raw))
