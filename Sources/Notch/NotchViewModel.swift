@@ -266,10 +266,7 @@ final class NotchViewModel: ObservableObject {
     @Published var codeSwitchQuotaRatiosEnabled = false
 
     var ringGrowth: CGFloat {
-        snapshots.contains {
-            IndependentQuotaRing.reading(for: $0, enabled: independentInnerRing,
-                                         ratiosEnabled: codeSwitchQuotaRatiosEnabled) != nil
-        } ? NotchLayout.independentRingGrowth : 0
+        independentInnerRing ? NotchLayout.independentRingGrowth : 0
     }
     var cellRingDiameter: CGFloat { NotchLayout.ringDiameter + ringGrowth }
     var bodyDepth: CGFloat { NotchLayout.bodyDepth(for: edge, ringGrowth: ringGrowth) }

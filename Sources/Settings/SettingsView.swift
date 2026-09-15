@@ -666,15 +666,13 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Toggle(L10n.t("Code Switch R period ratio rings"), isOn: $preferences.codeSwitchQuotaRatiosEnabled)
-                Text(preferences.independentInnerRing
-                    ? L10n.t("The inner ring shows daily use against the weekly limit, or weekly use against the monthly limit when daily quota is unavailable. Alerts use actual quota limits.")
-                    : L10n.t("Show daily use against the weekly limit and weekly use against the monthly limit. With only two periods, the thin ring keeps the longer period's usage rate. Alerts use actual quota limits."))
+                Text(L10n.t("Divide remaining quota by days until reset to estimate daily availability. Prefer weekly over monthly quota; missing daily usage is recorded locally. Alerts use actual limits."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Toggle(L10n.t("Independent inner ring"), isOn: $preferences.independentInnerRing)
-                Text(L10n.t("Keep the original quota rings and add pace or period ratio inside. The percentage follows the innermost ring."))
+                Text(L10n.t("Enlarge all provider rings equally. Show daily budget on the thick inner ring and its percentage below."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

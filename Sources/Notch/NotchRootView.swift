@@ -128,6 +128,7 @@ struct NotchRootView: View {
                         },
                         deepSeekPricingEnabled: model.deepSeekPricingEnabled,
                         deepSeekPricingSchedule: model.deepSeekPricingSchedule,
+                        dailyBudgetEnabled: model.codeSwitchQuotaRatiosEnabled,
                         onFocusSession: model.onFocusSession
                     )
                         // Deliberately *no* `.id` here: the card is one object
@@ -314,7 +315,8 @@ struct NotchRootView: View {
                 weeklyRing: model.weeklyRing,
                 codeSwitchQuotaRatiosEnabled: model.codeSwitchQuotaRatiosEnabled,
                 independentInnerRing: model.independentInnerRing,
-                cellRingDiameter: model.cellRingDiameter
+                cellRingDiameter: model.cellRingDiameter,
+                now: model.now
             )
                 // Pinned to what the cell claims along the stack, or the drawn
                 // rings stop lining up with the centres `ringCenter` hands to

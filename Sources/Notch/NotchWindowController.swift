@@ -252,7 +252,10 @@ final class NotchWindowController {
 
         model.$independentInnerRing.combineLatest(model.$codeSwitchQuotaRatiosEnabled)
             .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.relocate() }
+            .sink { [weak self] _ in
+                self?.relocate()
+                self?.startClock()
+            }
             .store(in: &cancellables)
 
         // No `receive(on:)`: the appearance has to be on the window before the
@@ -1393,9 +1396,18 @@ final class NotchWindowController {
     // MARK: - Odds and ends
 
     private func startClock() {
+        clockTimer?.invalidate()
         // Keeps "Resets in N min" from going stale while the tooltip is open.
-        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.model.now = Date() }
+        let timer = Timer(timeInterval: model.codeSwitchQuotaRatiosEnabled ? 1 : 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let now = Date()
+                let visibleBudget = self.model.isExpanded && self.model.codeSwitchQuotaRatiosEnabled
+                    && self.model.visibleIndices.contains { self.model.snapshots[$0].linked != nil }
+                if visibleBudget || now.timeIntervalSince(self.model.now) >= 30 {
+                    self.model.now = now
+                }
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         clockTimer = timer

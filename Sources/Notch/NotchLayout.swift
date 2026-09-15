@@ -61,8 +61,9 @@ enum NotchLayout {
     static let ringDiameter  = Design.px(117)   // 44pt, the design spec's anchor
     static let independentRingGrowth: CGFloat = 20
     static let independentRingInset: CGFloat = 14
+    static let independentRingStroke: CGFloat = 4
     static let expandedSecondaryInsideInset: CGFloat = 8
-    static let expandedSecondaryOutsideInset: CGFloat = -2.5
+    static var expandedSecondaryOutsideInset: CGFloat { weeklyRingStroke / 2 }
     static let trackStroke   = Design.px(15.5)
     static let progressStroke = Design.px(8)
     static let glyphSize     = Design.px(46)

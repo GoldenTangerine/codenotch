@@ -23,46 +23,182 @@ import Testing
                        active: Bool = true, unlimited: Bool = false,
                        kind: String = "progress", invalid: String? = nil, reset: String? = nil) -> CodeSwitchQuota {
         CodeSwitchQuota(key: key, label: nil, used: used, total: total, unlimited: unlimited,
-            nextReset: reset, active: active, valueMode: mode, unit: unit, extra: nil,
+            nextReset: reset ?? ISO8601DateFormatter().string(from: Date().addingTimeInterval(5 * 86_400)), active: active, valueMode: mode, unit: unit, extra: nil,
             invalidMessage: invalid, displayKind: kind)
     }
 
     private var weekly: CodeSwitchQuota { quota("weekly", used: 80, total: 200) }
     private var monthly: CodeSwitchQuota { quota("monthly", used: 200, total: 2000) }
 
-    @Test func independentRingKeepsActualQuotasAndPrefersDailyRatio() throws {
+    @Test func independentRingKeepsActualQuotasAndUsesDailyBudget() throws {
         let raw = snapshot([quota("daily"), weekly, monthly])
+        let now = Date()
+        let budget = try #require(CodeSwitchDailyBudget.reading(for: raw, now: now))
         for placement in [WeeklyRing.off, .inside, .outside] {
             let cell = ProviderCell(snapshot: raw, activity: ActivitySummary(state: .working),
-                weeklyRing: placement, codeSwitchQuotaRatiosEnabled: true, independentInnerRing: true)
+                weeklyRing: placement, codeSwitchQuotaRatiosEnabled: true, independentInnerRing: true, now: now)
             #expect(cell.displayedMainFraction == raw.ringFraction)
             #expect(cell.displayedSecondaryFraction == raw.secondaryWindow?.usedFraction)
-            #expect(cell.innerReading?.fraction == 0.05)
+            #expect(cell.innerReading?.fraction == budget.usedFraction)
             let text = try #require(cell.quotaRingText)
-            #expect(text.contains(L10n.t("Daily used / Weekly limit")))
-            #expect(!text.contains(L10n.t("Weekly used / Monthly limit")))
+            #expect(text.contains(L10n.t("Daily budget")))
             #expect(text.contains(L10n.t("Secondary quota ring")) == (placement != .off))
-            #expect(cell.accessibilityText.contains(", 5%"))
         }
-        let legacy = ProviderCell(snapshot: raw, codeSwitchQuotaRatiosEnabled: true)
+        let legacy = ProviderCell(snapshot: raw, codeSwitchQuotaRatiosEnabled: true, now: now)
         #expect(legacy.innerReading == nil)
-        #expect(legacy.displayedMainFraction == 0.05)
-        let weeklyOnly = ProviderCell(snapshot: snapshot([weekly, monthly]),
-            codeSwitchQuotaRatiosEnabled: true, independentInnerRing: true)
-        #expect(weeklyOnly.innerReading?.fraction == 0.04)
+        #expect(legacy.displayedMainFraction == budget.usedFraction)
     }
 
-    @Test func unavailableInnerRingFallsBackWithoutEnlarging() {
-        for raw in [snapshot([weekly]), snapshot([quota("daily", unit: "CNY"), weekly])] {
-            let cell = ProviderCell(snapshot: raw, codeSwitchQuotaRatiosEnabled: true, independentInnerRing: true)
-            #expect(cell.innerReading == nil)
-            #expect(cell.displayedMainFraction == raw.ringFraction)
+    @Test func allProvidersEnlargeEvenWithoutBudget() {
+        for raw in [snapshot([]), snapshot([quota("five_hour")]), snapshot([weekly])] {
             let model = NotchViewModel()
             model.snapshots = [raw]
             model.independentInnerRing = true
+            #expect(model.ringGrowth == NotchLayout.independentRingGrowth)
+            #expect(model.cellRingDiameter == 64)
             model.codeSwitchQuotaRatiosEnabled = true
+            #expect(model.cellRingDiameter == 64)
+            model.independentInnerRing = false
             #expect(model.ringGrowth == 0)
         }
+    }
+
+    @Test func outsideSecondaryKeepsTheSamePaintedDiameter() throws {
+        var widths: [Int] = []
+        for placement in [WeeklyRing.off, .inside, .outside] {
+            for secondary: Double? in [nil, 1] {
+                let renderer = ImageRenderer(content: ProviderRing(usedFraction: 1, glyph: .claude,
+                    weeklyFraction: secondary, weeklyRing: placement, innerFraction: 1, expanded: true)
+                    .padding(10).background(Color.black).environment(\.colorScheme, .dark))
+                renderer.scale = 4
+                let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+                var painted: [Int] = []
+                for x in 0..<bitmap.pixelsWide {
+                    for y in 0..<bitmap.pixelsHigh {
+                        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                        let values = [color.redComponent, color.greenComponent, color.blueComponent]
+                        if values.max()! - values.min()! > 0.3 { painted.append(x); break }
+                    }
+                }
+                widths.append(try #require(painted.max()) - #require(painted.min()) + 1)
+            }
+        }
+        #expect(try #require(widths.max()) - #require(widths.min()) <= 2)
+        #expect(widths.allSatisfy { abs($0 - 256) <= 2 })
+    }
+
+    @Test func refreshPreservesTodayUsageButDoesNotAccumulateOrCrossDays() throws {
+        let now = Date()
+        let reset = ISO8601DateFormatter().string(from: now.addingTimeInterval(5 * 86_400))
+        let store = CodeSwitchDailyUsage()
+        func raw(_ used: Double, loading: Bool = false) -> ProviderSnapshot {
+            var item = snapshot([quota("weekly", used: used, total: 700, reset: reset)])
+            let old = item.linked!.provider
+            item.linked = CodeSwitchDetails(platform: "Codex", provider: CodeSwitchProvider(
+                providerId: old.providerId, providerName: old.providerName, icon: old.icon,
+                activeRequests: 0, status: "enabled", loading: loading, updatedAt: 0, quotas: old.quotas, stats: nil))
+            return item
+        }
+        _ = store.observe([raw(100)], now: now)
+        let ready = store.observe([raw(150)], now: now)[0]
+        let loading = store.observe([raw(150, loading: true)], now: now)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: loading, now: now) == CodeSwitchDailyBudget.reading(for: ready, now: now))
+        #expect(store.observe([raw(200, loading: true)], now: now)[0].codeSwitchDailyUsage?.todayUsed == 50)
+        #expect(store.observe([raw(200)], now: now)[0].codeSwitchDailyUsage?.todayUsed == 100)
+        let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: now)!
+        #expect(store.observe([raw(200, loading: true)], now: tomorrow)[0].codeSwitchDailyUsage == nil)
+    }
+
+    @Test func dailyCounterDoesNotRequireADailyLimit() throws {
+        let now = Date()
+        for unlimited in [true, false] {
+            let raw = snapshot([quota("weekly", used: 150, total: 700),
+                                quota("daily", used: 50, total: 0, unlimited: unlimited)])
+            let budget = try #require(CodeSwitchDailyBudget.reading(for: raw, now: now))
+            #expect(budget.todayUsed == 50 && !budget.sinceObservation)
+            #expect(abs(budget.usedFraction - 0.3125) < 0.00001)
+        }
+        for daily in [quota("daily", used: -1), quota("daily", used: .nan),
+                      quota("daily", used: 50, unit: "CNY"), quota("daily", used: 50, active: false),
+                      quota("daily", used: 50, reset: "2000-01-01T00:00:00Z")] {
+            let budget = try #require(CodeSwitchDailyBudget.reading(for: snapshot([weekly, daily]), now: now))
+            #expect(budget.todayUsed == 0 && budget.sinceObservation)
+        }
+    }
+
+    @Test func cachedResetDatesRemainDistinctAndInvalidDatesStayInvalid() {
+        let first = quota("weekly", reset: "2026-10-01T00:00:00Z")
+        let equivalent = quota("weekly", reset: "2026-10-01T08:00:00+08:00")
+        let changed = quota("weekly", reset: "2026-10-02T00:00:00Z")
+        for _ in 0..<3 {
+            #expect(first.reset == equivalent.reset)
+            #expect(first.reset != changed.reset)
+            #expect(quota("weekly", reset: "invalid").reset == nil)
+        }
+    }
+
+    @Test func enlargedRingsShareDiameterAndInnerStrokeIsStrongest() throws {
+        for fraction: Double? in [nil, 0.5] {
+            let renderer = ImageRenderer(content: ProviderRing(usedFraction: 0.5, glyph: .claude,
+                weeklyFraction: 0.5, weeklyRing: .outside, innerFraction: fraction, expanded: true))
+            renderer.scale = 2
+            let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+            #expect(bitmap.pixelsWide == 128 && bitmap.pixelsHigh == 128)
+        }
+        #expect(NotchLayout.independentRingStroke > NotchLayout.weeklyRingStroke)
+        let innerOuterEdge = 32 - NotchLayout.independentRingInset + NotchLayout.independentRingStroke / 2
+        let middleInnerEdge = 32 - NotchLayout.expandedSecondaryInsideInset - NotchLayout.weeklyRingStroke / 2
+        #expect(innerOuterEdge < middleInnerEdge)
+    }
+
+    @Test func dailyBudgetTooltipRendersAmountAndRemainingProgress() throws {
+        let raw = snapshot([weekly, quota("daily", used: 50, total: 100)])
+        let budget = try #require(CodeSwitchDailyBudget.reading(for: raw))
+        let renderer = ImageRenderer(content: CodeSwitchDailyBudgetRow(budget: budget)
+            .frame(width: NotchLayout.cardTextWidth)
+            .environment(\.codenotchAccentColor, .blue)
+            .background(Color.black))
+        renderer.scale = 2
+        let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+        #expect(bitmap.pixelsHigh > 60)
+        #expect(budget.available > 0 && budget.remainingFraction > 0 && budget.remainingFraction < 1)
+        #expect(!budget.amount(budget.available).isEmpty)
+    }
+
+    @Test func bridgePublishesObservedUsageAndPreservesSessionIdentity() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("tray-snapshot-v1.json")
+        let bridge = CodeSwitchBridge(file: file, dailyUsage: CodeSwitchDailyUsage())
+        bridge.setDailyBudgetEnabled(true)
+        let now = Date()
+        let sessionKey = String(repeating: "a", count: 64)
+        let reset = ISO8601DateFormatter().string(from: now.addingTimeInterval(5 * 86_400))
+        func publish(_ used: Double, sequence: Int) throws {
+            let value: [String: Any] = ["version": 1, "session": "budget-test", "sequence": sequence,
+                "heartbeatAt": now.timeIntervalSince1970 * 1000,
+                "platforms": [["platform": "codex", "name": "Codex", "icon": "openai", "error": false,
+                    "providers": [["providerId": "budget", "providerName": "Budget", "icon": "openai",
+                        "activeRequests": 0, "status": "enabled", "loading": false, "updatedAt": 0,
+                        "quotas": [["key": "weekly", "used": used, "total": 700,
+                            "nextReset": reset, "active": true, "displayKind": "progress"]]]],
+                    "sessionBindings": [["sessionKey": sessionKey, "providerId": "budget", "providerName": "Budget",
+                        "icon": "openai", "sequence": sequence, "updatedAt": now.timeIntervalSince1970 * 1000]]]]]
+            try JSONSerialization.data(withJSONObject: value).write(to: file, options: .atomic)
+        }
+        try publish(150, sequence: 1)
+        await bridge.poll(now: now)
+        #expect(bridge.snapshots.first?.codeSwitchDailyUsage?.todayUsed == 0)
+        try publish(180, sequence: 2)
+        await bridge.poll(now: now)
+        #expect(bridge.snapshots.first?.codeSwitchDailyUsage?.todayUsed == 30)
+        #expect(bridge.bindings[sessionKey]?.snapshot.codeSwitchDailyUsage?.todayUsed == 30)
+        #expect(bridge.bindings[sessionKey]?.snapshot.linked?.provider.status == "session")
+        bridge.setDailyBudgetEnabled(false)
+        await bridge.poll(now: now)
+        #expect(bridge.snapshots.first?.codeSwitchDailyUsage == nil)
+        #expect(bridge.snapshots.first?.headline?.usedFraction == 180.0 / 700)
     }
 
     @Test func claudeIndependentPaceRestoresSessionAndWeekWithoutChangingSnapshot() throws {
@@ -98,6 +234,8 @@ import Testing
             #expect(model.ringCenter(index: 0) == originalCenter + NotchLayout.independentRingGrowth / 2)
             #expect(abs(model.ringCenter(index: 1) - model.ringCenter(index: 0) - model.cellPitch) < 0.000001)
             model.codeSwitchQuotaRatiosEnabled = false
+            #expect(model.bodyDepth == originalDepth + NotchLayout.independentRingGrowth)
+            model.independentInnerRing = false
             #expect(model.bodyDepth == originalDepth)
         }
     }
@@ -167,7 +305,7 @@ import Testing
         let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
         let diameter = NotchLayout.ringDiameter + NotchLayout.independentRingGrowth
         #expect(abs(CGFloat(bitmap.pixelsWide) / 3 - diameter) < 1)
-        for radius in [diameter / 2 - NotchLayout.trackStroke / 2,
+        for radius in [diameter / 2 - NotchLayout.weeklyRingStroke / 2,
                        diameter / 2 - NotchLayout.expandedSecondaryInsideInset,
                        diameter / 2 - NotchLayout.independentRingInset] {
             let color = try #require(bitmap.colorAt(x: Int((diameter / 2 + radius) * 3),
@@ -180,138 +318,104 @@ import Testing
     private func snapshot(_ quotas: [CodeSwitchQuota], platform: String = "codex") -> ProviderSnapshot {
         let provider = CodeSwitchProvider(providerId: "supplier", providerName: "Supplier", icon: "openai",
             activeRequests: 0, status: "enabled", loading: false, updatedAt: 0, quotas: quotas, stats: nil)
-        return provider.snapshot(platform: CodeSwitchPlatform(platform: platform, name: platform,
+        let raw = provider.snapshot(platform: CodeSwitchPlatform(platform: platform, name: platform,
             icon: "openai", error: false, providers: [provider]))
+        return CodeSwitchDailyUsage().observe([raw], now: Date())[0]
     }
 
     @Test(arguments: ["claude", "codex", "gemini", "custom:工具"])
-    func threePeriodsUseActualAmountsAcrossPlatforms(platform: String) throws {
-        let raw = snapshot([monthly, quota("five_hour"), weekly, quota("daily")], platform: platform)
-        let before = raw
-        let rings = try #require(CodeSwitchQuotaRings.reading(for: raw, enabled: true))
-        #expect(rings.main.fraction == 0.05)
-        #expect(rings.secondary.fraction == 0.04)
-        #expect(rings.main.label == L10n.t("Daily used / Weekly limit"))
-        #expect(rings.secondary.label == L10n.t("Weekly used / Monthly limit"))
-        #expect(raw == before)
-        #expect(raw.headline?.id == "monthly")
-        #expect(raw.windows.count == 4)
+    func singleWeeklyOrMonthlyAndShorterPeriodWork(platform: String) throws {
+        let now = Date()
+        for key in ["weekly", "monthly"] {
+            let raw = snapshot([quota(key)], platform: platform)
+            let budget = try #require(CodeSwitchDailyBudget.reading(for: raw, now: now))
+            #expect(budget.source.key == key)
+            #expect(budget.todayUsed == 0)
+            #expect(budget.available > 0)
+            #expect(budget.sinceObservation)
+            #expect(CodeSwitchQuotaRings.reading(for: raw, enabled: false) == nil)
+        }
+        let raw = snapshot([monthly, weekly], platform: platform)
+        #expect(CodeSwitchDailyBudget.reading(for: raw, now: now)?.source.key == "weekly")
     }
 
-    @Test func twoPeriodsKeepTheLongerPeriodsActualRate() throws {
-        let daily = try #require(CodeSwitchQuotaRings.reading(
-            for: snapshot([quota("daily"), weekly]), enabled: true))
-        #expect(daily.main.fraction == 0.05)
-        #expect(daily.secondary.fraction == 0.4)
-        #expect(daily.secondary.label == weekly.title)
-        let week = try #require(CodeSwitchQuotaRings.reading(for: snapshot([weekly, monthly]), enabled: true))
-        #expect(week.main.fraction == 0.04)
-        #expect(week.secondary.fraction == 0.1)
-        #expect(week.secondary.label == monthly.title)
-    }
-
-    @Test func disabledNativeAndMissingAdjacentPeriodsKeepOriginalDisplay() {
-        let raw = snapshot([quota("daily"), weekly, monthly])
-        #expect(CodeSwitchQuotaRings.reading(for: raw, enabled: false) == nil)
-        var native = raw
-        native.linked = nil
-        #expect(CodeSwitchQuotaRings.reading(for: native, enabled: true) == nil)
-        for quotas in [[], [weekly], [quota("daily"), monthly], [quota("five_hour"), weekly]] {
-            #expect(CodeSwitchQuotaRings.reading(for: snapshot(quotas), enabled: true) == nil)
+    @Test func dynamicBudgetUsesFractionalDaysAndOneDayMinimum() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let iso = ISO8601DateFormatter()
+        for days in [5.0, 2.5, 0.25] {
+            let raw = snapshot([
+                quota("weekly", used: 150, total: 700, reset: iso.string(from: now.addingTimeInterval(days * 86_400))),
+                quota("daily", used: 50, total: 200, reset: iso.string(from: now.addingTimeInterval(3600)))])
+            let budget = try #require(CodeSwitchDailyBudget.reading(for: raw, now: now))
+            let available = 550 / max(1, days)
+            #expect(abs(budget.available - available) < 0.000001)
+            #expect(abs(budget.usedFraction - 50 / (50 + available)) < 0.000001)
+            #expect(abs(budget.remainingFraction - available / (50 + available)) < 0.000001)
+            #expect(!budget.sinceObservation)
+            #expect(budget.amount(110) == "$110")
         }
     }
 
-    @Test func invalidWeeklyAmountsNeverProduceRatios() {
-        let invalid = [
-            quota("weekly", total: 0), quota("weekly", total: -1),
-            quota("weekly", total: .infinity), quota("weekly", total: .nan),
-            quota("weekly", used: -1), quota("weekly", used: .infinity), quota("weekly", used: .nan),
-            quota("weekly", active: false), quota("weekly", unlimited: true),
-            quota("weekly", kind: "balance"), quota("weekly", invalid: "Unavailable"),
-            quota("weekly", used: .greatestFiniteMagnitude, total: .leastNonzeroMagnitude)
-        ]
-        for week in invalid {
-            #expect(CodeSwitchQuotaRings.reading(for: snapshot([quota("daily"), week, monthly]), enabled: true) == nil)
+    @Test func expiredInvalidAndUnlimitedPeriodsFallBackSafely() throws {
+        let now = Date()
+        let expired = ISO8601DateFormatter().string(from: now.addingTimeInterval(-1))
+        for bad in [quota("weekly", reset: expired), quota("weekly", reset: "invalid"),
+                    quota("weekly", unlimited: true), quota("weekly", total: 0),
+                    quota("weekly", used: .nan), quota("weekly", used: -1),
+                    quota("weekly", unit: "%"), quota("weekly", active: false)] {
+            let raw = snapshot([bad])
+            #expect(CodeSwitchDailyBudget.reading(for: raw, now: now) == nil)
+            let fallback = snapshot([bad, monthly])
+            #expect(CodeSwitchDailyBudget.reading(for: fallback, now: now)?.source.key == "monthly")
         }
-        #expect(CodeSwitchQuotaRings.reading(
-            for: snapshot([quota("daily"), weekly, weekly, monthly]), enabled: true) == nil)
+        let empty = snapshot([quota("weekly", used: 20, total: 20)])
+        let exhausted = try #require(CodeSwitchDailyBudget.reading(for: empty, now: now))
+        #expect(exhausted.available == 0 && exhausted.usedFraction == 1 && exhausted.remainingFraction == 0)
     }
 
-    @Test func invalidOptionalPeriodsFallBackToTheUsablePair() throws {
-        let noMonth = try #require(CodeSwitchQuotaRings.reading(for: snapshot([
-            quota("daily"), weekly, quota("monthly", unlimited: true)
-        ]), enabled: true))
-        #expect(noMonth.main.fraction == 0.05)
-        #expect(noMonth.secondary.fraction == 0.4)
-        let noDay = try #require(CodeSwitchQuotaRings.reading(for: snapshot([
-            quota("daily", active: false), weekly, monthly
-        ]), enabled: true))
-        #expect(noDay.main.fraction == 0.04)
-        #expect(noDay.secondary.fraction == 0.1)
-    }
-
-    @Test func unitsAndValueModesMustBeComparable() throws {
-        let mismatches: [(CodeSwitchQuota, CodeSwitchQuota)] = [
-            (quota("daily", unit: "USD"), quota("weekly", unit: "CNY")),
-            (quota("daily", mode: "count"), weekly),
-            (quota("daily", mode: "count", unit: "tokens"), quota("weekly", mode: "count", unit: "requests")),
-            (quota("daily", mode: "count", unit: "%"), quota("weekly", mode: "count", unit: "%")),
-            (quota("daily", mode: "unknown"), quota("weekly", mode: "unknown"))
-        ]
-        for (day, week) in mismatches {
-            #expect(CodeSwitchQuotaRings.reading(for: snapshot([day, week]), enabled: true) == nil)
+    @Test func observationPersistsWithoutDoubleCountingAndResetsItsBaseline() throws {
+        let domain = "DailyUsageTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let now = Date()
+        let reset = ISO8601DateFormatter().string(from: now.addingTimeInterval(5 * 86_400))
+        func raw(_ used: Double, unit: String = "USD", resetAt: String? = nil) -> ProviderSnapshot {
+            snapshot([quota("weekly", used: used, total: 700, unit: unit, reset: resetAt ?? reset)])
         }
-        let money = try #require(CodeSwitchQuotaRings.reading(for: snapshot([
-            quota("daily", mode: nil), quota("weekly", used: 80, total: 200, unit: " usd ")
-        ]), enabled: true))
-        #expect(money.main.fraction == 0.05)
-        let counts = try #require(CodeSwitchQuotaRings.reading(for: snapshot([
-            quota("daily", mode: "count", unit: "tokens"),
-            quota("weekly", used: 80, total: 200, mode: "count", unit: "tokens")
-        ]), enabled: true))
-        #expect(counts.main.fraction == 0.05)
-        let mixedMonth = try #require(CodeSwitchQuotaRings.reading(for: snapshot([
-            quota("daily"), weekly, quota("monthly", unit: "CNY")
-        ]), enabled: true))
-        #expect(mixedMonth.secondary.fraction == 0.4)
+        let store = CodeSwitchDailyUsage(defaults: defaults)
+        #expect(store.observe([raw(150)], now: now)[0].codeSwitchDailyUsage?.todayUsed == 0)
+        #expect(store.observe([raw(180)], now: now)[0].codeSwitchDailyUsage?.todayUsed == 30)
+        #expect(store.observe([raw(180)], now: now)[0].codeSwitchDailyUsage?.todayUsed == 30)
+        let restarted = CodeSwitchDailyUsage(defaults: defaults)
+        let current = restarted.observe([raw(200)], now: now)[0]
+        #expect(current.codeSwitchDailyUsage?.todayUsed == 50)
+        #expect(CodeSwitchDailyBudget.reading(for: current, now: now)?.todayUsed == 50)
+        #expect(restarted.observe([raw(10)], now: now)[0].codeSwitchDailyUsage?.todayUsed == 0)
+        #expect(restarted.observe([raw(20)], now: now)[0].codeSwitchDailyUsage?.todayUsed == 10)
+        #expect(restarted.observe([raw(30, unit: "CNY")], now: now)[0].codeSwitchDailyUsage?.todayUsed == 0)
+        let nextDay = Calendar.current.startOfDay(for: now).addingTimeInterval(86_400 + 60)
+        #expect(CodeSwitchDailyBudget.reading(for: current, now: nextDay) == nil)
+        #expect(restarted.observe([raw(250)], now: nextDay)[0].codeSwitchDailyUsage?.todayUsed == 0)
+        let changedReset = ISO8601DateFormatter().string(from: nextDay.addingTimeInterval(7 * 86_400))
+        #expect(restarted.observe([raw(5, resetAt: changedReset)], now: nextDay)[0].codeSwitchDailyUsage?.todayUsed == 0)
     }
 
-    @Test func zeroAndOverBudgetValuesRemainMeasured() throws {
-        for used in [0.0, 400.0] {
-            let rings = try #require(CodeSwitchQuotaRings.reading(
-                for: snapshot([quota("daily", used: used), weekly]), enabled: true))
-            #expect(rings.main.fraction == used / 200)
-        }
-        let overflow = snapshot([
-            quota("daily", used: .greatestFiniteMagnitude, total: .greatestFiniteMagnitude),
-            quota("weekly", used: 0, total: .leastNonzeroMagnitude)
-        ])
-        #expect(CodeSwitchQuotaRings.reading(for: overflow, enabled: true) == nil)
-        let oversizedPercentage = snapshot([
-            quota("daily", used: 1e20, total: 1e20), quota("weekly", used: 0, total: 1)
-        ])
-        #expect(CodeSwitchQuotaRings.reading(for: oversizedPercentage, enabled: true) == nil)
+    @Test func providerAndUnitBoundariesDoNotMixObservation() throws {
+        let now = Date()
+        let store = CodeSwitchDailyUsage()
+        let first = snapshot([weekly])
+        let other = snapshot([weekly], platform: "claude")
+        _ = store.observe([first, other], now: now)
+        let changed = snapshot([quota("weekly", used: 100, total: 200)])
+        let readings = store.observe([changed, other], now: now)
+        #expect(readings[0].codeSwitchDailyUsage?.todayUsed == 20)
+        #expect(readings[1].codeSwitchDailyUsage?.todayUsed == 0)
+        let mismatch = snapshot([weekly, quota("daily", used: 50, unit: "CNY")])
+        let budget = try #require(CodeSwitchDailyBudget.reading(for: mismatch, now: now))
+        #expect(budget.todayUsed == 0 && budget.sinceObservation)
     }
 
-    @Test func descriptionsFollowVisibleRingsWithoutInventingRemainingBudget() throws {
-        let raw = snapshot([quota("daily"), weekly, monthly])
-        let rings = try #require(CodeSwitchQuotaRings.reading(for: raw, enabled: true))
-        for placement in [WeeklyRing.off, .inside, .outside] {
-            let cell = ProviderCell(snapshot: raw, weeklyRing: placement, codeSwitchQuotaRatiosEnabled: true)
-            let text = try #require(cell.quotaRingText)
-            #expect(text.contains(rings.main.summary))
-            #expect(text.contains(rings.secondary.summary) == (placement != .off))
-            #expect(!text.contains("95%"))
-            #expect(cell.accessibilityText.contains(text))
-        }
-        let working = ProviderCell(snapshot: raw, activity: ActivitySummary(state: .working),
-            weeklyRing: .inside, codeSwitchQuotaRatiosEnabled: true)
-        #expect(try #require(working.quotaRingText).contains(rings.main.summary))
-        #expect(working.quotaRingText?.contains(rings.secondary.summary) == false)
-        #expect(ProviderCell(snapshot: raw, weeklyRing: .off).quotaRingText == nil)
-    }
-
-    @Test func dailyExhaustionStillAlertsWhenTheDisplayReadsFivePercent() throws {
+    @Test func dailyExhaustionStillAlertsIndependentlyOfBudget() throws {
         var alerts: [ThresholdAlert] = []
         var limits: [UsageAlertEvent] = []
         let notifier = ThresholdNotifier(deliver: { alerts.append($0) })
@@ -327,7 +431,7 @@ import Testing
         #expect(alerts.isEmpty && limits.isEmpty)
         let spent = snapshot([quota("daily", used: 10, total: 10), weekly, monthly])
         let rings = try #require(CodeSwitchQuotaRings.reading(for: spent, enabled: true))
-        #expect(rings.main.fraction == 0.05)
+        #expect(rings.main.fraction > 0 && rings.main.fraction < 1)
         #expect(spent.usedFraction == 1)
         notifier.observe([spent])
         watcher.observe([spent])
@@ -354,7 +458,7 @@ import Testing
         #expect(restored == raw)
         #expect(routing.providerID(for: session) == raw.id)
         let cell = ProviderCell(snapshot: restored, weeklyRing: .outside, codeSwitchQuotaRatiosEnabled: true)
-        #expect(try #require(cell.quotaRingText).contains(L10n.t("Weekly used / Monthly limit")))
+        #expect(try #require(cell.quotaRingText).contains(L10n.t("Daily budget")))
     }
 
     @Test func preferenceIsIndependentAndPersistsOptIn() throws {
@@ -406,7 +510,7 @@ import Testing
         notifier.observe([spent]); watcher.observe([spent])
         #expect(alerts.map(\.windowID) == ["monthly", "monthly"])
         #expect(limits.map(\.windowID) == ["monthly"])
-        #expect(CodeSwitchQuotaRings.reading(for: spent, enabled: true)?.main.fraction == 0.08)
+        #expect(CodeSwitchQuotaRings.reading(for: spent, enabled: true)?.main.fraction == 0)
     }
 
     @Test func simultaneousPeriodsDoNotMaskEachOtherOrReplayAfterReordering() {
@@ -485,7 +589,7 @@ import Testing
         for used in [1e20, .greatestFiniteMagnitude, .infinity, .nan, -1] {
             let raw = snapshot([quota("weekly", used: used, total: 1), monthly])
             #expect(raw.windows.map(\.id) == ["monthly"])
-            #expect(CodeSwitchQuotaRings.reading(for: raw, enabled: true) == nil)
+            #expect(CodeSwitchDailyBudget.reading(for: raw)?.source.key == "monthly")
             for enabled in [false, true] {
                 let cell = ProviderCell(snapshot: raw, weeklyRing: .outside, codeSwitchQuotaRatiosEnabled: enabled)
                 #expect(!cell.accessibilityText.isEmpty)

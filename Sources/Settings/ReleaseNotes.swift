@@ -40,6 +40,16 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.38",
+            headline: L10n.t("Daily budget"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Estimate daily availability from remaining quota and reset time")),
+                ReleaseNote.Change(title: L10n.t("Track daily use across restarts and show available amounts in the tooltip")),
+                ReleaseNote.Change(title: L10n.t("Keep all provider rings the same size with a stronger inner ring")),
+                ReleaseNote.Change(title: L10n.t("Preserve daily readings during refresh and support unlimited daily counters"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.37",
             headline: L10n.t("Independent inner ring"),
             changes: [

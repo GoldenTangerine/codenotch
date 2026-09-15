@@ -455,6 +455,7 @@ private struct CodeSwitchTooltip: View {
     var resetTimeFormat: ResetTimeFormat = .automatic
     var fullContent = false
     var showUsagePace = false
+    var dailyBudgetEnabled = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -492,6 +493,9 @@ private struct CodeSwitchTooltip: View {
                         Text("Loading…").foregroundStyle(Palette.textSecondary)
                     } else if details.provider.quotas.isEmpty {
                         Text("No reading").foregroundStyle(Palette.textSecondary)
+                    }
+                    if dailyBudgetEnabled, let budget = CodeSwitchDailyBudget.reading(for: snapshot, now: now) {
+                        CodeSwitchDailyBudgetRow(budget: budget)
                     }
                     ForEach(Array(details.provider.quotas.enumerated()), id: \.offset) { _, quota in
                         if !quota.active && quota.displayKind != "error" && quota.invalidMessage?.isEmpty != false {
@@ -532,6 +536,44 @@ private struct CodeSwitchTooltip: View {
             Text(value).foregroundStyle(Palette.textPrimary)
                 .lineLimit(1).minimumScaleFactor(0.7).help(value)
         }
+    }
+}
+
+struct CodeSwitchDailyBudgetRow: View {
+    let budget: CodeSwitchDailyBudget.Reading
+    @Environment(\.codenotchAccentColor) private var accentColor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(budget.title).foregroundStyle(Palette.textPrimary)
+                Text("· " + budget.source.title).foregroundStyle(Palette.textSecondary)
+                Spacer(minLength: 4)
+                Text(Percent.text(for: budget.usedFraction) + "%")
+                    .foregroundStyle(Palette.textPrimary).monospacedDigit()
+            }
+            GeometryReader { proxy in
+                Capsule().fill(Palette.barTrack)
+                Capsule().fill(UsageBand.band(for: budget.usedFraction).color(accent: accentColor))
+                    .frame(width: proxy.size.width * CGFloat(budget.usedFraction))
+            }
+            .frame(height: 4)
+            HStack(alignment: .firstTextBaseline) {
+                Text(L10n.t("Used today")).foregroundStyle(Palette.textSecondary)
+                Spacer(minLength: 4)
+                Text(budget.amount(budget.todayUsed)).foregroundStyle(Palette.textPrimary)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(L10n.t("Daily available")).foregroundStyle(Palette.textSecondary)
+                Spacer(minLength: 4)
+                Text(budget.amount(budget.available) + " · " + Percent.text(for: budget.remainingFraction) + "%")
+                    .foregroundStyle(Palette.textPrimary)
+            }
+            if budget.sinceObservation {
+                Text(L10n.t("Since recording began")).foregroundStyle(Palette.textSecondary)
+            }
+        }
+        .lineLimit(1).minimumScaleFactor(0.65)
     }
 }
 
@@ -1123,6 +1165,7 @@ struct TooltipCard: View {
     @State private var naturalHeight: CGFloat = 0
     var deepSeekPricingEnabled: Bool = true
     var deepSeekPricingSchedule: DeepSeekPricing.Schedule = .current
+    var dailyBudgetEnabled = false
     /// A tap on a session row jumps to that session's terminal — nil leaves
     /// the rows as plain text.
     var onFocusSession: ((pid_t) -> Void)? = nil
@@ -1201,7 +1244,7 @@ struct TooltipCard: View {
             if let details = snapshot.linked {
                 CodeSwitchTooltip(snapshot: snapshot, details: details, now: now, activity: activity,
                                   resetTimeFormat: resetTimeFormat, fullContent: heightMode == .full,
-                                  showUsagePace: showUsagePace)
+                                  showUsagePace: showUsagePace, dailyBudgetEnabled: dailyBudgetEnabled)
             } else {
                 ProviderTooltip(activityNote: localActivityNote, snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat,
                                 fullContent: heightMode == .full, isRefreshing: isRefreshing, showUsagePace: showUsagePace)

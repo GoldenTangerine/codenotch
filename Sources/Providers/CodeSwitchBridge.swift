@@ -135,6 +135,21 @@ struct CodeSwitchQuota: Codable, Equatable {
 
     var reset: Date? {
         guard let nextReset, !nextReset.isEmpty else { return nil }
+        let key = (TimeZone.current.identifier + "|" + nextReset) as NSString
+        if let cached = Self.resetCache.object(forKey: key) { return cached as Date }
+        guard let date = Self.parseReset(nextReset) else { return nil }
+        Self.resetCache.setObject(date as NSDate, forKey: key)
+        return date
+    }
+
+    // NSCache 支持跨读取线程访问；限制条目数，避免不断变化的重置日期长期占用内存。
+    private static let resetCache: NSCache<NSString, NSDate> = {
+        let cache = NSCache<NSString, NSDate>()
+        cache.countLimit = 512
+        return cache
+    }()
+
+    private static func parseReset(_ nextReset: String) -> Date? {
         let iso = ISO8601DateFormatter()
         if let date = iso.date(from: nextReset) { return date }
         iso.formatOptions.insert(.withFractionalSeconds)
@@ -294,11 +309,23 @@ final class CodeSwitchBridge: ObservableObject {
     private var generation: UInt64 = 0
     private var readTask: Task<Void, Never>?
     private var pending = false
+    private let dailyUsage: CodeSwitchDailyUsage
+    private var dailyBudgetEnabled = false
+
+    func setDailyBudgetEnabled(_ enabled: Bool) {
+        guard dailyBudgetEnabled != enabled else { return }
+        dailyBudgetEnabled = enabled
+        refresh()
+    }
 
     init(file: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Caches/code-switch/tray-snapshot-v1.json")) {
+        .appendingPathComponent("Library/Caches/code-switch/tray-snapshot-v1.json"),
+         dailyUsage: CodeSwitchDailyUsage? = nil) {
         self.file = file
         reader = CodeSwitchReader(file: file)
+        let production = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/code-switch/tray-snapshot-v1.json")
+        self.dailyUsage = dailyUsage ?? CodeSwitchDailyUsage(defaults: file == production ? .standard : nil)
     }
 
     func setEnabled(_ enabled: Bool) { configure(enabled: enabled, mode: mode) }
@@ -383,8 +410,19 @@ final class CodeSwitchBridge: ObservableObject {
         let current = generation
         guard let result = await reader.read(now: now, mode: mode, generation: current),
               current == generation else { return }
-        if bindings != result.bindings { bindings = result.bindings }
-        if snapshots != result.snapshots { snapshots = result.snapshots }
+        var observed = Set<String>()
+        let raw = (result.snapshots + result.bindings.values.map(\.snapshot))
+            .filter { observed.insert($0.id).inserted }
+        let decorated = dailyBudgetEnabled ? dailyUsage.observe(raw, now: now) : raw
+        let byID = Dictionary(decorated.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let nextBindings = result.bindings.mapValues {
+            var snapshot = $0.snapshot
+            snapshot.codeSwitchDailyUsage = byID[snapshot.id]?.codeSwitchDailyUsage
+            return CodeSwitchSessionLink(platform: $0.platform, binding: $0.binding, snapshot: snapshot)
+        }
+        let nextSnapshots = result.snapshots.map { byID[$0.id] ?? $0 }
+        if bindings != nextBindings { bindings = nextBindings }
+        if snapshots != nextSnapshots { snapshots = nextSnapshots }
         trayIDs = result.trayIDs
         updateDisplayedSnapshots()
         if connection != result.connection { connection = result.connection }

@@ -40,9 +40,18 @@ struct ProviderRing: View {
     /// Where the user asked for it, if at all.
     var weeklyRing: WeeklyRing = .off
     var innerFraction: Double?
+    var expanded = false
+
+    private var isExpanded: Bool { expanded || innerFraction != nil }
+    private var mainTrackStroke: CGFloat { isExpanded ? NotchLayout.weeklyRingStroke : NotchLayout.trackStroke }
+    private var mainProgressStroke: CGFloat { isExpanded ? NotchLayout.weeklyRingStroke : NotchLayout.progressStroke }
+    private var mainInset: CGFloat {
+        isExpanded && weeklyRing == .outside && weeklyFraction != nil
+            ? NotchLayout.expandedSecondaryInsideInset - mainTrackStroke / 2 : 0
+    }
 
     private var diameter: CGFloat {
-        NotchLayout.ringDiameter + (innerFraction == nil ? 0 : NotchLayout.independentRingGrowth)
+        NotchLayout.ringDiameter + (isExpanded ? NotchLayout.independentRingGrowth : 0)
     }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -67,7 +76,7 @@ struct ProviderRing: View {
     /// the more urgent fact, and the week is still a hover away. Outside there
     /// is no contest, so nothing is given up there.
     private var isWorking: Bool {
-        innerFraction == nil && weeklyRing == .inside && activity != nil && activity?.state != .idle
+        !isExpanded && weeklyRing == .inside && activity != nil && activity?.state != .idle
     }
 
     var body: some View {
@@ -77,7 +86,8 @@ struct ProviderRing: View {
             // even when the percentage behind it has gone stale.
             ZStack {
                 Circle()
-                    .strokeBorder(Palette.ringTrack, lineWidth: NotchLayout.trackStroke)
+                    .inset(by: mainInset)
+                    .strokeBorder(Palette.ringTrack, lineWidth: mainTrackStroke)
 
                 if localPerformance != nil || localContextFraction != nil {
                     // Two facts on one ring: the arc is the context filling up,
@@ -88,22 +98,22 @@ struct ProviderRing: View {
                     // the quota colours would say something a local model has
                     // no quota to mean.
                     Circle()
-                        .inset(by: NotchLayout.progressStroke / 2)
+                        .inset(by: mainInset + mainTrackStroke / 2)
                         .trim(from: 0, to: localSweep)
                         .stroke(
                             localPerformance?.band.color ?? Palette.textSecondary,
-                            style: StrokeStyle(lineWidth: NotchLayout.progressStroke, lineCap: .round)
+                            style: StrokeStyle(lineWidth: mainProgressStroke, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
                         .animation(NotchMotion.reading, value: localSweep)
                         .animation(NotchMotion.reading, value: localPerformance?.band)
                 } else if usedFraction != nil {
                     Circle()
-                        .inset(by: NotchLayout.trackStroke / 2)
+                        .inset(by: mainInset + mainTrackStroke / 2)
                         .trim(from: 0, to: sweep)
                         .stroke(
                             band.color(accent: accentColor),
-                            style: StrokeStyle(lineWidth: NotchLayout.progressStroke, lineCap: .round)
+                            style: StrokeStyle(lineWidth: mainProgressStroke, lineCap: .round)
                         )
                         // Refreshing spins the reading itself rather than
                         // overlaying a separate spinner: the thing being
@@ -127,7 +137,7 @@ struct ProviderRing: View {
                 // would hide it. Held slightly back in opacity so the headline
                 // stays the one the eye lands on first.
                 if let radius = weeklyRing.radius, weeklyFraction != nil, !isWorking {
-                    let inset = innerFraction == nil
+                    let inset = !isExpanded
                         ? NotchLayout.ringDiameter / 2 - radius
                         : (weeklyRing == .inside ? NotchLayout.expandedSecondaryInsideInset
                             : NotchLayout.expandedSecondaryOutsideInset)
@@ -160,12 +170,12 @@ struct ProviderRing: View {
                 if let innerFraction {
                     Circle()
                         .inset(by: NotchLayout.independentRingInset)
-                        .stroke(Palette.ringTrack, lineWidth: NotchLayout.weeklyRingStroke)
+                        .stroke(Palette.ringTrack, lineWidth: NotchLayout.independentRingStroke)
                     Circle()
                         .inset(by: NotchLayout.independentRingInset)
                         .trim(from: 0, to: CGFloat(min(max(innerFraction, 0), 1)))
                         .stroke(UsageBand.band(for: innerFraction).color(accent: accentColor),
-                                style: StrokeStyle(lineWidth: NotchLayout.weeklyRingStroke, lineCap: .round))
+                                style: StrokeStyle(lineWidth: NotchLayout.independentRingStroke, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .animation(NotchMotion.reading, value: innerFraction)
                 }
@@ -292,6 +302,7 @@ struct ProviderCell: View {
     var codeSwitchQuotaRatiosEnabled: Bool = false
     var independentInnerRing: Bool = false
     var cellRingDiameter: CGFloat = NotchLayout.ringDiameter
+    var now: Date = Date()
 
     private struct QuotaReading {
         let snapshot: ProviderSnapshot
@@ -299,11 +310,11 @@ struct ProviderCell: View {
         let inner: CodeSwitchQuotaRings.Reading?
 
         var mainFraction: Double? { ratios?.main.fraction ?? snapshot.ringFraction }
-        var secondaryFraction: Double? { ratios?.secondary.fraction ?? snapshot.secondaryWindow?.usedFraction }
+        var secondaryFraction: Double? { snapshot.secondaryWindow?.usedFraction }
     }
 
     private var quotaReading: QuotaReading {
-        let ratios = CodeSwitchQuotaRings.reading(for: snapshot, enabled: codeSwitchQuotaRatiosEnabled)
+        let ratios = CodeSwitchQuotaRings.reading(for: snapshot, enabled: codeSwitchQuotaRatiosEnabled, now: now)
         return QuotaReading(
             snapshot: independentInnerRing ? IndependentQuotaRing.originalQuotas(in: snapshot) : snapshot,
             ratios: independentInnerRing ? nil : ratios,
@@ -324,6 +335,8 @@ struct ProviderCell: View {
 
     var body: some View {
         let reading = quotaReading
+        let cellDiameter = max(cellRingDiameter, NotchLayout.ringDiameter
+            + (independentInnerRing ? NotchLayout.independentRingGrowth : 0))
         let readingText = makeReadingText(reading)
         let ringText = makeRingText(reading)
         VStack(spacing: NotchLayout.ringLabelGap) {
@@ -340,9 +353,10 @@ struct ProviderCell: View {
                 weeklyFraction: snapshot.hasReading
                     ? reading.secondaryFraction : nil,
                 weeklyRing: weeklyRing,
-                innerFraction: reading.inner?.fraction
+                innerFraction: reading.inner?.fraction,
+                expanded: independentInnerRing
             )
-            .frame(width: cellRingDiameter, height: cellRingDiameter)
+            .frame(width: cellDiameter, height: cellDiameter)
             Text(readingText)
                 .font(Typography.percent)
                 .foregroundStyle(snapshot.showsLocalPerformance && snapshot.localPerformance == nil
@@ -357,7 +371,7 @@ struct ProviderCell: View {
                 .contentTransition(.numericText())
                 .animation(NotchMotion.reading, value: readingText)
         }
-        .frame(height: cellRingDiameter + NotchLayout.ringLabelGap + NotchLayout.percentLineHeight)
+        .frame(height: cellDiameter + NotchLayout.ringLabelGap + NotchLayout.percentLineHeight)
         .help(ringText ?? snapshot.headline?.summary ?? snapshot.statusMessage ?? snapshot.displayName)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(makeAccessibilityText(ringText: ringText, readingText: readingText))
@@ -383,9 +397,7 @@ struct ProviderCell: View {
         if independentInnerRing {
             let original = reading.snapshot
             var parts = original.headline.map { ["\(L10n.t("Main ring")): \($0.label), \($0.summary)"] } ?? []
-            let hidesSecondary = reading.inner == nil && weeklyRing == .inside
-                && activity != nil && activity?.state != .idle
-            if weeklyRing != .off, !hidesSecondary, let secondary = original.secondaryWindow {
+            if weeklyRing != .off, let secondary = original.secondaryWindow {
                 parts.append("\(L10n.t("Secondary quota ring")): \(secondary.label), \(secondary.summary)")
             }
             if let innerReading = reading.inner {
@@ -396,9 +408,10 @@ struct ProviderCell: View {
         if let ratios = reading.ratios, snapshot.hasReading {
             let main = "\(L10n.t("Main ring")): \(ratios.main.summary)"
             guard weeklyRing != .off,
+                  let secondary = ratios.secondary,
                   !(weeklyRing == .inside && activity != nil && activity?.state != .idle) else { return main }
             let position = weeklyRing == .inside ? L10n.t("Inner ring") : L10n.t("Outer ring")
-            return "\(main); \(position): \(ratios.secondary.summary)"
+            return "\(main); \(position): \(secondary.summary)"
         }
         guard weeklyRing != .off, snapshot.hasReading,
               let secondary = snapshot.secondaryWindow else { return nil }

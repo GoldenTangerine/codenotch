@@ -1,6 +1,116 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Estimate daily availability from remaining quota and reset time": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按剩余额度和重置时间动态计算每日可用额度"
+          }
+        }
+      }
+    },
+    "Track daily use across restarts and show available amounts in the tooltip": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跨重启记录今日用量，在气泡中显示可用金额和剩余比例"
+          }
+        }
+      }
+    },
+    "Keep all provider rings the same size with a stronger inner ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "统一所有供应商圆环大小，加粗内圈突出每日预算"
+          }
+        }
+      }
+    },
+    "Preserve daily readings during refresh and support unlimited daily counters": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新时保留每日读数，支持无日额度上限的用量统计"
+          }
+        }
+      }
+    },
+    "Daily budget": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每日预算"
+          }
+        }
+      }
+    },
+    "Daily available": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每日可用"
+          }
+        }
+      }
+    },
+    "Used today": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今日已用"
+          }
+        }
+      }
+    },
+    "Since recording began": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自开始记录"
+          }
+        }
+      }
+    },
+    "Divide remaining quota by days until reset to estimate daily availability. Prefer weekly over monthly quota; missing daily usage is recorded locally. Alerts use actual limits.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按剩余额度和距重置的天数计算每日可用额度，优先使用周额度，其次月额度。缺少日用量时从本地开始记录，提醒仍按真实额度触发。"
+          }
+        }
+      }
+    },
+    "Enlarge all provider rings equally. Show daily budget on the thick inner ring and its percentage below.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "统一放大所有供应商圆环，最内圈加粗显示每日预算，下方百分比跟随最内环。"
+          }
+        }
+      }
+    },
     "Keep quota rings and add daily pace or period ratio inside": {
       "extractionState": "manual",
       "localizations": {

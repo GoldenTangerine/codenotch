@@ -591,8 +591,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             preferences.$independentInnerRing.combineLatest(preferences.$codeSwitchQuotaRatiosEnabled)
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet] independent, ratios in
+                .sink { [weak fleet, weak codeSwitch] independent, ratios in
                     fleet?.apply(independentInnerRing: independent, codeSwitchQuotaRatiosEnabled: ratios)
+                    codeSwitch?.setDailyBudgetEnabled(ratios)
                 }
                 .store(in: &cancellables)
 
