@@ -62,6 +62,14 @@ enum CodeSwitchDailyBudget {
         return daily.used
     }
 
+    static func dailyCost(in snapshot: ProviderSnapshot, source: CodeSwitchQuota) -> Double? {
+        // 联动协议的今日费用以美元计价，不能用于次数或其他币种的额度。
+        guard (source.valueMode ?? "currency") == "currency", unit(source) == "USD",
+              let cost = snapshot.linked?.provider.stats?.costTotal,
+              cost.isFinite, cost >= 0 else { return nil }
+        return cost
+    }
+
     static func reading(for snapshot: ProviderSnapshot, now: Date = Date(),
                         calendar: Calendar = .current) -> Reading? {
         guard let source = source(in: snapshot, now: now), let reset = source.reset else { return nil }
@@ -73,7 +81,7 @@ enum CodeSwitchDailyBudget {
         } else if let sample = snapshot.codeSwitchDailyUsage,
                   sample.matches(source, now: now, calendar: calendar) {
             today = sample.todayUsed
-            estimated = true
+            estimated = sample.costIsCurrent != true
         } else { return nil }
         let remaining = max(0, source.total - source.used)
         let days = max(1, reset.timeIntervalSince(now) / 86_400)

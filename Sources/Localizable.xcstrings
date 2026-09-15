@@ -1,6 +1,39 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Use today's reported cost when daily quota usage is unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缺少日额度用量时采用今日费用"
+          }
+        }
+      }
+    },
+    "Keep recorded daily use when statistics are temporarily unavailable": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "统计暂时缺失时保留今日用量并继续累计"
+          }
+        }
+      }
+    },
+    "Stop reusing known old costs after a day or time zone change": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跨日或切换时区后停用已知旧费用"
+          }
+        }
+      }
+    },
     "Estimate daily availability from remaining quota and reset time": {
       "extractionState": "manual",
       "localizations": {

@@ -40,6 +40,15 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.39",
+            headline: L10n.t("Daily budget"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Use today's reported cost when daily quota usage is unavailable")),
+                ReleaseNote.Change(title: L10n.t("Keep recorded daily use when statistics are temporarily unavailable")),
+                ReleaseNote.Change(title: L10n.t("Stop reusing known old costs after a day or time zone change"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.38",
             headline: L10n.t("Daily budget"),
             changes: [

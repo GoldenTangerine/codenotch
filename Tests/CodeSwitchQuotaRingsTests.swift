@@ -315,12 +315,142 @@ import Testing
         }
     }
 
-    private func snapshot(_ quotas: [CodeSwitchQuota], platform: String = "codex") -> ProviderSnapshot {
+    private func snapshot(_ quotas: [CodeSwitchQuota], platform: String = "codex", cost: Double? = nil) -> ProviderSnapshot {
+        let stats = cost.map { CodeSwitchStats(totalRequests: 1, successfulRequests: 1, failedRequests: 0,
+            successRate: 1, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, costTotal: $0,
+            avgFirstTokenSec: 0, avgTokensPerSec: 0) }
         let provider = CodeSwitchProvider(providerId: "supplier", providerName: "Supplier", icon: "openai",
-            activeRequests: 0, status: "enabled", loading: false, updatedAt: 0, quotas: quotas, stats: nil)
+            activeRequests: 0, status: "enabled", loading: false, updatedAt: 0, quotas: quotas, stats: stats)
         let raw = provider.snapshot(platform: CodeSwitchPlatform(platform: platform, name: platform,
             icon: "openai", error: false, providers: [provider]))
         return CodeSwitchDailyUsage().observe([raw], now: Date())[0]
+    }
+
+    @Test func dailyCostFillsMissingCounterOnFirstObservation() throws {
+        let now = Date()
+        for key in ["weekly", "monthly"] {
+            let raw = snapshot([quota(key)], cost: 25.41)
+            let budget = try #require(CodeSwitchDailyBudget.reading(for: raw, now: now))
+            #expect(budget.todayUsed == 25.41)
+            #expect(!budget.sinceObservation)
+            #expect(abs(budget.usedFraction - 25.41 / (25.41 + budget.available)) < 0.000001)
+            #expect(abs(budget.remainingFraction + budget.usedFraction - 1) < 0.000001)
+        }
+        let preferred = snapshot([weekly, quota("daily", used: 50)], cost: 25.41)
+        #expect(CodeSwitchDailyBudget.reading(for: preferred, now: now)?.todayUsed == 50)
+        let invalidDaily = snapshot([weekly, quota("daily", used: -1)], cost: 25.41)
+        #expect(CodeSwitchDailyBudget.reading(for: invalidDaily, now: now)?.todayUsed == 25.41)
+    }
+
+    @Test func dailyCostRejectsInvalidValuesAndIncompatibleUnits() throws {
+        let now = Date()
+        for cost: Double? in [nil, -1, .nan, .infinity] {
+            let budget = try #require(CodeSwitchDailyBudget.reading(for: snapshot([weekly], cost: cost), now: now))
+            #expect(budget.todayUsed == 0)
+            #expect(budget.sinceObservation)
+        }
+        for source in [quota("weekly", unit: "CNY"), quota("weekly", mode: "count", unit: "USD")] {
+            let budget = try #require(CodeSwitchDailyBudget.reading(for: snapshot([source], cost: 25.41), now: now))
+            #expect(budget.todayUsed == 0)
+            #expect(budget.sinceObservation)
+        }
+        let zero = try #require(CodeSwitchDailyBudget.reading(for: snapshot([weekly], cost: 0), now: now))
+        #expect(zero.todayUsed == 0)
+        #expect(!zero.sinceObservation)
+        #expect(zero.usedFraction == 0)
+    }
+
+    @Test func dailyCostRefreshAndMissingStatsPreserveFallback() throws {
+        let now = Date()
+        let resetAt = ISO8601DateFormatter().string(from: now.addingTimeInterval(7 * 86_400))
+        let store = CodeSwitchDailyUsage()
+        _ = store.observe([snapshot([quota("weekly", used: 10, total: 700, reset: resetAt)], cost: 25.41)], now: now)
+        let observed = store.observe([snapshot([quota("weekly", used: 30, total: 700, reset: resetAt)], cost: 40)], now: now)[0]
+        let budget = try #require(CodeSwitchDailyBudget.reading(for: observed, now: now))
+        #expect(budget.todayUsed == 40)
+        #expect(!budget.sinceObservation)
+        let missing = store.observe([snapshot([quota("weekly", used: 30, total: 700, reset: resetAt)])], now: now)[0]
+        let fallback = try #require(CodeSwitchDailyBudget.reading(for: missing, now: now))
+        #expect(fallback.todayUsed == 40)
+        #expect(fallback.sinceObservation)
+        let reset = store.observe([snapshot([quota("weekly", used: 30, total: 700, reset: resetAt)], cost: 0)], now: now)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: reset, now: now)?.todayUsed == 0)
+        #expect(CodeSwitchDailyBudget.reading(for: reset, now: now)?.sinceObservation == false)
+    }
+
+    @Test func dailyCostAnchorSurvivesRestartAndRepeatedStats() throws {
+        let now = Date()
+        let reset = ISO8601DateFormatter().string(from: now.addingTimeInterval(7 * 86_400))
+        let domain = "DailyCostTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        func raw(_ used: Double, cost: Double?) -> ProviderSnapshot {
+            snapshot([quota("weekly", used: used, total: 700, reset: reset)], cost: cost)
+        }
+        let store = CodeSwitchDailyUsage(defaults: defaults)
+        _ = store.observe([raw(100, cost: 40)], now: now)
+        let restarted = CodeSwitchDailyUsage(defaults: defaults)
+        let missing = restarted.observe([raw(110, cost: nil)], now: now)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: missing, now: now)?.todayUsed == 50)
+        let repeated = restarted.observe([raw(110, cost: 40)], now: now)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: repeated, now: now)?.todayUsed == 50)
+        #expect(CodeSwitchDailyBudget.reading(for: repeated, now: now)?.sinceObservation == true)
+        let updated = restarted.observe([raw(110, cost: 50)], now: now)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: updated, now: now)?.todayUsed == 50)
+        #expect(CodeSwitchDailyBudget.reading(for: updated, now: now)?.sinceObservation == false)
+    }
+
+    @Test func dailyCostExpiresAcrossDaysAndPersistsBlockedValue() throws {
+        let now = Date()
+        let tomorrow = now.addingTimeInterval(86_400)
+        let reset = ISO8601DateFormatter().string(from: now.addingTimeInterval(7 * 86_400))
+        let domain = "DailyCostRolloverTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        func raw(_ cost: Double?) -> ProviderSnapshot {
+            snapshot([quota("weekly", used: 100, total: 700, reset: reset)], cost: cost)
+        }
+        let store = CodeSwitchDailyUsage(defaults: defaults)
+        let yesterday = store.observe([raw(25.41)], now: now)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: yesterday, now: tomorrow) == nil)
+        let stale = store.observe([raw(25.41)], now: tomorrow)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: stale, now: tomorrow)?.todayUsed == 0)
+        #expect(CodeSwitchDailyBudget.reading(for: stale, now: tomorrow)?.sinceObservation == true)
+        let restarted = CodeSwitchDailyUsage(defaults: defaults)
+        _ = restarted.observe([raw(nil)], now: tomorrow)
+        let stillStale = restarted.observe([raw(25.41)], now: tomorrow)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: stillStale, now: tomorrow)?.todayUsed == 0)
+        let monthly = snapshot([quota("monthly", used: 100, total: 700, reset: reset)], cost: 25.41)
+        let changedSource = restarted.observe([monthly], now: tomorrow)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: changedSource, now: tomorrow)?.sinceObservation == true)
+        #expect(CodeSwitchDailyBudget.reading(for: changedSource, now: tomorrow)?.todayUsed == 0)
+        let refreshed = restarted.observe([raw(0)], now: tomorrow)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: refreshed, now: tomorrow)?.todayUsed == 0)
+        #expect(CodeSwitchDailyBudget.reading(for: refreshed, now: tomorrow)?.sinceObservation == false)
+        var changedZone = Calendar.current
+        changedZone.timeZone = TimeZone(secondsFromGMT: Calendar.current.timeZone.secondsFromGMT() == 0 ? 3600 : 0)!
+        #expect(CodeSwitchDailyBudget.reading(for: refreshed, now: tomorrow, calendar: changedZone) == nil)
+        let moved = restarted.observe([raw(0)], now: tomorrow, calendar: changedZone)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: moved, now: tomorrow, calendar: changedZone)?.sinceObservation == true)
+    }
+
+    @Test func dailyCostLoadingDoesNotReplaceConfirmedUsage() throws {
+        let now = Date()
+        let store = CodeSwitchDailyUsage()
+        let ready = snapshot([weekly], cost: 40)
+        _ = store.observe([ready], now: now)
+        var loading = snapshot(try #require(ready.linked).provider.quotas, cost: 0)
+        let details = try #require(loading.linked)
+        let provider = details.provider
+        loading.linked = CodeSwitchDetails(platform: details.platform,
+            provider: CodeSwitchProvider(providerId: provider.providerId, providerName: provider.providerName,
+                icon: provider.icon, activeRequests: 0, status: "enabled", loading: true,
+                updatedAt: 0, quotas: provider.quotas, stats: provider.stats))
+        let refreshing = store.observe([loading], now: now)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: refreshing, now: now)?.todayUsed == 40)
+        let tomorrow = now.addingTimeInterval(86_400)
+        let expired = store.observe([loading], now: tomorrow)[0]
+        #expect(CodeSwitchDailyBudget.reading(for: expired, now: tomorrow) == nil)
     }
 
     @Test(arguments: ["claude", "codex", "gemini", "custom:工具"])

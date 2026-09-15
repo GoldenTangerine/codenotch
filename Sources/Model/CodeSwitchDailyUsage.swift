@@ -19,6 +19,9 @@ final class CodeSwitchDailyUsage {
         let mode: String
         var lastUsed: Double
         var todayUsed: Double
+        var lastCost: Double? = nil
+        var blockedCost: Double? = nil
+        var costIsCurrent: Bool? = nil
 
         func matches(_ quota: CodeSwitchQuota, now: Date, calendar: Calendar) -> Bool {
             day == calendar.startOfDay(for: now) && timeZone == calendar.timeZone.identifier
@@ -54,14 +57,36 @@ final class CodeSwitchDailyUsage {
                 return decorated
             }
             if sample?.matches(source, now: now, calendar: calendar) != true || source.used < (sample?.lastUsed ?? 0) {
+                let previous = sample ?? ["weekly", "monthly", "daily"]
+                    .compactMap { records[snapshot.id + ":" + $0] }.max { $0.day < $1.day }
+                let crossedDay = previous.map {
+                    $0.day != calendar.startOfDay(for: now) || $0.timeZone != calendar.timeZone.identifier
+                } ?? false
+                let blocked = previous?.blockedCost ?? (crossedDay ? previous?.lastCost : nil)
                 sample = Sample(day: calendar.startOfDay(for: now), timeZone: calendar.timeZone.identifier,
                     sourceKey: source.key, reset: reset, unit: CodeSwitchDailyBudget.unit(source),
-                    mode: source.valueMode ?? "currency", lastUsed: source.used, todayUsed: 0)
+                    mode: source.valueMode ?? "currency", lastUsed: source.used, todayUsed: 0,
+                    blockedCost: blocked)
             } else if var current = sample {
                 let total = current.todayUsed + max(0, source.used - current.lastUsed)
                 guard total.isFinite else { return decorated }
                 current.todayUsed = total
                 current.lastUsed = source.used
+                sample = current
+            }
+            if var current = sample {
+                current.costIsCurrent = false
+                if CodeSwitchDailyBudget.dailyUsage(in: snapshot, source: source, now: now) == nil,
+                   let cost = CodeSwitchDailyBudget.dailyCost(in: snapshot, source: source),
+                   cost != current.blockedCost {
+                    // 无统计日期时拒绝沿用跨日旧费用；同日重复心跳不能抹掉已累计的增量。
+                    if cost != current.lastCost {
+                        current.todayUsed = cost
+                    }
+                    current.lastCost = cost
+                    current.blockedCost = nil
+                    current.costIsCurrent = current.todayUsed == cost
+                }
                 sample = current
             }
             records[key] = sample
