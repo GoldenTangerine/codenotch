@@ -63,8 +63,7 @@ import Testing
         }
     }
 
-    @Test func outsideSecondaryKeepsTheSamePaintedDiameter() throws {
-        var widths: [Int] = []
+    @Test func paintedDiameterMatchesVisibleRingLayers() throws {
         for placement in [WeeklyRing.off, .inside, .outside] {
             for secondary: Double? in [nil, 1] {
                 let renderer = ImageRenderer(content: ProviderRing(usedFraction: 1, glyph: .claude,
@@ -80,11 +79,14 @@ import Testing
                         if values.max()! - values.min()! > 0.3 { painted.append(x); break }
                     }
                 }
-                widths.append(try #require(painted.max()) - #require(painted.min()) + 1)
+                let width = try #require(painted.max()) - #require(painted.min()) + 1
+                let hasThirdRing = secondary != nil && placement != .off
+                let diameter = NotchLayout.ringDiameter + NotchLayout.independentRingGrowth
+                let paintedDiameter = hasThirdRing ? diameter
+                    : diameter - 2 * NotchLayout.expandedSecondaryInsideInset + NotchLayout.weeklyRingStroke
+                #expect(abs(CGFloat(width) - paintedDiameter * 4) <= 2)
             }
         }
-        #expect(try #require(widths.max()) - #require(widths.min()) <= 2)
-        #expect(widths.allSatisfy { abs($0 - 256) <= 2 })
     }
 
     @Test func refreshPreservesTodayUsageButDoesNotAccumulateOrCrossDays() throws {
@@ -312,6 +314,34 @@ import Testing
                 y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
             let channels = [color.redComponent, color.greenComponent, color.blueComponent]
             #expect(try #require(channels.max()) - #require(channels.min()) > 0.25)
+        }
+    }
+
+    @Test func twoQuotaRingsUseInnerAndMiddleLayers() throws {
+        for placement: WeeklyRing in [.inside, .outside, .off] {
+            for secondary: Double? in [nil, 1] {
+                let renderer = ImageRenderer(content: ProviderRing(usedFraction: 1, glyph: .claude,
+                    weeklyFraction: secondary, weeklyRing: placement, innerFraction: 1, expanded: true)
+                    .environment(\.codenotchAccentColor, .blue)
+                    .background(Color.black))
+                renderer.scale = 3
+                let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+                #expect(bitmap.pixelsWide == 192 && bitmap.pixelsHigh == 192)
+                let hasThirdRing = secondary != nil && placement != .off
+                for (radius, visible) in [(CGFloat(32) - NotchLayout.weeklyRingStroke / 2, hasThirdRing),
+                                          (32 - NotchLayout.expandedSecondaryInsideInset, true),
+                                          (32 - NotchLayout.independentRingInset, true)] {
+                    let color = try #require(bitmap.colorAt(x: Int((32 + radius) * 3),
+                        y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+                    let channels = [color.redComponent, color.greenComponent, color.blueComponent]
+                    let maximum = try #require(channels.max())
+                    if visible {
+                        #expect(maximum - (try #require(channels.min())) > 0.25)
+                    } else {
+                        #expect(maximum < 0.05)
+                    }
+                }
+            }
         }
     }
 

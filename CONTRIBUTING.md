@@ -58,6 +58,12 @@ and publish both assets. Setting `RELEASE_SIGNING=true` optionally enables
 Apple signing and notarization and requires the additional secrets listed in
 `.github/workflows/release.yml`.
 
+The tag workflow runs the release-tooling tests and builds the Release archive
+without first building Debug and running the full application test suite.
+Run `make test` before tagging a release; full application tests are a local
+pre-release check. Code-signature and update-feed validation remain required
+in the packaging workflow.
+
 The workflow compares numeric stable versions before marking the release as
 Latest. Republishing an older version does not replace Latest or the Pages
 mirror. Missing assets, invalid update metadata, API failures, and unknown

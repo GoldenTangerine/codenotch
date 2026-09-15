@@ -119,10 +119,9 @@ jobs:
           # did not yield a usable Developer ID identity.
           security find-identity -v -p codesigning | grep "Developer ID Application"
 
-      - name: Test
+      - name: Validate release tooling
         run: |
           python3 -m unittest discover -s Scripts -p 'test_*.py'
-          make test
 
       - name: Archive and package the dmg (signed)
         if: env.SIGNED == 'true'

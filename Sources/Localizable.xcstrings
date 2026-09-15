@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Bring two rings closer while keeping the daily budget inside": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "缩小两圈间距，每日预算保持在最内层"
+          }
+        }
+      }
+    },
+    "Keep three-ring positions and provider spacing unchanged": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保持三圈位置和供应商占位尺寸"
+          }
+        }
+      }
+    },
     "Use today's reported cost when daily quota usage is unavailable": {
       "extractionState": "manual",
       "localizations": {

@@ -46,7 +46,9 @@ struct ProviderRing: View {
     private var mainTrackStroke: CGFloat { isExpanded ? NotchLayout.weeklyRingStroke : NotchLayout.trackStroke }
     private var mainProgressStroke: CGFloat { isExpanded ? NotchLayout.weeklyRingStroke : NotchLayout.progressStroke }
     private var mainInset: CGFloat {
-        isExpanded && weeklyRing == .outside && weeklyFraction != nil
+        let hasSecondary = weeklyRing != .off && weeklyFraction != nil
+        return isExpanded && ((weeklyRing == .outside && hasSecondary)
+            || (innerFraction != nil && !hasSecondary))
             ? NotchLayout.expandedSecondaryInsideInset - mainTrackStroke / 2 : 0
     }
 
