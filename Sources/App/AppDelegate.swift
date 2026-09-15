@@ -455,6 +455,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(notchTriggerHeight: $0) }
                 .store(in: &cancellables)
 
+            preferences.$topAvoidanceAdjustment.combineLatest(preferences.$ringEdgeAdjustment)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak fleet] top, ring in
+                    fleet?.apply(topAvoidanceAdjustment: CGFloat(top), ringEdgeAdjustment: CGFloat(ring))
+                }
+                .store(in: &cancellables)
+
             preferences.$foldsForFullScreen
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(foldsForFullScreen: $0) }
@@ -863,6 +870,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(displayPreference: preferences.displayPreference)
         fleet.apply(alongOffset: preferences.offset(for: preferences.notchEdge))
         fleet.apply(scale: preferences.notchScale)
+        fleet.apply(topAvoidanceAdjustment: CGFloat(preferences.topAvoidanceAdjustment),
+                    ringEdgeAdjustment: CGFloat(preferences.ringEdgeAdjustment))
         fleet.apply(resetTimeFormat: preferences.resetTimeFormat)
         fleet.apply(tooltipHeightMode: preferences.tooltipHeightMode)
         Self.bindNotchAccentColor(preferences, to: fleet)

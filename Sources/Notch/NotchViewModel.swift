@@ -269,7 +269,12 @@ final class NotchViewModel: ObservableObject {
         independentInnerRing ? NotchLayout.independentRingGrowth : 0
     }
     var cellRingDiameter: CGFloat { NotchLayout.ringDiameter + ringGrowth }
-    var bodyDepth: CGFloat { NotchLayout.bodyDepth(for: edge, ringGrowth: ringGrowth) }
+    var baseBodyDepth: CGFloat { NotchLayout.bodyDepth(for: edge, ringGrowth: ringGrowth) }
+    @Published var topAvoidanceAdjustment: CGFloat = 0
+    @Published var ringEdgeAdjustment: CGFloat = 0
+    var ringEdgePadding: CGFloat { max(0, ringEdgeAdjustment) / sizeScale }
+    var ringEdgeOffset: CGFloat { min(0, ringEdgeAdjustment) / sizeScale }
+    var bodyDepth: CGFloat { baseBodyDepth + ringEdgePadding }
     var cellAlong: CGFloat { NotchLayout.cellAlong(for: edge, ringGrowth: ringGrowth) }
     /// Whether the move handle is on the notch at all. Mirrored from Settings
     /// like `weeklyRing`.
@@ -338,7 +343,11 @@ final class NotchViewModel: ObservableObject {
     /// which is the same distance a ring sits from the bezel on every other
     /// placement. Adding a gap as well pads them twice and leaves them adrift
     /// of the notch they are supposed to belong to.
-    var contentInset: CGFloat { hardwareNotch?.height ?? 0 }
+    var contentInset: CGFloat {
+        // 避让值使用屏幕点数；逆向抵消视图缩放，避免小尺寸下内容进入实体刘海。
+        guard edge == .top else { return 0 }
+        return max(0, (hardwareNotch?.height ?? 0) + topAvoidanceAdjustment) / sizeScale
+    }
 
     /// How much of each end of the bar the flare actually takes.
     var flare: CGFloat {
@@ -816,6 +825,8 @@ final class NotchViewModel: ObservableObject {
         let hardware: HardwareNotch?
         let scale: CGFloat
         let ringGrowth: CGFloat
+        let topAdjustment: CGFloat
+        let ringAdjustment: CGFloat
         let count: Int
         let snapshots: [ProviderSnapshot]
         let now: Date
@@ -829,12 +840,15 @@ final class NotchViewModel: ObservableObject {
     /// Preview each centered landing with its own hardware and edge geometry.
     func centeredGuideFrames(on screen: ScreenDescribing, cellCount: Int) -> [NotchEdge: CGRect] {
         let key = GuideLayoutKey(frame: screen.frameValue, usable: screen.visibleFrameValue,
-            hardware: screen.hardwareNotch, scale: sizeScale, ringGrowth: ringGrowth, count: cellCount, snapshots: snapshots,
+            hardware: screen.hardwareNotch, scale: sizeScale, ringGrowth: ringGrowth,
+            topAdjustment: topAvoidanceAdjustment, ringAdjustment: ringEdgeAdjustment, count: cellCount, snapshots: snapshots,
             now: now, tooltipMode: tooltipHeightMode, moveHandle: showsMoveHandle, settingsHandle: showsSettingsHandle)
         if guideLayoutKey == key { return guideFrames }
         let preview = NotchViewModel()
         preview.now = now
         preview.sizeScale = sizeScale
+        preview.topAvoidanceAdjustment = topAvoidanceAdjustment
+        preview.ringEdgeAdjustment = ringEdgeAdjustment
         preview.snapshots = snapshots
         preview.independentInnerRing = independentInnerRing
         preview.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled

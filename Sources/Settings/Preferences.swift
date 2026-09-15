@@ -190,6 +190,26 @@ final class Preferences: ObservableObject {
     /// stops being readable, which is the one thing the notch exists for.
     static let customScaleRange: ClosedRange<Double> = 0.75...1.5
 
+    static let topAvoidanceRange: ClosedRange<Double> = -60...120
+    static let ringEdgeRange: ClosedRange<Double> = -40...80
+    static func geometryValue(_ value: Double, in range: ClosedRange<Double>) -> Double {
+        value.isFinite ? min(max(value, range.lowerBound), range.upperBound) : 0
+    }
+    @Published var topAvoidanceAdjustment: Double {
+        didSet {
+            let clamped = Self.geometryValue(topAvoidanceAdjustment, in: Self.topAvoidanceRange)
+            if topAvoidanceAdjustment != clamped { topAvoidanceAdjustment = clamped; return }
+            defaults.set(topAvoidanceAdjustment, forKey: "topAvoidanceAdjustment")
+        }
+    }
+    @Published var ringEdgeAdjustment: Double {
+        didSet {
+            let clamped = Self.geometryValue(ringEdgeAdjustment, in: Self.ringEdgeRange)
+            if ringEdgeAdjustment != clamped { ringEdgeAdjustment = clamped; return }
+            defaults.set(ringEdgeAdjustment, forKey: "ringEdgeAdjustment")
+        }
+    }
+
     /// What the notch is actually drawn at, whichever control is in charge.
     var notchScale: CGFloat {
         usesCustomNotchScale ? CGFloat(customNotchScale) : notchSize.scale
@@ -777,6 +797,8 @@ final class Preferences: ObservableObject {
         // Absent means never chosen, and the presets are what every earlier
         // version had — so the slider is opt-in rather than the default.
         self.usesCustomNotchScale = defaults.bool(forKey: Keys.usesCustomSize)
+        self.topAvoidanceAdjustment = Self.geometryValue(defaults.double(forKey: "topAvoidanceAdjustment"), in: Self.topAvoidanceRange)
+        self.ringEdgeAdjustment = Self.geometryValue(defaults.double(forKey: "ringEdgeAdjustment"), in: Self.ringEdgeRange)
         let stored = defaults.object(forKey: Keys.customSize) as? Double
         self.customNotchScale = stored.map {
             min(max($0, Self.customScaleRange.lowerBound), Self.customScaleRange.upperBound)

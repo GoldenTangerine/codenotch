@@ -69,6 +69,8 @@ final class NotchFleet {
     /// ring on one display and not another would read as a bug.
     private var weeklyRing: WeeklyRing = .off
     private var independentInnerRing = false
+    private var topAvoidanceAdjustment: CGFloat = 0
+    private var ringEdgeAdjustment: CGFloat = 0
     private var codeSwitchQuotaRatiosEnabled = false
     private var showsMoveHandle = false
     private var showsSettingsHandle = false
@@ -241,6 +243,14 @@ final class NotchFleet {
         self.accentColor = accentColor
         for controller in controllers.values {
             controller.model.accentColor = accentColor
+        }
+    }
+
+    func apply(topAvoidanceAdjustment: CGFloat, ringEdgeAdjustment: CGFloat) {
+        self.topAvoidanceAdjustment = CGFloat(Preferences.geometryValue(Double(topAvoidanceAdjustment), in: Preferences.topAvoidanceRange))
+        self.ringEdgeAdjustment = CGFloat(Preferences.geometryValue(Double(ringEdgeAdjustment), in: Preferences.ringEdgeRange))
+        for controller in controllers.values {
+            controller.apply(topAvoidanceAdjustment: self.topAvoidanceAdjustment, ringEdgeAdjustment: self.ringEdgeAdjustment)
         }
     }
 
@@ -501,6 +511,8 @@ final class NotchFleet {
         // Set before `show()`, so a display plugged in later builds its panel
         // at the current size rather than at medium and resizing a beat later.
         controller.model.sizeScale = scale
+        controller.model.topAvoidanceAdjustment = topAvoidanceAdjustment
+        controller.model.ringEdgeAdjustment = ringEdgeAdjustment
         controller.model.resetTimeFormat = resetTimeFormat
         controller.model.tooltipHeightMode = tooltipHeightMode
         controller.model.accentColor = accentColor

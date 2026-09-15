@@ -345,14 +345,17 @@ struct NotchRootView: View {
                     .padding(.top, leadIn)
                     // The contents keep the expanded layout while folding, so
                     // the stack does not reflow on its way out; the shape clips it.
-                    .frame(width: model.bodyDepth)
+                    .frame(width: model.baseBodyDepth)
             } else {
                 HStack(spacing: model.cellSpacing) { stack }
                     .padding(.leading, leadIn)
-                    .frame(height: model.bodyDepth)
+                    .frame(height: model.baseBodyDepth)
             }
         }
         .allowsHitTesting(model.isExpanded)
+        .offset(x: -model.edge.outward.x * model.ringEdgeOffset,
+                y: -model.edge.outward.y * model.ringEdgeOffset)
+        .padding(bezelSide, model.ringEdgePadding)
     }
 
     /// The corner of the shape's own frame where the stack starts and the

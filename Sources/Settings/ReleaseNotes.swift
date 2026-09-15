@@ -40,6 +40,15 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.42",
+            headline: L10n.t("Top avoidance height"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Keep content below the hardware notch at smaller sizes")),
+                ReleaseNote.Change(title: L10n.t("Calibrate top avoidance and adjust ring spacing on every edge")),
+                ReleaseNote.Change(title: L10n.t("Improve slider accessibility and combine window updates while dragging"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.41",
             headline: L10n.t("Independent inner ring"),
             changes: [

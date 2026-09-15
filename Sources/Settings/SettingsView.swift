@@ -778,6 +778,33 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text(L10n.t("Top avoidance height"))
+                        Spacer()
+                        Text(String(format: "%+.0f pt", preferences.topAvoidanceAdjustment)).monospacedDigit()
+                        Button(L10n.t("Reset")) { preferences.topAvoidanceAdjustment = 0 }
+                            .accessibilityLabel(Text(L10n.t("Reset top avoidance height")))
+                    }
+                    Slider(value: $preferences.topAvoidanceAdjustment, in: Preferences.topAvoidanceRange, step: 1)
+                        .accessibilityLabel(Text(L10n.t("Top avoidance height")))
+                        .accessibilityValue(Text(String(format: "%+.0f pt", preferences.topAvoidanceAdjustment)))
+                    Text(L10n.t("Adjust the detected notch height. Zero uses automatic detection; the height does not scale."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    HStack {
+                        Text(L10n.t("Ring edge spacing"))
+                        Spacer()
+                        Text(String(format: "%+.0f pt", preferences.ringEdgeAdjustment)).monospacedDigit()
+                        Button(L10n.t("Reset")) { preferences.ringEdgeAdjustment = 0 }
+                            .accessibilityLabel(Text(L10n.t("Reset ring edge spacing")))
+                    }
+                    Slider(value: $preferences.ringEdgeAdjustment, in: Preferences.ringEdgeRange, step: 1)
+                        .accessibilityLabel(Text(L10n.t("Ring edge spacing")))
+                        .accessibilityValue(Text(String(format: "%+.0f pt", preferences.ringEdgeAdjustment)))
+                    Text(L10n.t("Move rings and percentages away from the docked edge. Negative values move them closer and may clip content."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
                 // The nudge has been draggable since the edge picker existed,
                 // and nothing on screen has ever said so — the only way to
                 // find it was to hold ⌥ on the notch and see what happened.

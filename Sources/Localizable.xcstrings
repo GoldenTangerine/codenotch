@@ -1,6 +1,105 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Keep content below the hardware notch at smaller sizes": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "小尺寸下保持内容避开实体刘海"
+          }
+        }
+      }
+    },
+    "Calibrate top avoidance and adjust ring spacing on every edge": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支持顶部避让校准与四边圆环边距调整"
+          }
+        }
+      }
+    },
+    "Improve slider accessibility and combine window updates while dragging": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完善滑块辅助功能，合并拖动期间的窗口更新"
+          }
+        }
+      }
+    },
+    "Reset top avoidance height": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置顶部避让高度"
+          }
+        }
+      }
+    },
+    "Reset ring edge spacing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置圆环边距"
+          }
+        }
+      }
+    },
+    "Top avoidance height": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顶部避让高度"
+          }
+        }
+      }
+    },
+    "Ring edge spacing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "圆环边距"
+          }
+        }
+      }
+    },
+    "Adjust the detected notch height. Zero uses automatic detection; the height does not scale.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在自动识别的刘海高度上校准，0 为自动；避让高度不随胶囊缩放。"
+          }
+        }
+      }
+    },
+    "Move rings and percentages away from the docked edge. Negative values move them closer and may clip content.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正值让圆环和百分比远离停靠边界；负值使其靠近，可能遮挡内容。"
+          }
+        }
+      }
+    },
     "Space all three rings evenly between their edges": {
       "extractionState": "manual",
       "localizations": {

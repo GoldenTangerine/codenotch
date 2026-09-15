@@ -63,6 +63,158 @@ import Testing
         }
     }
 
+    @Test func topAvoidanceIsIndependentOfScaleAndOnlyAppliesAtTop() {
+        struct NotchedScreen: ScreenDescribing {
+            let frameValue = CGRect(x: 0, y: 0, width: 1440, height: 900)
+            let visibleFrameValue = CGRect(x: 0, y: 0, width: 1440, height: 868)
+            let hardwareNotch: HardwareNotch? = HardwareNotch(width: 200, height: 32)
+        }
+        let model = NotchViewModel()
+        for edge in NotchEdge.allCases {
+            model.edge = edge
+            for scale: CGFloat in [0.75, 1, 1.5] {
+                model.sizeScale = scale
+                model.adopt(screen: NotchedScreen())
+                for adjustment: CGFloat in [-60, 0, 10, 120] {
+                    model.topAvoidanceAdjustment = adjustment
+                    let expected: CGFloat = edge == .top ? max(0, 32 + adjustment) : 0
+                    #expect(abs(model.contentInset * scale - expected) < 0.000001)
+                }
+            }
+        }
+        model.edge = .top
+        model.topAvoidanceAdjustment = 12
+        model.adopt(screen: Screen())
+        #expect(abs(model.contentInset * model.sizeScale - 12) < 0.000001)
+    }
+
+    @Test func ringSpacingMovesContentsWithoutChangingAlongPositions() {
+        let model = NotchViewModel()
+        for edge in NotchEdge.allCases {
+            model.edge = edge
+            for scale: CGFloat in [0.75, 1, 1.5] {
+                model.sizeScale = scale
+                model.ringEdgeAdjustment = 0
+                let depth = model.notchDrawnDepth
+                let center = model.ringCenter(index: 0)
+                for adjustment: CGFloat in [-40, -5, 0, 20, 80] {
+                    model.ringEdgeAdjustment = adjustment
+                    #expect(abs((model.ringEdgePadding + model.ringEdgeOffset) * scale - adjustment) < 0.000001)
+                    #expect(abs(model.notchDrawnDepth - depth - max(0, adjustment)) < 0.000001)
+                    #expect(model.ringCenter(index: 0) == center)
+                    #expect(model.tooltipInset == model.notchDrawnDepth + NotchLayout.tailGap)
+                }
+            }
+        }
+    }
+
+    @Test func geometrySettingsPersistAndRejectInvalidValues() throws {
+        let domain = "GeometrySettingsTests." + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let preferences = Preferences(defaults: defaults)
+        #expect(preferences.topAvoidanceAdjustment == 0 && preferences.ringEdgeAdjustment == 0)
+        preferences.topAvoidanceAdjustment = 15
+        preferences.ringEdgeAdjustment = -12
+        let restored = Preferences(defaults: defaults)
+        #expect(restored.topAvoidanceAdjustment == 15 && restored.ringEdgeAdjustment == -12)
+        preferences.topAvoidanceAdjustment = .infinity
+        preferences.ringEdgeAdjustment = -999
+        #expect(preferences.topAvoidanceAdjustment == 0 && preferences.ringEdgeAdjustment == -40)
+        let clamped = Preferences(defaults: defaults)
+        #expect(clamped.topAvoidanceAdjustment == 0 && clamped.ringEdgeAdjustment == -40)
+        preferences.ringEdgeAdjustment = .nan
+        #expect(preferences.ringEdgeAdjustment == 0)
+    }
+
+    @Test func placementGuidesFollowGeometrySettings() {
+        let model = NotchViewModel()
+        let original = model.centeredGuideFrames(on: Screen(), cellCount: 1)
+        model.topAvoidanceAdjustment = 10
+        model.ringEdgeAdjustment = 20
+        let changed = model.centeredGuideFrames(on: Screen(), cellCount: 1)
+        for edge in NotchEdge.allCases {
+            let before = original[edge]!
+            let after = changed[edge]!
+            let difference = edge.isVertical ? after.width - before.width : after.height - before.height
+            #expect(abs(difference - (edge == .top ? 30 : 20)) < 0.000001)
+        }
+    }
+
+    @Test func geometryDragAppliesFinalWindowSizeAfterCoalescing() async throws {
+        let controller = NotchWindowController()
+        defer { controller.stop() }
+        controller.model.edge = .top
+        controller.model.sizeScale = 0.75
+        controller.model.isExpanded = true
+        controller.apply(topAvoidanceAdjustment: 5, ringEdgeAdjustment: 5)
+        _ = try #require(controller.panelFrameForTesting)
+        for value in 6...20 {
+            controller.apply(topAvoidanceAdjustment: CGFloat(value), ringEdgeAdjustment: CGFloat(value))
+        }
+        #expect(controller.model.topAvoidanceAdjustment == 20)
+        #expect(controller.model.ringEdgeAdjustment == 20)
+        try await Task.sleep(for: .milliseconds(250))
+        let settled = try #require(controller.panelFrameForTesting)
+        controller.relocate()
+        #expect(controller.panelFrameForTesting == settled)
+    }
+
+    @Test func stoppingControllerCancelsPendingGeometryLayout() async throws {
+        let controller = NotchWindowController()
+        controller.model.edge = .top
+        controller.apply(topAvoidanceAdjustment: 5, ringEdgeAdjustment: 5)
+        let initial = try #require(controller.panelFrameForTesting)
+        controller.apply(topAvoidanceAdjustment: 30, ringEdgeAdjustment: 30)
+        controller.stop()
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(controller.panelFrameForTesting == initial)
+    }
+
+    @Test func renderedRingSpacingMovesInwardOnEveryEdge() throws {
+        for edge in NotchEdge.allCases {
+            let model = NotchViewModel()
+            model.edge = edge
+            model.sizeScale = 0.75
+            model.isExpanded = true
+            model.accentColor = .blue
+            model.surfaceStyle = .solid
+            model.showsMoveHandle = false
+            model.showsSettingsHandle = false
+            model.snapshots = [ProviderSnapshot(id: "p", displayName: "P", glyph: .claude,
+                fidelity: .official, status: .ok,
+                windows: [LimitWindow(id: "w", label: "Session", usedFraction: 0.4)], headlineID: "w")]
+            var starts: [CGFloat] = []
+            for offset: CGFloat in [0, 10, -5] {
+                model.ringEdgeAdjustment = offset
+                let size = model.panelSize
+                let renderer = ImageRenderer(content: NotchRootView(model: model)
+                    .frame(width: size.width, height: size.height)
+                    .environment(\.colorScheme, .dark))
+                renderer.scale = 2
+                let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+                var distances: [CGFloat] = []
+                for x in 0..<bitmap.pixelsWide {
+                    for y in 0..<bitmap.pixelsHigh {
+                        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                              color.blueComponent - color.redComponent > 0.3 else { continue }
+                        let distance: Int
+                        switch edge {
+                        case .top: distance = y
+                        case .bottom: distance = bitmap.pixelsHigh - 1 - y
+                        case .left: distance = x
+                        case .right: distance = bitmap.pixelsWide - 1 - x
+                        }
+                        distances.append(CGFloat(distance) / 2)
+                    }
+                }
+                starts.append(try #require(distances.min()))
+            }
+            #expect(abs(starts[1] - starts[0] - 10) <= 1)
+            #expect(abs(starts[2] - starts[0] + 5) <= 1)
+        }
+    }
+
     @Test func paintedDiameterMatchesVisibleRingLayers() throws {
         for placement in [WeeklyRing.off, .inside, .outside] {
             for secondary: Double? in [nil, 1] {

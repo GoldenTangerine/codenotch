@@ -291,6 +291,8 @@ final class NotchWindowController {
     }
 
     func stop() {
+        pendingRelocate?.cancel()
+        pendingRelocate = nil
         finishPositionEditing(commit: false)
         setPointing(false)
         peekUntil = nil
@@ -917,6 +919,14 @@ final class NotchWindowController {
         relocate()
     }
 
+    func apply(topAvoidanceAdjustment: CGFloat, ringEdgeAdjustment: CGFloat) {
+        guard model.topAvoidanceAdjustment != topAvoidanceAdjustment
+            || model.ringEdgeAdjustment != ringEdgeAdjustment else { return }
+        model.topAvoidanceAdjustment = topAvoidanceAdjustment
+        model.ringEdgeAdjustment = ringEdgeAdjustment
+        coalesceRelocate()
+    }
+
     func apply(scale: CGFloat) {
         guard model.sizeScale != scale else { return }
 
@@ -952,6 +962,8 @@ final class NotchWindowController {
 
     /// Resize the window on a budget, and always once the drag has stopped.
     private func coalesceRelocate() {
+        pendingRelocate?.cancel()
+        pendingRelocate = nil
         let now = Date()
         if now.timeIntervalSince(lastRelocate) >= Self.relocateInterval {
             lastRelocate = now
@@ -960,9 +972,9 @@ final class NotchWindowController {
         }
         // Too soon. Replace any pending catch-up with one scheduled from now,
         // so a drag that stops mid-interval still ends up correctly sized.
-        pendingRelocate?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            self.pendingRelocate = nil
             self.lastRelocate = Date()
             self.relocate()
             self.updateInteractiveRects()
