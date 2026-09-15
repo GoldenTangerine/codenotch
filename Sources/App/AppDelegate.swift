@@ -456,10 +456,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .store(in: &cancellables)
 
             preferences.$topAvoidanceAdjustment.combineLatest(preferences.$ringEdgeAdjustment)
+                .dropFirst()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak fleet] top, ring in
                     fleet?.apply(topAvoidanceAdjustment: CGFloat(top), ringEdgeAdjustment: CGFloat(ring))
+                    fleet?.previewGeometry()
                 }
+                .store(in: &cancellables)
+
+            preferences.$isEditingNotchGeometry.removeDuplicates().dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak fleet] editing in fleet?.previewGeometry(editing: editing) }
                 .store(in: &cancellables)
 
             preferences.$foldsForFullScreen

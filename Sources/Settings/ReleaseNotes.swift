@@ -40,6 +40,14 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.43",
+            headline: L10n.t("Top avoidance height"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Automatically expand the capsule while adjusting height or ring spacing")),
+                ReleaseNote.Change(title: L10n.t("Keep the preview open while dragging and for 1.2 seconds after release or reset"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.42",
             headline: L10n.t("Top avoidance height"),
             changes: [

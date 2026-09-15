@@ -71,6 +71,7 @@ final class NotchFleet {
     private var independentInnerRing = false
     private var topAvoidanceAdjustment: CGFloat = 0
     private var ringEdgeAdjustment: CGFloat = 0
+    private var isEditingGeometry = false
     private var codeSwitchQuotaRatiosEnabled = false
     private var showsMoveHandle = false
     private var showsSettingsHandle = false
@@ -251,6 +252,13 @@ final class NotchFleet {
         self.ringEdgeAdjustment = CGFloat(Preferences.geometryValue(Double(ringEdgeAdjustment), in: Preferences.ringEdgeRange))
         for controller in controllers.values {
             controller.apply(topAvoidanceAdjustment: self.topAvoidanceAdjustment, ringEdgeAdjustment: self.ringEdgeAdjustment)
+        }
+    }
+
+    func previewGeometry(editing: Bool? = nil) {
+        if let editing { isEditingGeometry = editing }
+        for controller in controllers.values {
+            controller.previewGeometry(editing: editing)
         }
     }
 
@@ -547,6 +555,7 @@ final class NotchFleet {
         controller.model.now = Date()
         controller.show()
         controller.apply(visibility)
+        if isEditingGeometry { controller.previewGeometry(editing: true) }
         return controller
     }
 }

@@ -121,6 +121,7 @@ final class NotchWindowController {
     /// second. A peek is not the pointer arriving, so the pointer leaving is
     /// not what should end it.
     private var peekUntil: Date?
+    private var isEditingGeometry = false
     /// The standing visibility choice, so a peek never overrides Hidden.
     private var visibility: NotchVisibility = .onHover
     /// Whether we have pushed the pointing hand onto the cursor stack.
@@ -291,6 +292,7 @@ final class NotchWindowController {
     }
 
     func stop() {
+        isEditingGeometry = false
         pendingRelocate?.cancel()
         pendingRelocate = nil
         finishPositionEditing(commit: false)
@@ -742,6 +744,7 @@ final class NotchWindowController {
 
         // A peek holds the notch open for its own duration; only after that
         // does the pointer get a say again.
+        if isEditingGeometry && visibility != .hidden { return }
         if let peekUntil, peekUntil > Date() { return }
         let holdsOpen = ignoreAlwaysOn ? model.isPinned : model.staysOpen
         guard model.isExpanded, !holdsOpen, foldWork == nil else { return }
@@ -925,6 +928,17 @@ final class NotchWindowController {
         model.topAvoidanceAdjustment = topAvoidanceAdjustment
         model.ringEdgeAdjustment = ringEdgeAdjustment
         coalesceRelocate()
+    }
+
+    func previewGeometry(editing: Bool? = nil) {
+        if let editing { isEditingGeometry = editing }
+        guard peek(for: 1.2, focusing: nil) else { return }
+        if isEditingGeometry {
+            // 按住滑块但没有数值变化时，也要维持展开直到编辑结束。
+            peekUntil = .distantFuture
+            peekWork?.cancel()
+            peekWork = nil
+        }
     }
 
     func apply(scale: CGFloat) {
@@ -1182,7 +1196,7 @@ final class NotchWindowController {
                 guard let self, let panel = self.panel else { return }
                 self.peekWork = nil
                 self.peekUntil = nil
-                guard !self.model.staysOpen else { return }
+                guard !self.model.staysOpen, !self.isEditingGeometry else { return }
                 // Left open if the peek did its job and the pointer is already
                 // there; the ordinary hover fold takes it from here.
                 guard !self.isInLiveRegion(self.localCursor(in: panel.frame)) else { return }

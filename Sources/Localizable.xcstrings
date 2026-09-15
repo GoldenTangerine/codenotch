@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Automatically expand the capsule while adjusting height or ring spacing": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调整避让高度或圆环边距时自动展开胶囊"
+          }
+        }
+      }
+    },
+    "Keep the preview open while dragging and for 1.2 seconds after release or reset": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖动期间持续预览，松开或重置后保留 1.2 秒"
+          }
+        }
+      }
+    },
     "Keep content below the hardware notch at smaller sizes": {
       "extractionState": "manual",
       "localizations": {

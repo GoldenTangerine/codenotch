@@ -191,6 +191,7 @@ final class Preferences: ObservableObject {
     static let customScaleRange: ClosedRange<Double> = 0.75...1.5
 
     static let topAvoidanceRange: ClosedRange<Double> = -60...120
+    @Published var isEditingNotchGeometry = false
     static let ringEdgeRange: ClosedRange<Double> = -40...80
     static func geometryValue(_ value: Double, in range: ClosedRange<Double>) -> Double {
         value.isFinite ? min(max(value, range.lowerBound), range.upperBound) : 0

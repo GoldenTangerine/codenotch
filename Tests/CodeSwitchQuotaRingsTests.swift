@@ -160,6 +160,40 @@ import Testing
         #expect(controller.panelFrameForTesting == settled)
     }
 
+    @Test func geometryPreviewStaysOpenWhileHeldAndRestoresHoverAfterRelease() async throws {
+        let controller = NotchWindowController(mouseLocation: { CGPoint(x: -100_000, y: -100_000) })
+        controller.relocate()
+        defer { controller.stop() }
+        controller.apply(.onHover)
+        #expect(!controller.model.isExpanded)
+        controller.previewGeometry(editing: true)
+        #expect(controller.model.isExpanded)
+        try await Task.sleep(for: .milliseconds(1400))
+        #expect(controller.model.isExpanded)
+        controller.previewGeometry(editing: false)
+        #expect(controller.model.isExpanded)
+        try await Task.sleep(for: .milliseconds(1400))
+        #expect(!controller.model.isExpanded)
+        controller.previewGeometry()
+        #expect(controller.model.isExpanded)
+    }
+
+    @Test func geometryPreviewRespectsHiddenAndAlwaysVisibleModes() async throws {
+        let controller = NotchWindowController(mouseLocation: { CGPoint(x: -100_000, y: -100_000) })
+        controller.relocate()
+        defer { controller.stop() }
+        controller.apply(.hidden)
+        controller.previewGeometry(editing: true)
+        controller.previewGeometry()
+        controller.previewGeometry(editing: false)
+        #expect(!controller.model.isExpanded)
+        controller.apply(.alwaysShow)
+        controller.previewGeometry(editing: true)
+        controller.previewGeometry(editing: false)
+        try await Task.sleep(for: .milliseconds(1400))
+        #expect(controller.model.isExpanded)
+    }
+
     @Test func stoppingControllerCancelsPendingGeometryLayout() async throws {
         let controller = NotchWindowController()
         controller.model.edge = .top
