@@ -658,13 +658,23 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Toggle(L10n.t("Claude daily pace ring"), isOn: $preferences.claudeDailyPaceRing)
-                Text(L10n.t("Claude's main ring shows today's share of the weekly limit — a seventh a day, counted from the weekly reset — instead of the session. The session moves to the thin ring and the card; alerts follow the daily ring."))
+                Text(preferences.independentInnerRing
+                    ? L10n.t("Claude’s inner ring shows daily pace against the weekly allowance. Alerts follow daily pace.")
+                    : L10n.t("Claude's main ring shows today's share of the weekly limit — a seventh a day, counted from the weekly reset — instead of the session. The session moves to the thin ring and the card; alerts follow the daily ring."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Toggle(L10n.t("Code Switch R period ratio rings"), isOn: $preferences.codeSwitchQuotaRatiosEnabled)
-                Text(L10n.t("Show daily use against the weekly limit and weekly use against the monthly limit. With only two periods, the thin ring keeps the longer period's usage rate. Alerts use actual quota limits."))
+                Text(preferences.independentInnerRing
+                    ? L10n.t("The inner ring shows daily use against the weekly limit, or weekly use against the monthly limit when daily quota is unavailable. Alerts use actual quota limits.")
+                    : L10n.t("Show daily use against the weekly limit and weekly use against the monthly limit. With only two periods, the thin ring keeps the longer period's usage rate. Alerts use actual quota limits."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle(L10n.t("Independent inner ring"), isOn: $preferences.independentInnerRing)
+                Text(L10n.t("Keep the original quota rings and add pace or period ratio inside. The percentage follows the innermost ring."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

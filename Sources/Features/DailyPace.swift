@@ -29,6 +29,11 @@ enum DailyPace {
     static let days = 7
     static let weekLength: TimeInterval = Double(days) * dayLength
 
+    struct OriginalQuotaIDs: Equatable {
+        let headline: String?
+        let secondary: String?
+    }
+
     struct Reading: Equatable {
         /// Used against today's cumulative share, 0...1+.
         let usedFraction: Double
@@ -77,6 +82,8 @@ enum DailyPace {
               let weekly = snapshot.windows.first(where: { $0.id == "weekly_all" }),
               let daily = window(weekly: weekly, now: now) else { return snapshot }
         var paced = snapshot
+        paced.dailyPaceOriginalQuotaIDs = OriginalQuotaIDs(headline: snapshot.headlineID,
+                                                         secondary: snapshot.weeklyID)
         paced.windows.insert(daily, at: 0)
         paced.headlineID = windowID
         paced.weeklyID = snapshot.windows.contains { $0.id == "session" } ? "session" : nil

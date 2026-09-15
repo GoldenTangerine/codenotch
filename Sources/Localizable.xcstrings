@@ -1,6 +1,83 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Keep quota rings and add daily pace or period ratio inside": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留原额度环，在内侧新增每日节奏或周期比例环"
+          }
+        }
+      }
+    },
+    "Show the innermost reading below the ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下方百分比优先显示最内环读数"
+          }
+        }
+      }
+    },
+    "Keep full details on screen and preserve missing Claude session readings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完整详情适配屏幕，Claude 缺少会话额度时保留原环含义"
+          }
+        }
+      }
+    },
+    "Claude’s inner ring shows daily pace against the weekly allowance. Alerts follow daily pace.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude 内圈显示基于每周额度的每日节奏，提醒仍遵循每日节奏。"
+          }
+        }
+      }
+    },
+    "The inner ring shows daily use against the weekly limit, or weekly use against the monthly limit when daily quota is unavailable. Alerts use actual quota limits.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内圈优先显示日用量占周额度；日额度不可用时显示周用量占月额度。提醒仍按真实额度触发。"
+          }
+        }
+      }
+    },
+    "Independent inner ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "独立内圈"
+          }
+        }
+      }
+    },
+    "Keep the original quota rings and add pace or period ratio inside. The percentage follows the innermost ring.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保留原额度环，在内侧新增节奏或周期比例环，下方百分比优先显示最内环读数。"
+          }
+        }
+      }
+    },
     "Optionally show daily use against weekly limits and weekly use against monthly limits": {
       "extractionState": "manual",
       "localizations": {

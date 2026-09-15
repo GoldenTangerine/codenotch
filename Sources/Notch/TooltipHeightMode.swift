@@ -42,12 +42,13 @@ enum TooltipSizing {
         return min(safeLimit, natural.rounded(.up))
     }
 
-    static func heightLimit(on screen: ScreenDescribing, edge: NotchEdge, contentInset: CGFloat) -> CGFloat {
+    static func heightLimit(on screen: ScreenDescribing, edge: NotchEdge, contentInset: CGFloat,
+                            bodyDepth: CGFloat? = nil, scale: CGFloat = 1) -> CGFloat {
         let usable = screen.visibleFrameValue
         if edge.isVertical { return max(1, usable.height - 2 * screenMargin) }
         let topInset = edge == .top
-            ? max(0, contentInset - (screen.frameValue.maxY - usable.maxY)) : contentInset
-        return max(1, usable.height - topInset - NotchLayout.bodyDepth(for: edge)
+            ? max(0, contentInset * scale - (screen.frameValue.maxY - usable.maxY)) : contentInset * scale
+        return max(1, usable.height - topInset - (bodyDepth ?? NotchLayout.bodyDepth(for: edge)) * scale
                    - NotchLayout.tailLength - NotchLayout.tailGap - screenMargin)
     }
 }

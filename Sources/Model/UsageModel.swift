@@ -306,6 +306,8 @@ struct ProviderSnapshot: Identifiable, Equatable {
     var sourceProviderID: String?
     /// Account identity remains the refresh key; native features use this type.
     var nativeProviderID: String? = nil
+    // 合成节奏窗口不应丢失供应商声明，包括缺失窗口的标识和显式的 nil。
+    var dailyPaceOriginalQuotaIDs: DailyPace.OriginalQuotaIDs? = nil
 
     var providerID: String { sourceProviderID ?? id }
 

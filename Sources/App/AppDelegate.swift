@@ -589,6 +589,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(weeklyRing: $0) }
                 .store(in: &cancellables)
 
+            preferences.$independentInnerRing.combineLatest(preferences.$codeSwitchQuotaRatiosEnabled)
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] independent, ratios in
+                    fleet?.apply(independentInnerRing: independent, codeSwitchQuotaRatiosEnabled: ratios)
+                }
+                .store(in: &cancellables)
+
             preferences.$notchSurfaceStyle
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(surfaceStyle: $0) }
@@ -860,6 +867,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.bindNotchAccentColor(preferences, to: fleet)
             .store(in: &cancellables)
         fleet.apply(weeklyRing: preferences.weeklyRing)
+        fleet.apply(independentInnerRing: preferences.independentInnerRing,
+                    codeSwitchQuotaRatiosEnabled: preferences.codeSwitchQuotaRatiosEnabled)
         fleet.apply(showsMoveHandle: preferences.showsMoveHandle)
         fleet.apply(showsSettingsHandle: preferences.showsSettingsHandle)
         fleet.apply(foldsForFullScreen: preferences.foldsForFullScreen)

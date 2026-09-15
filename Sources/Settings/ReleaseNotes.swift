@@ -40,6 +40,15 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.37",
+            headline: L10n.t("Independent inner ring"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Keep quota rings and add daily pace or period ratio inside")),
+                ReleaseNote.Change(title: L10n.t("Show the innermost reading below the ring")),
+                ReleaseNote.Change(title: L10n.t("Keep full details on screen and preserve missing Claude session readings"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.36",
             headline: L10n.t("Code Switch R period ratio rings"),
             changes: [

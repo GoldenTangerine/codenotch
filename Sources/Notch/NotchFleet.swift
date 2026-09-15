@@ -68,6 +68,8 @@ final class NotchFleet {
     /// One choice for the whole fleet, like the edge and the size: a weekly
     /// ring on one display and not another would read as a bug.
     private var weeklyRing: WeeklyRing = .off
+    private var independentInnerRing = false
+    private var codeSwitchQuotaRatiosEnabled = false
     private var showsMoveHandle = false
     private var showsSettingsHandle = false
     private var foldsForFullScreen = true
@@ -223,6 +225,15 @@ final class NotchFleet {
         self.weeklyRing = weeklyRing
         for controller in controllers.values {
             controller.model.weeklyRing = weeklyRing
+        }
+    }
+
+    func apply(independentInnerRing: Bool, codeSwitchQuotaRatiosEnabled: Bool) {
+        self.independentInnerRing = independentInnerRing
+        self.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
+        for controller in controllers.values {
+            controller.model.independentInnerRing = independentInnerRing
+            controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
         }
     }
 
@@ -495,6 +506,8 @@ final class NotchFleet {
         controller.model.accentColor = accentColor
         controller.model.notchTriggerHeight = notchTriggerHeight
         controller.model.weeklyRing = weeklyRing
+        controller.model.independentInnerRing = independentInnerRing
+        controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
         controller.model.showsMoveHandle = showsMoveHandle
         controller.model.showsSettingsHandle = showsSettingsHandle
         controller.model.surfaceStyle = surfaceStyle

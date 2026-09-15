@@ -8,10 +8,16 @@
  @FilePath: Tests/CodeSwitchQuotaRingsTests.swift
  */
 import Foundation
+import SwiftUI
 import Testing
 @testable import Codenotch
 
 @Suite @MainActor struct CodeSwitchQuotaRingsTests {
+    private struct Screen: ScreenDescribing {
+        let frameValue = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let visibleFrameValue = CGRect(x: 0, y: 0, width: 1440, height: 900)
+    }
+
     private func quota(_ key: String, used: Double = 10, total: Double = 20,
                        mode: String? = "currency", unit: String? = nil,
                        active: Bool = true, unlimited: Bool = false,
@@ -23,6 +29,153 @@ import Testing
 
     private var weekly: CodeSwitchQuota { quota("weekly", used: 80, total: 200) }
     private var monthly: CodeSwitchQuota { quota("monthly", used: 200, total: 2000) }
+
+    @Test func independentRingKeepsActualQuotasAndPrefersDailyRatio() throws {
+        let raw = snapshot([quota("daily"), weekly, monthly])
+        for placement in [WeeklyRing.off, .inside, .outside] {
+            let cell = ProviderCell(snapshot: raw, activity: ActivitySummary(state: .working),
+                weeklyRing: placement, codeSwitchQuotaRatiosEnabled: true, independentInnerRing: true)
+            #expect(cell.displayedMainFraction == raw.ringFraction)
+            #expect(cell.displayedSecondaryFraction == raw.secondaryWindow?.usedFraction)
+            #expect(cell.innerReading?.fraction == 0.05)
+            let text = try #require(cell.quotaRingText)
+            #expect(text.contains(L10n.t("Daily used / Weekly limit")))
+            #expect(!text.contains(L10n.t("Weekly used / Monthly limit")))
+            #expect(text.contains(L10n.t("Secondary quota ring")) == (placement != .off))
+            #expect(cell.accessibilityText.contains(", 5%"))
+        }
+        let legacy = ProviderCell(snapshot: raw, codeSwitchQuotaRatiosEnabled: true)
+        #expect(legacy.innerReading == nil)
+        #expect(legacy.displayedMainFraction == 0.05)
+        let weeklyOnly = ProviderCell(snapshot: snapshot([weekly, monthly]),
+            codeSwitchQuotaRatiosEnabled: true, independentInnerRing: true)
+        #expect(weeklyOnly.innerReading?.fraction == 0.04)
+    }
+
+    @Test func unavailableInnerRingFallsBackWithoutEnlarging() {
+        for raw in [snapshot([weekly]), snapshot([quota("daily", unit: "CNY"), weekly])] {
+            let cell = ProviderCell(snapshot: raw, codeSwitchQuotaRatiosEnabled: true, independentInnerRing: true)
+            #expect(cell.innerReading == nil)
+            #expect(cell.displayedMainFraction == raw.ringFraction)
+            let model = NotchViewModel()
+            model.snapshots = [raw]
+            model.independentInnerRing = true
+            model.codeSwitchQuotaRatiosEnabled = true
+            #expect(model.ringGrowth == 0)
+        }
+    }
+
+    @Test func claudeIndependentPaceRestoresSessionAndWeekWithoutChangingSnapshot() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let raw = ProviderSnapshot(id: "claude", displayName: "Claude", glyph: .claude,
+            fidelity: .official, status: .ok,
+            windows: [LimitWindow(id: "session", label: "Session", usedFraction: 0.42),
+                      LimitWindow(id: "weekly_all", label: "Week", usedFraction: 0.3,
+                                  resetsAt: now.addingTimeInterval(5 * 86_400))],
+            headlineID: "session", weeklyID: "weekly_all")
+        let paced = DailyPace.apply(to: raw, now: now)
+        let cell = ProviderCell(snapshot: paced, weeklyRing: .inside, independentInnerRing: true)
+        #expect(cell.displayedMainFraction == 0.42)
+        #expect(cell.displayedSecondaryFraction == 0.3)
+        #expect(abs(try #require(cell.innerReading).fraction - 0.7) < 0.000001)
+        #expect(IndependentQuotaRing.originalQuotas(in: paced) == raw)
+        #expect(paced.headlineID == DailyPace.windowID)
+        #expect(ProviderCell(snapshot: raw, independentInnerRing: true).innerReading == nil)
+    }
+
+    @Test func expandedGeometryKeepsCentersAndCapacityConsistent() {
+        for edge in NotchEdge.allCases {
+            let model = NotchViewModel()
+            model.edge = edge
+            model.snapshots = [snapshot([quota("daily"), weekly, monthly])]
+            let originalDepth = model.bodyDepth
+            let originalCenter = model.ringCenter(index: 0)
+            let originalLength = model.bodyLength
+            model.independentInnerRing = true
+            model.codeSwitchQuotaRatiosEnabled = true
+            #expect(model.bodyDepth == originalDepth + NotchLayout.independentRingGrowth)
+            #expect(abs(model.bodyLength - originalLength - NotchLayout.independentRingGrowth) < 0.000001)
+            #expect(model.ringCenter(index: 0) == originalCenter + NotchLayout.independentRingGrowth / 2)
+            #expect(abs(model.ringCenter(index: 1) - model.ringCenter(index: 0) - model.cellPitch) < 0.000001)
+            model.codeSwitchQuotaRatiosEnabled = false
+            #expect(model.bodyDepth == originalDepth)
+        }
+    }
+
+    @Test func missingClaudeSessionKeepsOriginalQuotaDeclarations() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let ids: [(String?, String?)] = [("session", "weekly_all"), ("missing", nil), (nil, nil)]
+        for (headline, secondary) in ids {
+            let raw = ProviderSnapshot(id: "claude", displayName: "Claude", glyph: .claude,
+                fidelity: .official, status: .ok,
+                windows: [LimitWindow(id: "weekly_all", label: "Week", usedFraction: 0.3,
+                                      resetsAt: now.addingTimeInterval(5 * 86_400))],
+                headlineID: headline, weeklyID: secondary)
+            let paced = DailyPace.apply(to: raw, now: now)
+            #expect(IndependentQuotaRing.originalQuotas(in: paced) == raw)
+            #expect(DailyPace.apply(to: paced, now: now) == paced)
+            let cell = ProviderCell(snapshot: paced, weeklyRing: .inside, independentInnerRing: true)
+            #expect(cell.displayedMainFraction == raw.ringFraction)
+            #expect(cell.displayedSecondaryFraction == raw.secondaryWindow?.usedFraction)
+            #expect(cell.innerReading != nil)
+            if headline == "session" {
+                #expect(cell.displayedMainFraction == nil)
+                #expect(cell.displayedSecondaryFraction == 0.3)
+                var legacy = paced
+                legacy.dailyPaceOriginalQuotaIDs = nil
+                #expect(IndependentQuotaRing.originalQuotas(in: legacy) == raw)
+            }
+        }
+    }
+
+    @Test func fullTooltipFitsAfterInnerRingAndScaleChanges() {
+        for edge in NotchEdge.allCases {
+            for scale: CGFloat in [0.75, 1, 1.5] {
+                let model = NotchViewModel()
+                model.edge = edge
+                model.sizeScale = scale
+                model.tooltipHeightMode = .full
+                model.snapshots = [snapshot([quota("daily"), weekly, monthly])]
+                model.codeSwitchQuotaRatiosEnabled = true
+                model.adopt(screen: Screen())
+                let originalLimit = model.fullTooltipHeightLimit
+                model.independentInnerRing = true
+                model.adopt(screen: Screen())
+                let expectedReduction = edge.isVertical ? 0 : NotchLayout.independentRingGrowth * scale
+                #expect(abs(originalLimit - model.fullTooltipHeightLimit - expectedReduction) < 0.000001)
+                model.hoveredIndex = 0
+                model.recordTooltipHeight(10_000, for: model.snapshots[0], activity: nil)
+                let cardHeight = model.tooltipHeight(for: model.snapshots[0])
+                if !edge.isVertical {
+                    let total = model.notchDrawnDepth + NotchLayout.tailLength + NotchLayout.tailGap + cardHeight
+                    #expect(total <= Screen().visibleFrameValue.height - TooltipSizing.screenMargin + 0.000001)
+                }
+                model.independentInnerRing = false
+                model.adopt(screen: Screen())
+                #expect(model.fullTooltipHeightLimit == originalLimit)
+            }
+        }
+    }
+
+    @Test func threeQuotaRingsRemainVisibleWhileWorking() throws {
+        let renderer = ImageRenderer(content: ProviderRing(usedFraction: 1, glyph: .claude,
+            activity: ActivitySummary(state: .working), weeklyFraction: 1,
+            weeklyRing: .inside, innerFraction: 1)
+            .environment(\.codenotchAccentColor, .blue)
+            .background(Color.black))
+        renderer.scale = 3
+        let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+        let diameter = NotchLayout.ringDiameter + NotchLayout.independentRingGrowth
+        #expect(abs(CGFloat(bitmap.pixelsWide) / 3 - diameter) < 1)
+        for radius in [diameter / 2 - NotchLayout.trackStroke / 2,
+                       diameter / 2 - NotchLayout.expandedSecondaryInsideInset,
+                       diameter / 2 - NotchLayout.independentRingInset] {
+            let color = try #require(bitmap.colorAt(x: Int((diameter / 2 + radius) * 3),
+                y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+            let channels = [color.redComponent, color.greenComponent, color.blueComponent]
+            #expect(try #require(channels.max()) - #require(channels.min()) > 0.25)
+        }
+    }
 
     private func snapshot(_ quotas: [CodeSwitchQuota], platform: String = "codex") -> ProviderSnapshot {
         let provider = CodeSwitchProvider(providerId: "supplier", providerName: "Supplier", icon: "openai",
@@ -209,6 +362,9 @@ import Testing
         let defaults = try #require(UserDefaults(suiteName: domain))
         defer { defaults.removePersistentDomain(forName: domain) }
         let preferences = Preferences(defaults: defaults)
+        #expect(!preferences.independentInnerRing)
+        preferences.independentInnerRing = true
+        #expect(Preferences(defaults: defaults).independentInnerRing)
         #expect(!preferences.codeSwitchQuotaRatiosEnabled)
         preferences.claudeDailyPaceRing = true
         #expect(!preferences.codeSwitchQuotaRatiosEnabled)

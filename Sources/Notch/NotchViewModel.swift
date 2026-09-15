@@ -131,7 +131,7 @@ final class NotchViewModel: ObservableObject {
         let slack = NotchLayout.slack(for: edge, maxCardHeight: NotchLayout.maxCardHeight(sessionCap: 0))
         let room = available - 2 * slack - 2 * flare
             - NotchLayout.padStart(for: edge) - NotchLayout.padEnd(for: edge)
-        let capacity = max(1, Int((room + NotchLayout.cellSpacing) / NotchLayout.cellPitch(for: edge)))
+        let capacity = max(1, Int((room + NotchLayout.cellSpacing) / (cellAlong + NotchLayout.cellSpacing)))
         return min(count, capacity)
     }
 
@@ -262,6 +262,18 @@ final class NotchViewModel: ObservableObject {
     /// Mirrored here for the same reason `accentColor` is: the notch is a
     /// separate window, and it has to redraw the moment Settings changes this.
     @Published var weeklyRing: WeeklyRing = .off
+    @Published var independentInnerRing = false
+    @Published var codeSwitchQuotaRatiosEnabled = false
+
+    var ringGrowth: CGFloat {
+        snapshots.contains {
+            IndependentQuotaRing.reading(for: $0, enabled: independentInnerRing,
+                                         ratiosEnabled: codeSwitchQuotaRatiosEnabled) != nil
+        } ? NotchLayout.independentRingGrowth : 0
+    }
+    var cellRingDiameter: CGFloat { NotchLayout.ringDiameter + ringGrowth }
+    var bodyDepth: CGFloat { NotchLayout.bodyDepth(for: edge, ringGrowth: ringGrowth) }
+    var cellAlong: CGFloat { NotchLayout.cellAlong(for: edge, ringGrowth: ringGrowth) }
     /// Whether the move handle is on the notch at all. Mirrored from Settings
     /// like `weeklyRing`.
     @Published var showsMoveHandle = false
@@ -313,7 +325,8 @@ final class NotchViewModel: ObservableObject {
         if screenSize != size { screenSize = size }
         let usable = screen.visibleFrameValue.size
         if screenUsableSize != usable { screenUsableSize = usable }
-        let limit = TooltipSizing.heightLimit(on: screen, edge: edge, contentInset: contentInset)
+        let limit = TooltipSizing.heightLimit(on: screen, edge: edge, contentInset: contentInset,
+                                             bodyDepth: bodyDepth, scale: sizeScale)
         if fullTooltipHeightLimit != limit { fullTooltipHeightLimit = limit }
     }
 
@@ -388,7 +401,7 @@ final class NotchViewModel: ObservableObject {
         // the drawn width *is* the shape's length, and that is what has to
         // clear the hardware.
         let drawn = NotchLayout.shapeLength(
-            cellCount: visibleCount(cellCount), edge: edge, flare: flare
+            cellCount: visibleCount(cellCount), edge: edge, flare: flare, ringGrowth: ringGrowth
         )
         let wanted = hardwareNotch.width + 2 * NotchLayout.cornerRadius
         return max(0, (wanted - drawn) / 2)
@@ -442,7 +455,7 @@ final class NotchViewModel: ObservableObject {
 
     var orbInset: CGFloat {
         guard orbHugsCorner else { return contentInset + NotchLayout.orbInsetFromEdge }
-        return contentInset + NotchLayout.bodyDepth(for: edge)
+        return contentInset + bodyDepth
             - drawnCornerRadius + NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
     }
 
@@ -548,13 +561,13 @@ final class NotchViewModel: ObservableObject {
     /// drawn at that size, so this is the seam between the two spaces rather
     /// than a measurement either of them owns.
     var notchDrawnDepth: CGFloat {
-        (contentInset + NotchLayout.bodyDepth(for: edge)) * sizeScale
+        (contentInset + bodyDepth) * sizeScale
     }
 
     /// The straight part of the shape, flares excluded.
     var bodyLength: CGFloat {
         NotchLayout.bodyLength(
-            cellCount: visibleCount(snapshots.count), edge: edge, spacing: cellSpacing
+            cellCount: visibleCount(snapshots.count), edge: edge, spacing: cellSpacing, ringGrowth: ringGrowth
         ) + 2 * endSpread
     }
 
@@ -562,11 +575,11 @@ final class NotchViewModel: ObservableObject {
     /// included so the readings stay in the middle of the bar.
     func ringCenter(index: Int) -> CGFloat {
         NotchLayout.ringCenter(index: index - visibleStart, edge: edge, flare: flare,
-                              spacing: cellSpacing) + endSpread
+                              spacing: cellSpacing, ringGrowth: ringGrowth) + endSpread
     }
 
     var cellSpacing: CGFloat { cellSpacing(cellCount: snapshots.count) }
-    var cellPitch: CGFloat { NotchLayout.cellAlong(for: edge) + cellSpacing }
+    var cellPitch: CGFloat { cellAlong + cellSpacing }
 
     private func cellSpacing(cellCount: Int) -> CGFloat {
         guard edge.isVertical, screenSize.height > 0, cellCount > 1 else {
@@ -579,7 +592,7 @@ final class NotchViewModel: ObservableObject {
                 : contentCardHeight(sessionCap: 0),
             notchScale: sizeScale)
         let packed = NotchLayout.shapeLength(cellCount: cellCount, edge: edge,
-                                             flare: flare, spacing: 0)
+                                             flare: flare, spacing: 0, ringGrowth: ringGrowth)
         return min(NotchLayout.cellSpacing,
                    max(0, ((screenSize.height - 2 * slack) / sizeScale - packed) / CGFloat(cellCount - 1)))
     }
@@ -732,7 +745,7 @@ final class NotchViewModel: ObservableObject {
         }
         return screenSize.height / sizeScale
             - contentInset
-            - NotchLayout.bodyDepth(for: edge)
+            - bodyDepth
             - NotchLayout.tailLength
             - NotchLayout.tailGap
     }
@@ -752,7 +765,7 @@ final class NotchViewModel: ObservableObject {
 
     /// And across it.
     var notchDepth: CGFloat {
-        if isExpanded { return contentInset + NotchLayout.bodyDepth(for: edge) }
+        if isExpanded { return contentInset + bodyDepth }
         return hardwareNotch?.height ?? NotchLayout.pillWidth
     }
 
@@ -796,7 +809,7 @@ final class NotchViewModel: ObservableObject {
     func shapeLength(cellCount: Int) -> CGFloat {
         NotchLayout.shapeLength(cellCount: visibleCount(cellCount),
                                 edge: edge, flare: flare,
-                                spacing: cellSpacing(cellCount: cellCount))
+                                spacing: cellSpacing(cellCount: cellCount), ringGrowth: ringGrowth)
             + 2 * endSpread(cellCount: cellCount)
     }
 
@@ -805,6 +818,7 @@ final class NotchViewModel: ObservableObject {
         let usable: CGRect
         let hardware: HardwareNotch?
         let scale: CGFloat
+        let ringGrowth: CGFloat
         let count: Int
         let snapshots: [ProviderSnapshot]
         let now: Date
@@ -818,13 +832,15 @@ final class NotchViewModel: ObservableObject {
     /// Preview each centered landing with its own hardware and edge geometry.
     func centeredGuideFrames(on screen: ScreenDescribing, cellCount: Int) -> [NotchEdge: CGRect] {
         let key = GuideLayoutKey(frame: screen.frameValue, usable: screen.visibleFrameValue,
-            hardware: screen.hardwareNotch, scale: sizeScale, count: cellCount, snapshots: snapshots,
+            hardware: screen.hardwareNotch, scale: sizeScale, ringGrowth: ringGrowth, count: cellCount, snapshots: snapshots,
             now: now, tooltipMode: tooltipHeightMode, moveHandle: showsMoveHandle, settingsHandle: showsSettingsHandle)
         if guideLayoutKey == key { return guideFrames }
         let preview = NotchViewModel()
         preview.now = now
         preview.sizeScale = sizeScale
         preview.snapshots = snapshots
+        preview.independentInnerRing = independentInnerRing
+        preview.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
         preview.tooltipHeightMode = tooltipHeightMode
         preview.showsMoveHandle = showsMoveHandle
         preview.showsSettingsHandle = showsSettingsHandle
@@ -862,7 +878,7 @@ final class NotchViewModel: ObservableObject {
     /// panel had shrunk around a card that had not.
     func panelSize(cellCount: Int) -> CGSize {
         if tooltipHeightMode == .full, edge.isVertical, screenUsableSize.height > 0 {
-            return CGSize(width: (contentInset + NotchLayout.bodyDepth(for: edge)) * sizeScale
+            return CGSize(width: (contentInset + bodyDepth) * sizeScale
                           + NotchLayout.tooltipDepth(for: edge), height: screenUsableSize.height)
         }
         let card = maxCardHeight(cellCount: cellCount)
@@ -870,7 +886,7 @@ final class NotchViewModel: ObservableObject {
             edge: edge,
             length: shapeLength(cellCount: cellCount) * sizeScale
                 + 2 * NotchLayout.slack(for: edge, maxCardHeight: card, notchScale: sizeScale),
-            depth: (contentInset + NotchLayout.bodyDepth(for: edge)) * sizeScale
+            depth: (contentInset + bodyDepth) * sizeScale
                 + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card)
         )
     }
@@ -882,7 +898,7 @@ final class NotchViewModel: ObservableObject {
         return NotchPlacement.panelSize(edge: edge,
             length: shapeLength(cellCount: cellCount) * sizeScale
                 + 2 * NotchLayout.slack(for: edge, maxCardHeight: card, notchScale: sizeScale),
-            depth: (contentInset + NotchLayout.bodyDepth(for: edge)) * sizeScale
+            depth: (contentInset + bodyDepth) * sizeScale
                 + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card))
     }
 }
