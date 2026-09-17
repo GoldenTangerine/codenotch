@@ -1,3 +1,12 @@
+/**
+@name: Windows 诊断工具
+@Descripttion: 汇总本地运行状态与供应商诊断信息。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-17 16:39:40
+@LastEditTime: 2026-09-17 16:39:40
+@FilePath: windows/codenotch/src/doctor.rs
+*/
 //! `codenotch.exe doctor` — self-diagnosis: look instead of guessing.
 //! Checks the config, port occupancy, watch roots, the newest session file and how its tail parses,
 //! and writes to stdout plus %APPDATA%\codenotch\doctor.log.
@@ -77,6 +86,7 @@ pub fn run() -> String {
 
     o += &format!("\nusage sources:\n  {}\n  {}\n", crate::usage::probe_credentials(), crate::codex::probe());
     o += &format!("  {}\n", crate::cursor::probe());
+    o += &format!("  {}\n", crate::grok::probe());
     o += &format!("  {}\n", crate::antigravity::probe());
     o += &format!("\nprovider glyphs:\n{}\n", crate::glyphs::probe());
     o += &format!("\nworking state:\n  {}\n", crate::activity::probe());

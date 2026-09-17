@@ -449,7 +449,7 @@ struct NotchRootView: View {
                 blockMessage: snapshot.block?.summary(now: model.now),
                 hasTokenUsage: snapshot.tokenUsage != nil,
                 hasPlan: snapshot.plan != nil,
-                hasResetCredits: snapshot.resetCredits != nil,
+                hasResetCredits: snapshot.hasAvailableResetCredits,
                 localModelName: snapshot.localModel?.name,
                 showsLocalPerformance: snapshot.showsLocalPerformance,
                 localLedgerRows: snapshot.localLedgerRowCount,

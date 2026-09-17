@@ -18,9 +18,11 @@ mod i18n;
 mod server;
 mod state;
 mod tray;
+mod traymenu;
 mod usage;
 mod codex;
 mod cursor;
+mod grok;
 mod antigravity;
 mod agy_cli;
 mod glyphs;
@@ -47,6 +49,8 @@ pub struct AppState {
     /// Codex snapshot (same UsageSnapshot shape; status may also be none/absent)
     pub codex: Mutex<usage::UsageSnapshot>,
     pub cursor: Mutex<usage::UsageSnapshot>,
+    /// Grok Build credits, read from the Grok CLI's own session
+    pub grok: Mutex<usage::UsageSnapshot>,
     pub antigravity: Mutex<usage::UsageSnapshot>,
     /// Provider glyph cache, collected at launch and again on a tray refresh
     pub glyphs: Mutex<std::collections::HashMap<String, glyphs::Glyph>>,
@@ -79,21 +83,146 @@ pub fn broadcast(app: &AppHandle) {
     let _ = app.emit("state", &snap);
 }
 
+/// 旧版说明保留；本次扩展后的行为见下方实现。
 /// Pins the notch to the right edge of the primary monitor; the other edges are a later milestone.
+/// A monitor reduced to the numbers placement needs, so the borrowed `Monitor` does not have to be
+/// held across the config lock.
+#[derive(Clone, Debug)]
+pub struct Screen {
+    pub name: Option<String>,
+    pub x: i32,
+    pub y: i32,
+    pub w: i32,
+    pub h: i32,
+    pub scale: f64,
+}
+
+impl Screen {
+    fn of(m: &tauri::window::Monitor) -> Self {
+        Self {
+            name: m.name().cloned(),
+            x: m.position().x,
+            y: m.position().y,
+            w: m.size().width as i32,
+            h: m.size().height as i32,
+            scale: m.scale_factor(),
+        }
+    }
+    fn contains(&self, x: i32, y: i32) -> bool {
+        x >= self.x && x < self.x + self.w && y >= self.y && y < self.y + self.h
+    }
+}
+
+/// Every attached monitor, primary first so a stale name always falls back to something sensible.
+pub fn screens(app: &AppHandle) -> Vec<Screen> {
+    let Some(w) = app.get_webview_window("notch") else {
+        return Vec::new();
+    };
+    let primary = w.primary_monitor().ok().flatten().map(|m| Screen::of(&m));
+    let mut out: Vec<Screen> = Vec::new();
+    if let Some(p) = primary.clone() {
+        out.push(p);
+    }
+    if let Ok(all) = w.available_monitors() {
+        for m in all {
+            let s = Screen::of(&m);
+            if !out.iter().any(|o| o.name == s.name && o.x == s.x && o.y == s.y) {
+                out.push(s);
+            }
+        }
+    }
+    out
+}
+
+/// The monitor the notch should sit on: the configured one while it is still attached, else primary.
+fn target_screen(app: &AppHandle) -> Option<Screen> {
+    let want = {
+        let st = app.state::<AppState>();
+        let c = st.cfg.lock().unwrap();
+        c.notch_monitor.clone()
+    };
+    let list = screens(app);
+    if let Some(name) = want {
+        if let Some(s) = list.iter().find(|s| s.name.as_deref() == Some(name.as_str())) {
+            return Some(s.clone());
+        }
+    }
+    list.into_iter().next()
+}
+
+/// The window's top-left corner for an edge, a position ratio along it and a measured window size.
+/// `ratio` is the *centre* of the notch along the edge, so 0.5 is the middle whatever the size.
+fn edge_origin(s: &Screen, edge: &str, ww: i32, wh: i32, ratio: f64) -> (i32, i32) {
+    let along = |span: i32, len: i32| -> i32 {
+        let v = (span as f64 * ratio - len as f64 / 2.0).round() as i32;
+        v.clamp(0, (span - len).max(0))
+    };
+    match edge {
+        "left" => (s.x, s.y + along(s.h, wh)),
+        "top" => (s.x + along(s.w, ww), s.y),
+        "bottom" => (s.x + along(s.w, ww), s.y + s.h - wh),
+        _ => (s.x + s.w - ww, s.y + along(s.h, wh)),
+    }
+}
+
+// 使用释放点选择显示器和边缘，透明卡片预留区域不能改变拖放目标。
+fn drop_placement(screens: &[Screen], x: i32, y: i32) -> Option<(&Screen, &'static str, f64)> {
+    let mon = screens.iter().find(|s| s.contains(x, y)).or_else(|| {
+        screens.iter().min_by_key(|s| {
+            let dx = i64::from(x) - i64::from(x.clamp(s.x, s.x + s.w));
+            let dy = i64::from(y) - i64::from(y.clamp(s.y, s.y + s.h));
+            dx * dx + dy * dy
+        })
+    })?;
+    let distances = [
+        ("left", (x - mon.x).abs()), ("right", (mon.x + mon.w - x).abs()),
+        ("top", (y - mon.y).abs()), ("bottom", (mon.y + mon.h - y).abs()),
+    ];
+    let edge = distances.iter().min_by_key(|(_, d)| *d)?.0;
+    let ratio = if config::edge_is_vertical(edge) {
+        (y - mon.y) as f64 / mon.h.max(1) as f64
+    } else {
+        (x - mon.x) as f64 / mon.w.max(1) as f64
+    };
+    Some((mon, edge, ratio.clamp(0.0, 1.0)))
+}
+
+/// Pins the notch to the configured edge of the configured monitor.
+/// The notch window's logical size for an edge.
+///
+/// Upright on the left and right, the pill is a column and 360 wide is plenty. Lying flat on the
+/// top and bottom it is a row: five 56 px rings, their gaps, the padding and both fillets already
+/// come to about 424 px, so a 360 px window clipped the pill once a fifth provider was on. The
+/// flat window keeps the full height too, for the hover card that opens below or above the pill.
+pub fn notch_window_size(edge: &str) -> (f64, f64) {
+    if config::edge_is_vertical(edge) {
+        (NOTCH_W, NOTCH_H)
+    } else {
+        (NOTCH_H, NOTCH_H)
+    }
+}
+
 pub fn place_notch(app: &AppHandle) {
     let Some(w) = app.get_webview_window("notch") else {
         return;
     };
     let scale = w.scale_factor().unwrap_or(1.0);
-    if let Ok(Some(mon)) = w.primary_monitor() {
+    if let Some(mon) = target_screen(app) {
         // Two monitors at different scales (150 % and 200 % in practice): the physical size can
         // end up converted with the *other* monitor's scale factor depending on where the window
         // is created and then moved, leaving the WebView ~256 logical px wide instead of 340.
         // So the physical size is pinned straight from mon.scale_factor() before placing the
         // window; if it still reports a different scale afterwards, it is pinned once more.
-        let ms = mon.scale_factor();
+        let ms = mon.scale;
         let size = ui_scale(app);
-        let target = tauri::PhysicalSize::new((NOTCH_W * ms * size).round() as u32, (NOTCH_H * ms * size).round() as u32);
+        // Read here, not with the ratio below, because the window's shape depends on it.
+        let edge = {
+            let st = app.state::<AppState>();
+            let c = st.cfg.lock().unwrap();
+            config::edge_or_right(&c.notch_edge)
+        };
+        let (width, height) = notch_window_size(&edge);
+        let target = tauri::PhysicalSize::new((width * ms * size).round() as u32, (height * ms * size).round() as u32);
         let _ = w.set_size(target);
         zoom_notch(&w, ms, size);
         // Position from the window's measured physical size — deriving it from the scale factor
@@ -102,53 +231,67 @@ pub fn place_notch(app: &AppHandle) {
             .outer_size()
             .map(|s| (s.width as i32, s.height as i32))
             .unwrap_or((target.width as i32, target.height as i32));
-        let x = mon.position().x + mon.size().width as i32 - ww;
+        // 旧版说明保留；本次扩展后的行为见下方实现。
         // Vertical position comes from the configured ratio (the pill can be dragged; it persists), clamped to the monitor
+        // The position along the edge comes from the config (it persists across a drag)
         let ratio = {
             let st = app.state::<AppState>();
             let c = st.cfg.lock().unwrap();
             c.notch_y.clamp(0.0, 1.0)
         };
-        let mh = mon.size().height as i32;
-        let y = (mon.position().y as f64 + mh as f64 * ratio - wh as f64 / 2.0).round() as i32;
-        let y = y.clamp(mon.position().y, mon.position().y + (mh - wh).max(0));
+        let (x, y) = edge_origin(&mon, &edge, ww, wh, ratio);
         let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
         if w.outer_size().map(|s| s.width != target.width).unwrap_or(false) {
             let _ = w.set_size(target);
-            let x = mon.position().x + mon.size().width as i32 - target.width as i32;
+            let (x, y) = edge_origin(&mon, &edge, target.width as i32, target.height as i32, ratio);
             let _ = w.set_position(tauri::PhysicalPosition::new(x, y));
         }
+        // The page mirrors itself for the edge it is on; it cannot know that on its own.
+        let _ = w.emit("notch_edge", &edge);
         // Placement log line: the first thing to check when the notch is not visible
         let log = config::config_path().with_file_name("run.log");
         let _ = std::fs::write(
             log,
             format!(
-                "notch placed build={BUILD}: pos=({x},{y}) size=({ww}x{wh}) inner={:?} win_scale={scale} mon_scale={ms} notch_size={size} monitor=({},{} {}x{})\n",
+                "notch placed build={BUILD}: edge={edge} pos=({x},{y}) size=({ww}x{wh}) inner={:?} win_scale={scale} mon_scale={ms} notch_size={size} monitor={:?}=({},{} {}x{})\n",
                 w.inner_size().map(|s| (s.width, s.height)).unwrap_or((0, 0)),
-                mon.position().x,
-                mon.position().y,
-                mon.size().width,
-                mon.size().height
+                mon.name,
+                mon.x,
+                mon.y,
+                mon.w,
+                mon.h
             ),
         );
     }
 }
 
+/// 旧版说明保留；本次扩展后的行为见下方实现。
 /// Older entry point name still used by tray.rs
+/// Older entry point name still used by tray.rs. Recentre also brings the notch back to the primary
+/// monitor's right edge: a notch lost on a screen that has since been unplugged is exactly what this
+/// button is for, so the monitor choice has to go with the position.
 pub fn reset_bar(app: &AppHandle) {
     {
         let st = app.state::<AppState>();
         let mut c = st.cfg.lock().unwrap();
         c.notch_y = 0.5;
+        c.notch_edge = "right".into();
+        c.notch_monitor = None;
         config::save(&c);
     }
     place_notch(app);
 }
 
+/// 旧版说明保留；本次扩展后的行为见下方实现。
 /// Drag along the right edge. The page calls this once after a press on the pill moves more than
 /// 4 px; from then on a Rust thread follows the system cursor (WebView mousemove is unreliable
 /// once the window itself starts moving). Releasing the left button ends the drag and the centre
 /// ratio is written back to the config.
+/// Drag. The page calls this once after a press on the pill moves more than 4 px; from then on a
+/// Rust thread follows the system cursor (WebView mousemove is unreliable once the window itself
+/// starts moving). The window is free in both axes while the button is down; releasing it snaps the
+/// notch to the nearest edge of whichever monitor it was dropped on, and that edge, that monitor and
+/// the position along the edge are written back to the config.
 static DRAGGING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 #[cfg(windows)]
@@ -171,40 +314,68 @@ fn drag_begin(app: AppHandle) {
             DRAGGING.store(false, std::sync::atomic::Ordering::SeqCst);
             return;
         };
-        let (Ok(start_cur), Ok(start_pos), Ok(size), Ok(Some(mon))) =
-            (app.cursor_position(), w.outer_position(), w.outer_size(), w.primary_monitor())
-        else {
+        let (Ok(start_cur), Ok(start_pos), Ok(size)) = (app.cursor_position(), w.outer_position(), w.outer_size()) else {
             DRAGGING.store(false, std::sync::atomic::Ordering::SeqCst);
             return;
         };
-        let (my, mh) = (mon.position().y, mon.size().height as i32);
-        let wh = size.height as i32;
-        let lo = my;
-        let hi = my + (mh - wh).max(0);
-        let mut last_y = start_pos.y;
+        let all = screens(&app);
+        if all.is_empty() {
+            DRAGGING.store(false, std::sync::atomic::Ordering::SeqCst);
+            return;
+        }
+        let (ww, wh) = (size.width as i32, size.height as i32);
+        // The whole desktop, so the window can be carried across monitors before it is dropped
+        let (vx0, vy0) = (all.iter().map(|s| s.x).min().unwrap(), all.iter().map(|s| s.y).min().unwrap());
+        let (vx1, vy1) = (
+            all.iter().map(|s| s.x + s.w).max().unwrap(),
+            all.iter().map(|s| s.y + s.h).max().unwrap(),
+        );
+        let (mut last_x, mut last_y) = (start_pos.x, start_pos.y);
+        let mut last_cursor = start_cur;
         let mut moved = false;
         loop {
             if !left_button_down() {
                 break;
             }
             if let Ok(cur) = app.cursor_position() {
-                let ny = (start_pos.y as f64 + (cur.y - start_cur.y)).round() as i32;
-                let ny = ny.clamp(lo, hi);
-                if ny != last_y {
+                last_cursor = cur;
+                let nx = ((start_pos.x as f64 + (cur.x - start_cur.x)).round() as i32).clamp(vx0, (vx1 - ww).max(vx0));
+                let ny = ((start_pos.y as f64 + (cur.y - start_cur.y)).round() as i32).clamp(vy0, (vy1 - wh).max(vy0));
+                if nx != last_x || ny != last_y {
+                    last_x = nx;
                     last_y = ny;
                     moved = true;
-                    let _ = w.set_position(tauri::PhysicalPosition::new(start_pos.x, ny));
+                    let _ = w.set_position(tauri::PhysicalPosition::new(nx, ny));
                 }
             }
             std::thread::sleep(std::time::Duration::from_millis(8));
         }
         if moved {
-            let ratio = ((last_y + wh / 2 - my) as f64 / mh as f64).clamp(0.0, 1.0);
-            let st = app.state::<AppState>();
-            let mut c = st.cfg.lock().unwrap();
-            c.notch_y = ratio;
-            config::save(&c);
-            applog(&format!("notch drag: y={last_y} ratio={ratio:.3}"));
+            // Dropped: the monitor under the window's centre owns it, and the nearest of that
+            // monitor's four edges is where it snaps back to.
+            // 上方保留旧版说明；实际落点改为鼠标释放位置，并重新读取已连接显示器。
+            let released = app.cursor_position().unwrap_or(last_cursor);
+            let current_screens = screens(&app);
+            let Some((mon, edge, ratio)) = drop_placement(
+                &current_screens, released.x.round() as i32, released.y.round() as i32
+            ) else {
+                DRAGGING.store(false, std::sync::atomic::Ordering::SeqCst);
+                let _ = app.emit("drag_end", moved);
+                return;
+            };
+            {
+                let st = app.state::<AppState>();
+                let mut c = st.cfg.lock().unwrap();
+                c.notch_y = ratio;
+                c.notch_edge = edge.into();
+                c.notch_monitor = mon.name.clone();
+                config::save(&c);
+            }
+            applog(&format!(
+                "notch drag: dropped at ({last_x},{last_y}) -> edge={edge} ratio={ratio:.3} monitor={:?}",
+                mon.name
+            ));
+            place_notch(&app);
         }
         DRAGGING.store(false, std::sync::atomic::Ordering::SeqCst);
         let _ = app.emit("drag_end", moved);
@@ -255,6 +426,7 @@ fn refresh_usage(app: AppHandle) {
     usage::request_refresh();
     codex::request_refresh();
     cursor::request_refresh();
+    grok::request_refresh();
     antigravity::request_refresh();
 }
 
@@ -296,6 +468,11 @@ fn open_data_dir() {
 }
 
 #[tauri::command]
+fn get_grok(state: tauri::State<AppState>) -> usage::UsageSnapshot {
+    state.grok.lock().unwrap().clone()
+}
+
+#[tauri::command]
 fn get_cursor(state: tauri::State<AppState>) -> usage::UsageSnapshot {
     state.cursor.lock().unwrap().clone()
 }
@@ -311,6 +488,7 @@ fn open_provider_page(provider: String) {
     let url = match provider.as_str() {
         "codex" => "https://chatgpt.com/#settings/Account",
         "cursor" => "https://cursor.com/dashboard",
+        "grok" => "https://grok.com/?_s=usage",
         "gemini" => "https://antigravity.google",
         _ => "https://claude.ai/settings/usage",
     };
@@ -395,11 +573,8 @@ pub fn applog(line: &str) {
 #[tauri::command]
 fn report_dpr(app: AppHandle, dpr: f64, w: f64, h: f64) {
     let Some(win) = app.get_webview_window("notch") else { return };
-    let want = win
-        .primary_monitor()
-        .ok()
-        .flatten()
-        .map(|m| m.scale_factor())
+    let want = target_screen(&app)
+        .map(|s| s.scale)
         .unwrap_or_else(|| win.scale_factor().unwrap_or(1.0))
         * ui_scale(&app);
     let mut z = ZOOM.lock().unwrap();
@@ -650,6 +825,7 @@ fn ring_window<'a>(
         "claude" => by_id("session"),
         "codex" => windows.first(),
         "cursor" => by_id("included").or_else(|| by_id("api")),
+        "grok" => by_id("credits").or_else(|| windows.first()),
         _ => antigravity_lane(windows, antigravity_limit, antigravity_model),
     }
 }
@@ -698,11 +874,12 @@ fn lane_is(w: &usage::LimitWindow, limit: &str) -> bool {
 }
 
 /// Ids match the ones the page uses, so the tray, the settings window and the notch all agree.
-fn snapshot_of(app: &AppHandle, id: &str) -> usage::UsageSnapshot {
+pub(crate) fn snapshot_of(app: &AppHandle, id: &str) -> usage::UsageSnapshot {
     let st = app.state::<AppState>();
     match id {
         "codex" => st.codex.lock().unwrap().clone(),
         "cursor" => st.cursor.lock().unwrap().clone(),
+        "grok" => st.grok.lock().unwrap().clone(),
         "gemini" => st.antigravity.lock().unwrap().clone(),
         _ => st.usage.lock().unwrap().clone(),
     }
@@ -710,8 +887,7 @@ fn snapshot_of(app: &AppHandle, id: &str) -> usage::UsageSnapshot {
 
 /// A provider's ring as a whole percentage, for the tray icon and the settings picker. A count
 /// window has no percentage to draw, so it is a dash.
-fn ring_pct(app: &AppHandle, provider: &str) -> Option<u32> {
-    let snap = snapshot_of(app, provider);
+pub(crate) fn ring_fraction(app: &AppHandle, provider: &str, snap: &usage::UsageSnapshot) -> Option<f64> {
     if snap.status == "absent" {
         return None;
     }
@@ -722,7 +898,13 @@ fn ring_pct(app: &AppHandle, provider: &str) -> Option<u32> {
     };
     ring_window(provider, &snap.windows, &limit, &model)
         .filter(|w| w.count.is_none())
-        .map(|w| (w.used * 100.0).round().clamp(0.0, 100.0) as u32)
+        .map(|w| w.used.clamp(0.0, 1.0))
+}
+
+pub(crate) fn ring_pct(app: &AppHandle, provider: &str) -> Option<u32> {
+    let snap = snapshot_of(app, provider);
+    ring_fraction(app, provider, &snap)
+        .map(|f| (f * 100.0).round().clamp(0.0, 100.0) as u32)
 }
 
 /// What one half of the icon shows: that provider's ring.
@@ -777,7 +959,6 @@ fn set_tray_config(app: AppHandle, cfg: TrayConfig) {
         config::save(&c);
     }
     repaint_tray(&app);
-    tray::refresh_menu(&app);
 }
 
 /// The real icon, as a picture, for the settings preview — so what is being edited cannot drift
@@ -959,30 +1140,112 @@ fn reset_notch_position(app: AppHandle) {
     reset_bar(&app);
 }
 
+/// Which screen edge the notch is pinned to.
+#[tauri::command]
+fn get_notch_edge(app: AppHandle) -> String {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    config::edge_or_right(&c.notch_edge)
+}
+
+/// Moving to another edge keeps the position along it, so the notch stays where the eye expects it:
+/// a notch two thirds down the right-hand edge arrives two thirds along the top one.
+#[tauri::command]
+fn set_notch_edge(app: AppHandle, edge: String) -> String {
+    let value = {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        c.notch_edge = config::edge_or_right(&edge);
+        config::save(&c);
+        c.notch_edge.clone()
+    };
+    place_notch(&app);
+    value
+}
+
+/// One attached monitor, as Settings lists it.
+#[derive(serde::Serialize)]
+pub struct MonitorInfo {
+    /// The system device name (`\\.\DISPLAY2`); absent on a monitor the platform will not name,
+    /// which then cannot be chosen explicitly and falls back to primary.
+    pub id: Option<String>,
+    /// "1  2560 × 1440" — enough to tell two identical screens apart by where they sit
+    pub label: String,
+    pub primary: bool,
+    pub current: bool,
+}
+
+#[tauri::command]
+fn get_monitors(app: AppHandle) -> Vec<MonitorInfo> {
+    let want = {
+        let st = app.state::<AppState>();
+        let c = st.cfg.lock().unwrap();
+        c.notch_monitor.clone()
+    };
+    let list = screens(&app);
+    let chosen = target_screen(&app).and_then(|s| s.name);
+    list.iter()
+        .enumerate()
+        .map(|(i, s)| MonitorInfo {
+            id: s.name.clone(),
+            label: format!("{}  {} × {}", i + 1, s.w, s.h),
+            primary: i == 0,
+            // With no explicit choice the primary monitor is the one in use
+            current: if want.is_some() { s.name == chosen } else { i == 0 },
+        })
+        .collect()
+}
+
+/// `None` (or a name that is no longer attached) means the primary monitor.
+#[tauri::command]
+fn set_notch_monitor(app: AppHandle, id: Option<String>) {
+    {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        c.notch_monitor = id.filter(|s| !s.is_empty());
+        config::save(&c);
+    }
+    place_notch(&app);
+}
+
 #[tauri::command]
 fn open_settings(app: AppHandle) {
     settings_window::open(&app);
+}
+
+/// Epoch milliseconds. Every polling module keeps its own copy of this; the tray menu's wording
+/// needs one that is not private to a poller.
+pub fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 pub fn provider_label(id: &str) -> &'static str {
     match id {
         "codex" => "Codex",
         "cursor" => "Cursor",
+        "grok" => "Grok",
         "gemini" => "Antigravity",
         _ => "Claude",
     }
 }
 
 /// Every provider the tray menu can offer, in the order the notch shows them.
-pub const TRAY_PROVIDER_IDS: [&str; 4] = ["claude", "codex", "cursor", "gemini"];
+pub const TRAY_PROVIDER_IDS: [&str; 5] = ["claude", "codex", "cursor", "grok", "gemini"];
 
 /// Draws the icon and writes the tooltip. Shared by the polling thread and by the settings window,
 /// so a change made in settings shows up at once rather than on the next poll.
+static ICON_SHOWN: Mutex<Option<(String, Vec<config::TraySlot>, Vec<Option<u32>>)>> = Mutex::new(None);
+
 fn paint_tray(app: &AppHandle, mode: &str, slots: &[config::TraySlot], values: &[Option<u32>]) {
     let Some(tray) = app.tray_by_id("main") else {
         applog("tray: no tray with id 'main' — icon not updated");
         return;
     };
+    let key = (mode.to_string(), slots.to_vec(), values.to_vec());
+    if ICON_SHOWN.lock().unwrap().as_ref() == Some(&key) { return; }
     let outcome = match mode {
         "numbers" if !values.is_empty() => tray.set_icon(Some(trayicon::numbers(values))),
         "bars" if !values.is_empty() => tray.set_icon(Some(trayicon::bars(values))),
@@ -992,38 +1255,30 @@ fn paint_tray(app: &AppHandle, mode: &str, slots: &[config::TraySlot], values: &
             None => Ok(()), // leave whatever icon is there rather than clearing it to nothing
         },
     };
-    if let Err(e) = outcome {
+    if let Err(e) = &outcome {
         applog(&format!("tray: set_icon FAILED mode={mode} values={values:?}: {e}"));
     }
     // The tooltip lists every slot, including any the digit layout could not fit, so nothing is
     // silently dropped.
-    let parts: Vec<String> = slots
-        .iter()
-        .zip(values.iter())
-        .map(|(slot, v)| {
-            format!(
-                "{} {}",
-                provider_label(&slot.provider),
-                v.map(|p| format!("{p}%")).unwrap_or_else(|| "—".into())
-            )
-        })
-        .collect();
-    let tip = if parts.is_empty() {
-        concat!("Codenotch v", env!("CARGO_PKG_VERSION")).to_string()
-    } else {
-        format!("Codenotch — {}", parts.join(" · "))
-    };
-    let _ = tray.set_tooltip(Some(&tip));
+    // 提示文本现由 tray::refresh_menu 统一生成，图标不再覆盖它。
+    if outcome.is_ok() { *ICON_SHOWN.lock().unwrap() = Some(key); }
 }
 
 /// Reads the current settings and readings, and repaints immediately.
 pub fn repaint_tray(app: &AppHandle) {
+    tray::refresh_menu(app);
+}
+
+pub(crate) fn update_tray_icon(app: &AppHandle, readings: &[tray::Reading]) {
     let (mode, slots) = {
         let st = app.state::<AppState>();
         let c = st.cfg.lock().unwrap();
         (c.tray_mode.clone(), c.tray_slots.clone())
     };
-    let values: Vec<Option<u32>> = slots.iter().map(|s| reading_for_slot(app, s)).collect();
+    let values: Vec<Option<u32>> = slots.iter().map(|s| {
+        readings.iter().find(|r| r.id == s.provider).and_then(|r| r.fraction)
+            .map(|f| (f * 100.0).round().clamp(0.0, 100.0) as u32)
+    }).collect();
     paint_tray(app, &mode, &slots, &values);
 }
 
@@ -1031,24 +1286,17 @@ pub fn repaint_tray(app: &AppHandle) {
 /// actually moved, so it costs nothing while idle.
 fn start_tray_updater(app: AppHandle) {
     std::thread::spawn(move || {
-        let mut last: Option<(String, Vec<config::TraySlot>, Vec<Option<u32>>)> = None;
         loop {
             std::thread::sleep(std::time::Duration::from_secs(2));
-            let (mode, slots) = {
-                let st = app.state::<AppState>();
-                let c = st.cfg.lock().unwrap();
-                (c.tray_mode.clone(), c.tray_slots.clone())
-            };
-            let values: Vec<Option<u32>> = slots.iter().map(|s| reading_for_slot(&app, s)).collect();
-            let key = (mode.clone(), slots.clone(), values.clone());
-            if last.as_ref() == Some(&key) {
-                continue;
-            }
-            last = Some(key);
-            paint_tray(&app, &mode, &slots, &values);
+            tray::refresh_menu(&app);
         }
     });
 }
+
+/// Keeps the tray menu current. macOS rebuilds its menu as it opens; Tauri has no such hook, so it
+/// is rebuilt whenever a reading changes, and once a minute besides — otherwise "Resets in 12 min"
+/// sits there being wrong while nothing else happens.
+// 旧版独立菜单定时器已合并到 start_tray_updater；比较完整显示文本后才更新原生菜单。
 
 /// Seen-clears-it: looking at a session acknowledges it (engine behaviour, unchanged)
 #[cfg(windows)]
@@ -1105,10 +1353,19 @@ fn report(r: Result<String, String>) {
     let _ = std::fs::write(log, &msg);
 }
 
+/// The subcommands that print to the parent console; only those may attach to it.
+const CONSOLE_CMDS: [&str; 4] = ["install-hooks", "uninstall-hooks", "autostart", "doctor"];
+
 fn main() {
-    attach_console();
     let args: Vec<String> = std::env::args().collect();
     if let Some(cmd) = args.get(1) {
+        // Attaching on the GUI path too tied the notch to whatever cmd.exe launched it: closing that
+        // window sends CTRL_CLOSE_EVENT to every process on the console, and with no handler the
+        // default action ends the process. The exe is already windows_subsystem = "windows", so the
+        // GUI run wants no console at all.
+        if CONSOLE_CMDS.contains(&cmd.as_str()) {
+            attach_console();
+        }
         match cmd.as_str() {
             "install-hooks" => {
                 report(hooks_install::install());
@@ -1154,6 +1411,7 @@ fn main() {
             usage: Mutex::new(usage::load_persisted()),
             codex: Mutex::new(codex::load_persisted()),
             cursor: Mutex::new(cursor::load_persisted()),
+            grok: Mutex::new(grok::load_persisted()),
             antigravity: Mutex::new(antigravity::load_persisted()),
             glyphs: Mutex::new(Default::default()),
             activity: Mutex::new(Vec::new()),
@@ -1163,6 +1421,7 @@ fn main() {
             get_usage,
             get_codex,
             get_cursor,
+            get_grok,
             get_antigravity,
             get_glyphs,
             get_activity,
@@ -1199,6 +1458,10 @@ fn main() {
             get_hooks_installed,
             set_hooks_installed,
             reset_notch_position,
+            get_notch_edge,
+            set_notch_edge,
+            get_monitors,
+            set_notch_monitor,
             open_settings,
             settings_window::get_system_look,
             settings_window::quit_app,
@@ -1219,6 +1482,7 @@ fn main() {
             usage::start(handle.clone());
             codex::start(handle.clone());
             cursor::start(handle.clone());
+            grok::start(handle.clone());
             antigravity::start(handle.clone());
             activity::start(handle.clone());
             // Collecting glyphs may read icon resources out of a few executables; do it off the main thread and push when done
@@ -1263,8 +1527,53 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{cursor_in_hot, ring_window, HOT_PAD};
+    use super::{cursor_in_hot, drop_placement, notch_window_size, ring_window, Screen, HOT_PAD, NOTCH_H, NOTCH_W};
     use crate::usage::LimitWindow;
+
+    #[test]
+    fn dropping_just_inside_another_screen_uses_the_pointer() {
+        let screens = vec![
+            Screen { name: Some("first".into()), x: 0, y: 0, w: 1920, h: 1080, scale: 1.0 },
+            Screen { name: Some("second".into()), x: 1920, y: 0, w: 2560, h: 1440, scale: 1.5 },
+        ];
+        let (screen, edge, ratio) = drop_placement(&screens, 1940, 540).unwrap();
+        assert_eq!(screen.name.as_deref(), Some("second"));
+        assert_eq!(edge, "left");
+        assert_eq!(ratio, 0.375);
+        let (_, edge, ratio) = drop_placement(&screens, 3200, 1430).unwrap();
+        assert_eq!(edge, "bottom");
+        assert_eq!(ratio, 0.5);
+    }
+
+    #[test]
+    fn dropping_on_negative_coordinates_or_a_display_gap_uses_the_nearest_screen() {
+        let screens = vec![
+            Screen { name: Some("left".into()), x: -1920, y: 0, w: 1920, h: 1080, scale: 1.0 },
+            Screen { name: Some("right".into()), x: 100, y: 0, w: 1920, h: 1080, scale: 2.0 },
+        ];
+        let (screen, edge, ratio) = drop_placement(&screens, -960, 10).unwrap();
+        assert_eq!(screen.name.as_deref(), Some("left"));
+        assert_eq!(edge, "top");
+        assert_eq!(ratio, 0.5);
+        let (screen, edge, _) = drop_placement(&screens, 90, 540).unwrap();
+        assert_eq!(screen.name.as_deref(), Some("right"));
+        assert_eq!(edge, "left");
+        assert!(drop_placement(&[], 0, 0).is_none());
+    }
+
+    #[test]
+    fn a_flat_notch_is_wide_enough_for_five_rings() {
+        // 5 × 56 px rings + 4 × 14 px gaps + 36 px padding + 2 × 26 px fillets
+        let pill = 5.0 * 56.0 + 4.0 * 14.0 + 36.0 + 2.0 * 26.0;
+        for edge in ["top", "bottom"] {
+            let (w, h) = notch_window_size(edge);
+            assert!(w >= pill, "{edge}: {w} px cannot hold a {pill} px pill");
+            assert_eq!(h, NOTCH_H, "{edge}: the hover card still needs the full height");
+        }
+        for edge in ["left", "right"] {
+            assert_eq!(notch_window_size(edge), (NOTCH_W, NOTCH_H));
+        }
+    }
 
     /// Real values from the run.log in #106: a 2560×1600 display at 150 %.
     const PILL: [f64; 4] = [405.0, 183.5, 105.0, 323.0];

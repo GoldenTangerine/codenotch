@@ -40,6 +40,17 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.49",
+            headline: L10n.t("Less background work and more reliable usage readings"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Reduce repeated activity reads and fullscreen checks")),
+                ReleaseNote.Change(title: L10n.t("Recover Codex readings after temporary database locks")),
+                ReleaseNote.Change(title: L10n.t("Clarify Claude access requests and unavailable usage limits")),
+                ReleaseNote.Change(title: L10n.t("Improve Ghostty tab focus, Kiro output parsing and Grok sign-in checks")),
+                ReleaseNote.Change(title: L10n.t("Hide empty Codex reset details and correct translated formats"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.48",
             headline: L10n.t("Hover delay"),
             changes: [

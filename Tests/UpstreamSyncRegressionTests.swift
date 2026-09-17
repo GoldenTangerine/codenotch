@@ -13,6 +13,72 @@ import SQLite3
 @testable import Codenotch
 
 @Suite @MainActor struct UpstreamSyncRegressionTests {
+    @Test func desktopCacheRecoversAfterDatabaseUnlockWithoutAWrite() throws {
+        let file = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".sqlite")
+        defer { try? FileManager.default.removeItem(at: file) }
+        var db: OpaquePointer?
+        #expect(sqlite3_open(file.path, &db) == SQLITE_OK)
+        defer { sqlite3_close(db) }
+        #expect(sqlite3_exec(db, "CREATE TABLE local_thread_catalog (thread_id TEXT, display_title TEXT, source_updated_at REAL); INSERT INTO local_thread_catalog VALUES ('thread', 'Synthetic thread', 1000)", nil, nil, nil) == SQLITE_OK)
+        let cache = CodexStoreCache()
+        #expect(sqlite3_exec(db, "BEGIN EXCLUSIVE", nil, nil, nil) == SQLITE_OK)
+        #expect(cache.newestDesktopThread(in: file) == nil)
+        #expect(sqlite3_exec(db, "ROLLBACK", nil, nil, nil) == SQLITE_OK)
+        #expect(cache.newestDesktopThread(in: file)?.id == "thread")
+        #expect(cache.newestDesktopThread(in: file)?.title == "Synthetic thread")
+    }
+
+    @Test func storeCacheKeepsThreadIdentityAndSeparatesAccounts() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let cache = CodexStoreCache()
+        for name in ["account-a", "account-b"] {
+            let rollout = dir.appendingPathComponent(name + ".jsonl")
+            try Data("{}\n".utf8).write(to: rollout)
+            let store = dir.appendingPathComponent(name + ".sqlite")
+            var db: OpaquePointer?
+            #expect(sqlite3_open(store.path, &db) == SQLITE_OK)
+            #expect(sqlite3_exec(db, "CREATE TABLE threads (id TEXT, rollout_path TEXT, archived INTEGER, updated_at_ms INTEGER)", nil, nil, nil) == SQLITE_OK)
+            #expect(sqlite3_exec(db, "INSERT INTO threads VALUES ('\(name)', '\(rollout.path)', 0, 1)", nil, nil, nil) == SQLITE_OK)
+            sqlite3_close(db)
+            try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 100)], ofItemAtPath: store.path)
+            let first = try #require(cache.newestRollout(in: store))
+            #expect(first.id == name)
+            #expect(cache.newestRollout(in: store)?.url == rollout)
+            let sessions = CodexActivityMonitor.read(stateStore: store,
+                desktopStore: dir.appendingPathComponent("missing"), staleAfter: 60,
+                storeCache: cache)
+            #expect(sessions.first?.nativeSessionKey == HookEvent.sessionKey(tool: "codex", id: name))
+        }
+    }
+
+    @Test func rolloutScanFindsEventsAcrossWindowsAndHonorsScanBudget() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: url) }
+        let completed = "{\"type\":\"event_msg\",\"payload\":{\"type\":\"task_complete\"}}\n"
+        let filler = "{\"padding\":\"" + String(repeating: "x", count: 270_000) + "\"}\n"
+        try Data((completed + filler).utf8).write(to: url)
+        #expect(CodexRolloutActivity.state(from: url) == .success)
+        let aborted = "{\"type\":\"event_msg\",\"payload\":{\"type\":\"turn_aborted\"}}\n"
+        try Data((completed + filler + aborted).utf8).write(to: url)
+        #expect(CodexRolloutActivity.state(from: url) == nil)
+        try Data((completed + String(repeating: filler, count: 5)).utf8).write(to: url)
+        #expect(CodexRolloutActivity.state(from: url) == nil)
+    }
+
+    @Test func keychainRefusalSurvivesRecreationWithoutCrossingAccounts() throws {
+        let suite = "codenotch-refusal-test-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let refusal = KeychainRefusal(key: "a", defaults: defaults)
+        refusal.set(true)
+        #expect(KeychainRefusal(key: "a", defaults: defaults).isRefused)
+        #expect(!KeychainRefusal(key: "b", defaults: defaults).isRefused)
+        refusal.set(false)
+        #expect(!KeychainRefusal(key: "a", defaults: defaults).isRefused)
+    }
+
     private func snapshot() -> ProviderSnapshot {
         ProviderSnapshot(id: "claude", displayName: "Claude", glyph: .claude,
             fidelity: .official, status: .ok,

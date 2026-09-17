@@ -42,6 +42,8 @@ Download this fork from [Releases](https://github.com/GoldenTangerine/codenotch/
 A Windows port — Rust/Tauri 2, same design and providers — lives in [`windows/`](windows/README.md).
 Build instructions, including the optional NSIS installer, are in that document.
 Settings include configurable tray layouts with previews and Ukrainian usage cards.
+Windows also supports Grok, all four screen edges, monitor selection and a tray
+menu with per-provider usage readings and refresh actions.
 
 ## Connect your phone
 
@@ -659,6 +661,12 @@ Developer ID identity so a grant survives rebuilds, and the secret is read
 only when the owning app has actually changed it — checked via the item's
 modification date, which isn't behind the same access prompt as the
 credential — so a valid grant does not mean a prompt on every poll.
+
+Choosing **Deny** for Claude's requested keychain access stops its usage reads,
+including CLI and Desktop-cache fallbacks, until **Allow access…** is requested
+again. This choice survives relaunches. Claude's automatic renewal runs from a
+dedicated temporary directory with session persistence disabled and strict MCP
+configuration.
 
 **Rate limits:** Claude's endpoint returns 429 if polled too hard, with an
 unhelpful `Retry-After: 0`. The back-off treats that as a floor-raiser only —

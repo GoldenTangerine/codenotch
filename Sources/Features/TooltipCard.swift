@@ -1205,7 +1205,7 @@ struct TooltipCard: View {
             linked: snapshot.linked != nil,
             hasTokenUsage: snapshot.tokenUsage != nil,
             hasPlan: snapshot.plan != nil,
-            hasResetCredits: snapshot.resetCredits != nil,
+            hasResetCredits: snapshot.hasAvailableResetCredits,
             localModelName: snapshot.localModel?.name,
             showsLocalPerformance: snapshot.showsLocalPerformance,
                 localLedgerRows: snapshot.localLedgerRowCount,
@@ -1260,7 +1260,7 @@ struct TooltipCard: View {
             } else {
                 ProviderTooltip(activityNote: localActivityNote, snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat,
                                 fullContent: heightMode == .full, isRefreshing: isRefreshing, showUsagePace: showUsagePace)
-                if let resetCredits = snapshot.resetCredits {
+                if let resetCredits = snapshot.resetCredits, snapshot.hasAvailableResetCredits {
                     CodexResetCreditsSection(credits: resetCredits, now: now)
                 }
                 if let tokenUsage = snapshot.tokenUsage {

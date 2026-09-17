@@ -1368,10 +1368,11 @@ struct SettingsView: View {
     /// Said before it happens rather than after. A system dialogue asking to
     /// read a *credential*, from an app installed a minute ago, looks alarming
     /// unless it was expected — and choosing Allow instead of Always Allow makes
+    /// unless it was expected — and choosing Allow instead of Always Allow made
     /// it return on every read, which is what "it asks every time" turns out to
     /// be.
     static var keychainCopy: String {
-        L10n.t("macOS will ask once for permission to read Claude Code's, Antigravity's and cursor-agent's saved logins. Choose Always Allow — plain Allow makes it ask again every time.")
+        L10n.t("macOS may ask permission to read saved logins. For Claude Code, Deny stops usage reads until you choose Allow access… again. Other providers may use their own sign-in sources or ask again later.")
     }
 
     /// A provider has just been switched on: put it after the ones already
@@ -1779,7 +1780,7 @@ private struct AccountRow: View {
                         // Not "it will stop asking": for Claude it will not.
                         // Claude Code recreates its login when the token
                         // rotates, and a recreated item forgets the grant.
-                        .help(L10n.t("Asks macOS for \(provider.name)'s saved login again. Always Allow means it is asked less often."))
+                        .help(L10n.t("Asks macOS for \(provider.name)'s saved login again."))
                 }
 
                 if isConnected, let destination {
@@ -2121,7 +2122,7 @@ private struct AccountRow: View {
             // Not a sign-in problem, so do not send them off to sign in. The
             // credential is right there and macOS is the one saying no — the
             // remedy is the button on this same row.
-            Text(L10n.t("macOS is not letting Codenotch read \(provider.name)'s saved login. Choose Allow access… above, then Always Allow."))
+            Text(L10n.t("Codenotch is not reading \(provider.name)'s saved login. Choose Allow access… above and answer Allow."))
                 .foregroundStyle(.orange)
                 .fixedSize(horizontal: false, vertical: true)
         } else {

@@ -21,8 +21,14 @@ import Foundation
 ///   by tty), but the server refuses any client that is not itself inside a
 ///   cmux terminal session (manaflow-ai/cmux#3089) — and Codenotch never is.
 /// * **Terminal.app** and **iTerm2** match a tab by tty.
+/// 旧版说明保留；本次扩展后的行为见下方实现。
 /// * Everything else publishes nothing (Warp, Ghostty), and the caller falls
 ///   back to raising the app — the honest answer rather than a silent no-op.
+/// * **Ghostty** (1.3+) scripts its terminals with an id, a title and a
+///   *working directory* but no tty, so it is matched by the session's cwd
+///   like cmux; `focus` selects the tab and raises its window in one go.
+/// * Everything else publishes nothing (Warp), and the caller falls back to
+///   raising the app — the honest answer rather than a silent no-op.
 enum TerminalTabFocus {
     /// Best effort: true when a tab was selected. Anything going wrong —
     /// no tty, no cwd, no match, a refused prompt — is false, and the caller
@@ -67,6 +73,29 @@ enum TerminalTabFocus {
                           select s
                           select t
                           select w
+                          return "found"
+                        end if
+                      end repeat
+                    end repeat
+                  end repeat
+                end tell
+                """)
+        case "com.mitchellh.ghostty":
+            // Ghostty's `working directory` comes from shell integration (OSC 7)
+            // and names the shell's directory, which is the session's cwd for a
+            // CLI started from the prompt. Two tabs in one folder are a tie the
+            // dictionary cannot break; the first wins, which is still that folder.
+            guard let cwd else { return false }
+            let condition = cmuxPathCandidates(cwd)
+                .map { "working directory of term is \"\(appleScriptEscaped($0))\"" }
+                .joined(separator: " or ")
+            return runOsascript("""
+                tell application "Ghostty"
+                  repeat with w in windows
+                    repeat with t in tabs of w
+                      repeat with term in terminals of t
+                        if \(condition) then
+                          focus term
                           return "found"
                         end if
                       end repeat

@@ -1,3 +1,12 @@
+/**
+@name: Grok 登录来源
+@Descripttion: 解析 Grok CLI 登录结构并筛选可信签发者。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-17 16:39:40
+@LastEditTime: 2026-09-17 16:39:40
+@FilePath: Sources/Providers/GrokCredentials.swift
+*/
 import Foundation
 
 /// Identity and token from `~/.grok/auth.json`.
@@ -67,7 +76,9 @@ struct GrokCredentials {
     }
 
     static func isTrusted(key: String, entry: [String: Any]) -> Bool {
-        if key.hasPrefix(trustedIssuer) { return true }
+        // The issuer is the part before `::`, compared whole. A prefix match
+        // also let `https://auth.x.ai.example.com::id` through.
+        if key.components(separatedBy: "::").first == trustedIssuer { return true }
         if let issuer = entry["oidc_issuer"] as? String, issuer == trustedIssuer { return true }
         return false
     }

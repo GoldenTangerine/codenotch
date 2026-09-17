@@ -867,6 +867,18 @@
             "state": "translated",
             "value": "显示移动手柄"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移動ハンドルを表示"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показувати маркер переміщення"
+          }
         }
       }
     },
@@ -877,6 +889,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "按住手柄可将显示栏拖到其他屏幕边缘，也可通过上方的边缘设置调整位置。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ノッチの上にある弧です。長押しすると、ノッチを別の辺へ運べます。上の「配置する辺」でも同じことができます。"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дуга над вирізом. Утримуйте її, щоб перенести виріз на інший край — те саме робить «Край» вище."
           }
         }
       }
@@ -5917,53 +5941,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Увімкніть, щоб знову увійти й читати %@."
-          }
-        }
-      }
-    },
-    "macOS is not letting Codenotch read %@'s saved login. Choose Allow access… above, then Always Allow.": {
-      "extractionState": "manual",
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS n'autorise pas Codenotch à lire les identifiants enregistrés de %@. Choisissez Autoriser l'accès… ci-dessus, puis Toujours autoriser."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS が %@ の保存済みログインの読み取りを許可していません。上の「アクセスを許可…」を選び、「常に許可」を選んでください。"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O macOS não está deixando o Codenotch ler o login salvo do %@. Escolha Permitir acesso… acima e depois Sempre Permitir."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS 不让 Codenotch 读取 %@ 已保存的登录信息。点上面的「允许访问…」，然后选「始终允许」。"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS не разрешает Codenotch читать сохранённый вход %@. Выберите выше «Разрешить доступ…», затем «Разрешать всегда»."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS erlaubt Codenotch nicht, die gespeicherte Anmeldung von %@ zu lesen. Wähle oben „Zugriff erlauben…“ und dann „Immer erlauben“."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS не дає Codenotch прочитати збережений вхід %@. Виберіть вище «Дозволити доступ…», потім «Завжди дозволяти»."
           }
         }
       }
@@ -14469,53 +14446,6 @@
         }
       }
     },
-    "Alert when %@ crosses 80% and 100% of a limit.": {
-      "extractionState": "manual",
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alerter quand %@ franchit 80 % et 100 % d'une limite."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ が上限の 80% と 100% を超えたときに通知します。"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alertar quando %@ ultrapassar 80% e 100% de um limite."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "当 %@ 的额度越过 80% 和 100% 时提醒。"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Оповещать, когда %@ достигает 80% и 100% лимита."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Benachrichtigen, wenn %@ 80 % und 100 % eines Limits überschreitet."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Сповіщати, коли %@ перетинає 80% і 100% ліміту."
-          }
-        }
-      }
-    },
     "Fills the ring against a ceiling you choose; Google publishes none for an API key.": {
       "extractionState": "manual",
       "localizations": {
@@ -14606,53 +14536,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Codenotch читає використання з інструментів, у які вже виконано вхід на цьому Mac, і ніколи не питає ваш пароль. Установіть будь-який з них — Claude Code (термінальний інструмент, не застосунок Claude), Cursor (редактор або cursor-agent), Codex, Antigravity, GLM, Grok, OpenCode, GitHub Copilot чи ключ Gemini API (через Gemini CLI, OpenCode або Hermes) — і увійдіть: його кільце зʼявиться у вирізі."
-          }
-        }
-      }
-    },
-    "macOS will ask once for permission to read Claude Code's, Antigravity's and cursor-agent's saved logins. Choose Always Allow — plain Allow makes it ask again every time.": {
-      "extractionState": "manual",
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS demandera une fois l'autorisation de lire les identifiants enregistrés de Claude Code, d'Antigravity et de cursor-agent. Choisissez Toujours autoriser — un simple Autoriser fait redemander à chaque fois."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS は Claude Code、Antigravity、cursor-agent の保存済みログインを読み取る許可を一度だけ尋ねます。「常に許可」を選んでください。「許可」だけでは毎回尋ねられます。"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "O macOS pedirá uma vez permissão para ler os logins salvos do Claude Code, do Antigravity e do cursor-agent. Escolha Sempre Permitir — o Permitir comum faz com que ele pergunte de novo toda vez."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS 会询问一次，是否允许读取 Claude Code、Antigravity 和 cursor-agent 已保存的登录信息。请选「始终允许」— 只选「允许」的话，每次都会再问。"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS один раз запросит доступ к сохранённым входам Claude Code, Antigravity и cursor-agent. Выберите «Разрешать всегда» — обычное «Разрешить» приводит к повторному запросу."
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS fragt einmal um Erlaubnis, die gespeicherten Anmeldungen von Claude Code, Antigravity und cursor-agent zu lesen. Wähle „Immer erlauben“ — bei einfachem „Erlauben“ fragt es jedes Mal erneut."
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "macOS один раз запитає дозвіл на читання збережених входів Claude Code, Antigravity та cursor-agent. Виберіть «Завжди дозволяти» — зі звичайним «Дозволити» запит повторюватиметься щоразу."
           }
         }
       }
@@ -16533,100 +16416,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Центрувати"
-          }
-        }
-      }
-    },
-    "%@% deficit": {
-      "extractionState": "manual",
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ % de déficit"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@% 超過"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@% de déficit"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@% 透支"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "дефицит %@%"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ % Defizit"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@% дефіциту"
-          }
-        }
-      }
-    },
-    "%@% reserved": {
-      "extractionState": "manual",
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ % en réserve"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@% 余裕"
-          }
-        },
-        "pt-BR": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@% em reserva"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@% 预留"
-          }
-        },
-        "ru": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "резерв %@%"
-          }
-        },
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@ % Reserve"
-          }
-        },
-        "uk": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%@% запасу"
           }
         }
       }
@@ -25005,6 +24794,42 @@
             "state": "translated",
             "value": "当 %@ 的限额达到 80%% 和 100%% 时提醒。"
           }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alerter quand %@ franchit 80 %% et 100 %% d'une limite."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ が上限の 80%% と 100%% を超えたときに通知します。"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alertar quando %@ ultrapassar 80%% e 100%% de um limite."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оповещать, когда %@ достигает 80%% и 100%% лимита."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benachrichtigen, wenn %@ 80 %% und 100 %% eines Limits überschreitet."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сповіщати, коли %@ перетинає 80%% і 100%% ліміту."
+          }
         }
       }
     },
@@ -27150,6 +26975,18 @@
             "state": "translated",
             "value": "全屏应用折叠"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フルスクリーンのアプリでは折りたたむ"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Згортати для повноекранних застосунків"
+          }
         }
       }
     },
@@ -27238,6 +27075,18 @@
             "state": "translated",
             "value": "大多数读数借自已经持有该账号的工具。DeepSeek 和 MiniMax 是例外：点“登录”会打开 Codenotch 自己的窗口，在这里退出只会清掉这次会话和已保存的读数。"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ほとんどの読み取りは、すでにアカウントを持っているツールから借りています。DeepSeek と MiniMax だけは例外で、「サインイン」をクリックするとそのアカウント用の Codenotch のウインドウが開きます。ここでサインアウトしても、消えるのはそのセッションと保存された読み取りだけです。"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Більшість показників беруться з інструмента, який уже тримає цей акаунт. Винятки — DeepSeek і MiniMax: натискання «Увійти» відкриває вікно Codenotch для цього акаунта, а вихід тут очищає лише цю сесію та її збережений показник."
+          }
         }
       }
     },
@@ -27248,6 +27097,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "区域"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "地域"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Регіон"
           }
         }
       }
@@ -27260,6 +27121,18 @@
             "state": "translated",
             "value": "国际"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "国際"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Міжнародний"
+          }
         }
       }
     },
@@ -27270,6 +27143,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "中国"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中国"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Китай"
           }
         }
       }
@@ -27282,6 +27167,18 @@
             "state": "translated",
             "value": "中国大陆"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中国本土"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Материковий Китай"
+          }
         }
       }
     },
@@ -27292,6 +27189,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "MiniMax Coding Plan 密钥"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MiniMax Coding Plan のキー"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ключ MiniMax Coding Plan"
           }
         }
       }
@@ -27326,6 +27235,18 @@
             "state": "translated",
             "value": "Cookie 标头（可选）"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cookie ヘッダー（任意）"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Заголовок Cookie (необовʼязково)"
+          }
         }
       }
     },
@@ -27333,6 +27254,12 @@
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cookie: …"
+          }
+        },
+        "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "Cookie: …"
@@ -27348,6 +27275,18 @@
             "state": "translated",
             "value": "可在 Codenotch 中登录 MiniMax，或粘贴 Coding Plan 密钥。Cookie 标头可选。Codenotch 不会读取浏览器 Cookie。"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codenotch で MiniMax にサインインするか、Coding Plan のキーを貼り付けてください。Cookie ヘッダーは任意です。Codenotch がブラウザの Cookie を読むことはありません。"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Увійдіть у MiniMax просто в Codenotch або вставте ключ Coding Plan. Заголовок Cookie можна не вказувати. Codenotch ніколи не читає кукі браузера."
+          }
         }
       }
     },
@@ -27359,6 +27298,18 @@
             "state": "translated",
             "value": "请在设置中粘贴 Coding Plan 密钥，或登录 MiniMax。"
           }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定で Coding Plan のキーを貼り付けるか、MiniMax にサインインしてください。"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вставте ключ Coding Plan у налаштуваннях або увійдіть у MiniMax."
+          }
         }
       }
     },
@@ -27369,6 +27320,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "MiniMax 未返回可用额度窗口"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MiniMax は使用量の枠を返しませんでした"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MiniMax не повернув вікон використання"
           }
         }
       }
@@ -28431,6 +28394,375 @@
           "stringUnit": {
             "state": "translated",
             "value": "虚线辅助额度环"
+          }
+        }
+      }
+    },
+    "Codenotch is not reading %@'s saved login. Choose Allow access… above and answer Allow.": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codenotch ne lit pas la connexion enregistrée de %@. Choisissez Autoriser l'accès… ci-dessus et répondez Autoriser."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codenotch は %@ の保存済みログインを読んでいません。上の「アクセスを許可…」を選び、「許可」と答えてください。"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Codenotch não está lendo o login salvo de %@. Escolha Permitir acesso… acima e responda Permitir."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codenotch 没有读取 %@ 保存的登录信息。请在上方选择“允许访问…”，然后选择“允许”。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codenotch не читает сохранённый вход %@. Выберите «Разрешить доступ…» выше и ответьте «Разрешить»."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codenotch liest die gespeicherte Anmeldung von %@ nicht. Wähle oben „Zugriff erlauben…“ und antworte mit „Erlauben“."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Codenotch не читає збережений вхід %@. Виберіть «Дозволити доступ…» вище й дайте відповідь «Дозволити»."
+          }
+        }
+      }
+    },
+    "%@%% deficit": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %% de déficit"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% 超過"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% de déficit"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% 透支"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "дефицит %@%%"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %% Defizit"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% дефіциту"
+          }
+        }
+      }
+    },
+    "%@%% reserved": {
+      "extractionState": "manual",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %% en réserve"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% 余裕"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% em reserva"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% 预留"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "резерв %@%%"
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ %% Reserve"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% запасу"
+          }
+        }
+      }
+    },
+    "Z.ai does not publish usage for the GLM Start Plan yet, so there is nothing to read. The Coding Plan is supported.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai veröffentlicht für den GLM Start Plan noch keine Nutzung, daher gibt es nichts zu lesen. Der Coding Plan wird unterstützt."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai ne publie pas encore la consommation du GLM Start Plan, il n'y a donc rien à lire. Le Coding Plan est pris en charge."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai は GLM Start Plan の使用量をまだ公開していないため、読み取れる情報がありません。Coding Plan には対応しています。"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A Z.ai ainda não publica o uso do GLM Start Plan, então não há nada para ler. O Coding Plan é compatível."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai пока не публикует использование для GLM Start Plan, поэтому читать нечего. Coding Plan поддерживается."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai поки не публікує використання для GLM Start Plan, тож читати нічого. Coding Plan підтримується."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Z.ai 尚未公开 GLM Start Plan 的用量，因此没有可读取的数据。Coding Plan 已支持。"
+          }
+        }
+      }
+    },
+    "Claude answered, but listed no usage limits for this account. Some Enterprise and team plans don't report them.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude hat geantwortet, aber für dieses Konto keine Nutzungslimits genannt. Manche Enterprise- und Team-Tarife melden sie nicht."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude a répondu, mais n'a indiqué aucune limite d'utilisation pour ce compte. Certaines offres Enterprise et Team ne les communiquent pas."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude から応答はありましたが、このアカウントの使用量上限は示されませんでした。Enterprise や Team の一部のプランでは報告されません。"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "O Claude respondeu, mas não informou limites de uso para esta conta. Alguns planos Enterprise e Team não os informam."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude ответил, но не указал лимиты использования для этой учётной записи. Некоторые тарифы Enterprise и Team их не сообщают."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude відповів, але не вказав лімітів використання для цього облікового запису. Деякі тарифи Enterprise і Team їх не повідомляють."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude 已响应，但没有列出此账户的用量限额。部分 Enterprise 和团队套餐不会提供这些数据。"
+          }
+        }
+      }
+    },
+    "macOS may ask permission to read saved logins. For Claude Code, Deny stops usage reads until you choose Allow access… again. Other providers may use their own sign-in sources or ask again later.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS 可能请求读取已保存登录信息的权限。对于 Claude Code，选择“拒绝”后会停止读取用量，直到再次选择“允许访问…”。其他供应商可能使用各自的登录来源，或稍后再次请求权限。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS が保存済みログイン情報の読み取り許可を求める場合があります。Claude Code では「拒否」を選ぶと、「アクセスを許可…」を再度選ぶまで使用量を読み取りません。他のプロバイダーは独自のログイン元を使用したり、後で再び許可を求めたりする場合があります。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS может запросить доступ к сохранённым данным входа. Для Claude Code отказ останавливает чтение использования, пока вы снова не выберете «Разрешить доступ…». Другие провайдеры могут использовать свои источники входа или запросить доступ позже."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS може запитати дозвіл на читання збережених даних входу. Для Claude Code відмова зупиняє читання використання, доки ви знову не виберете «Дозволити доступ…». Інші провайдери можуть використовувати власні джерела входу або запитати дозвіл пізніше."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "macOS fragt möglicherweise nach Zugriff auf gespeicherte Anmeldedaten. Bei Claude Code stoppt „Ablehnen“ das Lesen der Nutzung, bis du erneut „Zugriff erlauben…“ wählst. Andere Anbieter können eigene Anmeldequellen verwenden oder später erneut fragen."
+          }
+        }
+      }
+    },
+    "Asks macOS for %@'s saved login again.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再次请求 macOS 允许读取 %@ 已保存的登录信息。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ の保存済みログイン情報へのアクセスを macOS に再度要求します。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторно запрашивает у macOS доступ к сохранённым данным входа %@."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторно запитує в macOS доступ до збережених даних входу %@."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fragt macOS erneut nach den gespeicherten Anmeldedaten von %@."
+          }
+        }
+      }
+    },
+    "Less background work and more reliable usage readings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "减少后台开销，提升用量读取稳定性"
+          }
+        }
+      }
+    },
+    "Reduce repeated activity reads and fullscreen checks": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "减少重复活动读取和全屏状态查询"
+          }
+        }
+      }
+    },
+    "Recover Codex readings after temporary database locks": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修复 Codex 数据库临时锁定后无法恢复读取的问题"
+          }
+        }
+      }
+    },
+    "Clarify Claude access requests and unavailable usage limits": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "明确 Claude 授权提示和无法获取额度时的状态说明"
+          }
+        }
+      }
+    },
+    "Improve Ghostty tab focus, Kiro output parsing and Grok sign-in checks": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "改进 Ghostty 标签定位、Kiro 输出解析和 Grok 登录检查"
+          }
+        }
+      }
+    },
+    "Hide empty Codex reset details and correct translated formats": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐藏空的 Codex 重置详情，修正翻译格式"
           }
         }
       }

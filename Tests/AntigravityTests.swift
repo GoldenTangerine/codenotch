@@ -1119,12 +1119,17 @@ final class FirstRunCopyTests: XCTestCase {
                       "nothing warns that the Claude app is not Claude Code")
     }
 
+    /// 旧版说明保留；本次扩展后的行为见下方实现。
     /// The keychain prompt is the only interruption in the whole first run, and
     /// choosing Allow rather than Always Allow is what makes it recur.
+    /// The keychain prompt is explained before it appears: that it only comes
+    /// from Allow access…, and that Deny is honoured (#98). "Always Allow"
+    /// cannot outlast these items (#72), so the copy must not promise it.
     func testTheKeychainPromptIsExplainedBeforeItAppears() {
         let copy = SettingsView.keychainCopy
-        XCTAssertTrue(copy.contains("Always Allow"))
-        XCTAssertTrue(copy.lowercased().contains("macos will ask"))
+        XCTAssertTrue(copy.contains("Allow access…"))
+        XCTAssertTrue(copy.contains("Deny"))
+        XCTAssertFalse(copy.contains("Always Allow"))
     }
 }
 
