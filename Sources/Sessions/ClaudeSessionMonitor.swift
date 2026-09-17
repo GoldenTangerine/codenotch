@@ -88,6 +88,7 @@ final class ClaudeSessionMonitor: ObservableObject, AgentActivityMonitor {
         debounce?.cancel()
         source?.cancel()
         source = nil
+        sessions = []
     }
 
     private func watchDirectory() {

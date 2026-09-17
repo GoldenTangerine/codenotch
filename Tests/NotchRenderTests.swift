@@ -91,6 +91,9 @@ final class NotchRenderTests: XCTestCase {
             content: NotchRootView(model: model)
                 .frame(width: size.width, height: size.height)
                 .environment(\.codenotchReduceTransparency, reduceTransparency)
+                // The system material is not renderable offscreen; everything
+                // around it is. See TASKS.md, "The hardware's band stays black".
+                .environment(\.codenotchHeadlessGlass, true)
                 // Dark, the scheme the solid style pins its own panel to.
                 //
                 // `Palette.ringTrack` and its neighbours became translucent
@@ -397,10 +400,23 @@ final class NotchRenderTests: XCTestCase {
         }
     }
 
-    /// The glass style reaches the notch whether it is open or closed, as requested.
+    /// The glass style reaches the notch whether it is open or closed, as
+    /// requested: folded, the body fill is turned off and nothing of ours is
+    /// painted in its place.
+    ///
+    /// The system material is left out of the render (see
+    /// `\.codenotchHeadlessGlass`), so this pins the one half that is ours —
+    /// that the fill really did step aside — rather than what glass looks like.
+    ///
+    /// Three cells, where its neighbours render four: the first
+    /// `ImageRenderer` render of a given pixel size in a test method can hand
+    /// back the *previous* method's image at that size, and the method before
+    /// this one paints the same panel size opaque black, so at four cells this
+    /// read 1.0 in the full run and 0 alone. A size no other pixel test asks
+    /// for keeps the hand-me-down out.
     func testTheFoldedPillIsTransparentInTheGlassStyle() {
         for edge in NotchEdge.allCases {
-            let m = model(edge: edge)
+            let m = model(edge: edge, cells: 3)
             m.surfaceStyle = .glass
             m.isExpanded = false
             guard let rep = render(m) else {
@@ -420,6 +436,48 @@ final class NotchRenderTests: XCTestCase {
             XCTAssertEqual(
                 colour?.alphaComponent ?? 1, 0, accuracy: 0.01,
                 "\(edge): the folded pill is opaque in the glass style"
+            )
+        }
+    }
+
+    /// The other half of the same pixel: where `glass` leaves the surface to
+    /// the system, `darkGlass` puts a wash of ours underneath it, and that wash
+    /// *is* renderable offscreen. So the dim is the one thing about the dark
+    /// glass style a headless test can honestly check.
+    ///
+    /// Five cells, a panel size no other pixel test renders: the first
+    /// `ImageRenderer` render of a given pixel size in a test method can hand
+    /// back the *previous* method's image at that size, and the folded-pill
+    /// test above — which sorts right before this one and expects nothing at
+    /// this very probe — already claims three. A size of its own keeps this
+    /// test's dim out of that one's image.
+    func testTheFoldedPillCarriesTheDimInTheDarkGlassStyle() throws {
+        guard #available(macOS 26.0, *) else {
+            throw XCTSkip("no Liquid Glass below macOS 26, so darkGlass resolves to solid")
+        }
+        for edge in NotchEdge.allCases {
+            let m = model(edge: edge, cells: 5)
+            m.surfaceStyle = .darkGlass
+            m.isExpanded = false
+            guard let rep = render(m) else {
+                XCTFail("\(edge): no image")
+                continue
+            }
+            let place = NotchPlacement(edge: edge, panelSize: m.panelSize)
+            let onBezel = place.point(
+                along: m.slack + m.shapeLength / 2, across: 1
+            )
+            let colour = rep.colorAt(
+                x: min(rep.pixelsWide - 1, max(0, Int(onBezel.x))),
+                y: min(rep.pixelsHigh - 1, max(0, Int(onBezel.y)))
+            )
+            XCTAssertEqual(
+                colour?.alphaComponent ?? 0, 0.60, accuracy: 0.03,
+                "\(edge): the dark glass dim is not drawn beneath the folded pill"
+            )
+            XCTAssertLessThan(
+                colour?.brightnessComponent ?? 1, 0.05,
+                "\(edge): the dark glass dim is not black"
             )
         }
     }
@@ -525,6 +583,22 @@ final class PanelSizingIntegrityTests: XCTestCase {
             XCTAssertNil(window.appearance,
                          "the glass style pinned an appearance instead of inheriting one")
         }
+    }
+
+    /// Dark glass is `Glass.clear` over a black dim of ours, and it must always
+    /// read dark regardless of the Mac's appearance — same pin as solid, so
+    /// `Palette`'s frame hexes hold.
+    func testTheDarkGlassStyleForcesTheDarkAppearance() {
+        let controller = NotchWindowController()
+        controller.model.surfaceStyle = .darkGlass
+        controller.show()
+        defer { controller.stop() }
+
+        guard let window = controller.panelContentViewForTesting?.window else {
+            return XCTFail("no panel")
+        }
+        XCTAssertEqual(window.appearance?.name, .darkAqua,
+                       "the dark glass style left the panel following the Mac's appearance")
     }
 
     /// Reduce transparency means "no see-through chrome", and the window has to

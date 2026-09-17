@@ -144,6 +144,7 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
         scanGeneration += 1
         scanTask?.cancel()
         scanTask = nil
+        sessions = []
     }
 
     private func rescan() {

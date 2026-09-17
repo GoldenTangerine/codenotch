@@ -22,7 +22,7 @@ documented behaviour and the wire formats.
 
 | Cell | Source | How it reads it |
 |---|---|---|
-| **Claude** | `GET https://api.anthropic.com/api/oauth/usage` with the token Claude Code keeps in `~/.claude/.credentials.json` | Session / weekly windows, 429 back-off with a persisted deadline, stale readings dimmed with their age. A thin arc spins inside the ring while a Claude session is working, and pulses amber when one is waiting on you (Claude Code hooks + transcript watcher, desktop app included). |
+| **Claude** | `GET https://api.anthropic.com/api/oauth/usage` with the token Claude Code keeps in `~/.claude/.credentials.json` | Session / weekly windows, 429 back-off with a persisted deadline, stale readings dimmed with their age. Renews that token by running the standalone `claude -p` shortly before it expires (Claude Code inside the desktop app never writes this file), and never sends an expired one. A thin arc spins inside the ring while a Claude session is working, and pulses amber when one is waiting on you (Claude Code hooks + transcript watcher, desktop app included). |
 | **Codex** | The local Codex sign-in in `~/.codex/auth.json` (read only, never refreshed), falling back to the newest session snapshot | Live primary/secondary windows (5h + weekly on paid plans, a monthly window on free) while Codex is signed in; Spark and Code review appear on the hover card when Codex reports them; otherwise the last snapshot, marked stale by its own timestamp. |
 | **Cursor** | The editor's own session from `state.vscdb` → `cursor.com/api/usage-summary` | Included usage / API usage / on-demand, reset at billing-cycle end. Nothing to sign into: it borrows the editor's session, so there is only ever one account. |
 | **Antigravity** | Official `agy` CLI `/usage` print when installed; otherwise the existing local `language_server` bridge, Google Cloud Code API, or transcript model count | Official four quota rows (Gemini & Claude/GPT 5h/weekly) without running the full IDE. When CLI is absent, falls back to legacy local bridge/API. |
@@ -43,7 +43,10 @@ shows an error or the last reading marked stale. Codenotch does not automate sig
 
 ## Install / build
 
-Prerequisites: Rust (MSVC toolchain), WebView2 runtime (ships with Windows 11).
+This fork provides Windows source and an optional NSIS installer configuration.
+Its release workflow currently publishes the macOS DMG only.
+
+Build prerequisites: Rust (MSVC toolchain), WebView2 runtime (ships with Windows 11).
 
 ```powershell
 # from this directory (the repo root here; `windows/` inside the upstream repo)
@@ -52,10 +55,27 @@ cargo build --release
 .\target\release\codenotch.exe doctor   # self-diagnosis: credentials, data sources, icons, hooks
 ```
 
+To build the installer locally:
+
+```powershell
+# the hook gets its own target dir, so the bundler never copies it onto itself
+cargo build --release --locked -p codenotch-hook --target-dir target/hook
+cd codenotch
+npx @tauri-apps/cli@2 build --config tauri.bundle.conf.json
+# → ..\target\release\bundle\nsis\Codenotch_<version>_x64-setup.exe
+```
+
 Tray menu: **Settings…**, **Refresh usage now**, **Quit**. Everything else is in the settings
 window: the taskbar icon, which rings the notch shows, its size, start with Windows, the
 language, Claude Code hooks, reset position, and the data folder (`%APPDATA%\codenotch` —
 logs, persisted readings, icon overrides).
+
+Tray layouts include two numeric readings, one to five provider bars, or a plain app icon.
+Choose providers and preview the icon in Appearance; failed saves restore the previous selection.
+Ukrainian is supported in both settings and usage cards, including automatic language selection.
+Claude token renewal allows up to three attempts per expiry value during an app run, waiting
+10 and then 20 minutes between attempts. A changed expiry starts a new retry budget while
+retaining the cooldown.
 
 ### Icons
 

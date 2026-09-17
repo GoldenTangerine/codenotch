@@ -53,6 +53,7 @@ final class AntigravityActivityMonitor: AgentActivityMonitor {
     func stop() {
         timer?.invalidate()
         timer = nil
+        sessions = []
     }
 
     private func poll() {

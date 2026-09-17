@@ -40,6 +40,16 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.44",
+            headline: L10n.t("More appearance options and smoother activity tracking"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Add dark glass, adjustable usage colors and dashed secondary rings")),
+                ReleaseNote.Change(title: L10n.t("Support Ukrainian and reduce idle activity monitoring")),
+                ReleaseNote.Change(title: L10n.t("Prevent false completion notifications when reconnecting accounts")),
+                ReleaseNote.Change(title: L10n.t("Keep multiple accounts, Code Switch R and independent inner rings"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.43",
             headline: L10n.t("Top avoidance height"),
             changes: [

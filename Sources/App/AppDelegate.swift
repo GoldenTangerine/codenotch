@@ -20,7 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var phoneLinkServerStatus: PhoneLinkServerStatus?
     var phoneLinkPairing: PhoneLinkPairing?
     var phoneLinkRegistry: PhoneLinkRegistry?
-    private var monitors: [String: any AgentActivityMonitor] = [:]
+    private var activityCoordinator: ActivityCoordinator?
     private var ollamaRelay: OllamaActivityRelay?
     private var lmstudioMetrics: LMStudioMetrics?
     private var preferences: Preferences?
@@ -194,6 +194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) }))
                 self?.activitySources = Dictionary(uniqueKeysWithValues:
                     catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) })
+                self?.updateActivityMonitoring()
                 self?.updateActivity()
             }
             catalog.onChange = applyCatalog
@@ -598,6 +599,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(showsSettingsHandle: $0) }
                 .store(in: &cancellables)
 
+            preferences.$watchLimit
+                .combineLatest(preferences.$criticalLimit)
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] watch, critical in
+                    fleet?.apply(watchLimit: watch, criticalLimit: critical)
+                }
+                .store(in: &cancellables)
+
+            preferences.$weeklyRingDashed
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(weeklyRingDashed: $0) }
+                .store(in: &cancellables)
+
             preferences.$weeklyRing
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(weeklyRing: $0) }
@@ -813,26 +827,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             refresher.start()
             tokenRefresher = refresher
         }
-        for (id, monitor) in monitors {
-            monitor.sessionsPublisher
-                .receive(on: RunLoop.main)
-                .sink { [weak self] live in
-                    guard let self else { return }
-                    self.nativeSessions[id] = live
-                    // The publisher delivers on the main run loop, but the
-                    // closure itself is nonisolated — the same assertion the
-                    // notch controller's timers make.
-                    MainActor.assumeIsolated { self.updateActivity() }
-                }
-                .store(in: &cancellables)
-            monitor.start()
+        let activity = ActivityCoordinator(monitors: monitors) { [weak self] id, sessions in
+            guard let self else { return }
+            self.nativeSessions[id] = sessions
+            // The publisher delivers on the main run loop, but the
+            // closure itself is nonisolated — the same assertion the
+            // notch controller's timers make.
+            MainActor.assumeIsolated { self.updateActivity() }
         }
+        self.activityCoordinator = activity
+        updateActivityMonitoring()
+        preferences.$connectedProviders.combineLatest(preferences.$codeSwitchEnabled)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateActivityMonitoring() }
+            .store(in: &cancellables)
         // Poll usage hard only while something is actually running.
         store?.isBusy = { [weak self] in
             self?.hookMonitor.state.merging(self?.nativeSessions ?? [:]).values.contains { $0.contains { $0.state == .busy } } ?? false
                 || (self?.lmstudioMetrics?.isBusy ?? false)
         }
-        self.monitors = monitors
         hookMonitor.$state.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateActivity() }
             .store(in: &cancellables)
@@ -886,6 +899,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(weeklyRing: preferences.weeklyRing)
         fleet.apply(independentInnerRing: preferences.independentInnerRing,
                     codeSwitchQuotaRatiosEnabled: preferences.codeSwitchQuotaRatiosEnabled)
+        fleet.apply(watchLimit: preferences.watchLimit, criticalLimit: preferences.criticalLimit)
+        fleet.apply(weeklyRingDashed: preferences.weeklyRingDashed)
         fleet.apply(showsMoveHandle: preferences.showsMoveHandle)
         fleet.apply(showsSettingsHandle: preferences.showsSettingsHandle)
         fleet.apply(foldsForFullScreen: preferences.foldsForFullScreen)
@@ -927,6 +942,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         announcementWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    private func updateActivityMonitoring() {
+        guard let preferences, let activityCoordinator else { return }
+        activityCoordinator.setConnected(preferences.connectedProviders, sources: activitySources,
+                                         codeSwitchEnabled: preferences.codeSwitchEnabled)
     }
 
     private func updateActivity() {
@@ -1108,7 +1129,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         lmstudioMetrics?.stop()
         tokenRefresher?.stop()
         store?.stop()
-        monitors.values.forEach { $0.stop() }
+        activityCoordinator?.stop()
         notchFleet?.stop()
         Task { await phoneLinkServer?.stop() }
     }

@@ -74,6 +74,7 @@ final class CursorActivityMonitor: ObservableObject, AgentActivityMonitor {
     func stop() {
         timer?.invalidate()
         timer = nil
+        sessions = []
     }
 
     private func rescan() {

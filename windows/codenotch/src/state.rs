@@ -1,3 +1,12 @@
+/**
+ @name: 上游功能同步模块
+ @Descripttion: 维护 state.rs 的上游功能与本地兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-17 11:04:24
+ @LastEditTime: 2026-09-17 11:04:24
+ @FilePath: windows/codenotch/src/state.rs
+ */
 //! Four-state machine: attention > running > done > idle (ordered by attention cost).
 //! done persists: it is cleared only by a new UserPromptSubmit for that session, the user's ✕, or the > 24 h stale sweep.
 
@@ -60,6 +69,8 @@ pub struct Snapshot {
     pub lang: String,
     /// The actual language resolved on the Rust side (WebView2's navigator.language is unreliable)
     pub lang_resolved: String,
+    /// Whether reset times use a 24-hour clock, from the Windows region settings
+    pub clock_24h: bool,
     /// Whether dragging / wheel resizing is allowed (the page enables the gestures from it)
     pub drag: bool,
 }
@@ -243,7 +254,7 @@ impl Store {
         self.map.get(id).map(|s| s.ppid).filter(|p| *p != 0)
     }
 
-    pub fn snapshot(&self, lang: &str, lang_resolved: &str, drag: bool) -> Snapshot {
+    pub fn snapshot(&self, lang: &str, lang_resolved: &str, clock_24h: bool, drag: bool) -> Snapshot {
         let mut sessions: Vec<Session> = self.map.values().cloned().collect();
         let rank = |st: &str| match st {
             ST_ATTENTION => 0,
@@ -274,6 +285,7 @@ impl Store {
             counts,
             lang: lang.to_string(),
             lang_resolved: lang_resolved.to_string(),
+            clock_24h,
             drag,
         }
     }

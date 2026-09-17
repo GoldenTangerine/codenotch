@@ -254,6 +254,8 @@ struct SettingsView: View {
         .environment(\.locale, preferences.language.locale ?? .current)
         .tint(preferences.accentColor.color)
         .environment(\.codenotchAccentColor, preferences.accentColor.color)
+        .environment(\.usageWatchLimit, preferences.watchLimit)
+        .environment(\.usageCriticalLimit, preferences.criticalLimit)
         // Fills the window rather than claiming a fixed size. Under
         // `fullSizeContentView` the content view is the whole frame — title
         // bar included — so a view sized to `SettingsView.height` left the
@@ -657,6 +659,10 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                if preferences.weeklyRing != .off {
+                    Toggle(L10n.t("Dashed weekly ring"), isOn: $preferences.weeklyRingDashed)
+                }
+
                 Toggle(L10n.t("Claude daily pace ring"), isOn: $preferences.claudeDailyPaceRing)
                 Text(preferences.independentInnerRing
                     ? L10n.t("Claude’s inner ring shows daily pace against the weekly allowance. Alerts follow daily pace.")
@@ -885,6 +891,34 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+            }
+
+            Section(L10n.t("Usage Limits")) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L10n.t("Watch limit"))
+                        Spacer()
+                        Text("\(Int(preferences.watchLimit * 100))%")
+                    }
+                    Slider(value: $preferences.watchLimit, in: 0.01...0.99)
+                        .accessibilityLabel(L10n.t("Watch limit"))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(L10n.t("Critical limit"))
+                        Spacer()
+                        Text("\(Int(preferences.criticalLimit * 100))%")
+                    }
+                    Slider(value: $preferences.criticalLimit, in: 0.01...1.00)
+                        .accessibilityLabel(L10n.t("Critical limit"))
+                }
+                Button(L10n.t("Reset to defaults")) {
+                    // Critical first: `watchLimit` clamps itself below critical,
+                    // so resetting watch against a low stored critical would pin
+                    // it there and the reset would quietly do nothing.
+                    preferences.resetUsageLimits()
+                }
+                .padding(.top, 4)
             }
 
             // Apart from the notch's own group: these are about the app, not

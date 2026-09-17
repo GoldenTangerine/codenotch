@@ -311,6 +311,10 @@ final class Preferences: ObservableObject {
     }
 
     /// Whether the weekly limit gets a ring of its own, and where it sits.
+    @Published var weeklyRingDashed: Bool {
+        didSet { defaults.set(weeklyRingDashed, forKey: Keys.weeklyRingDashed) }
+    }
+
     @Published var weeklyRing: WeeklyRing {
         didSet { defaults.set(weeklyRing.rawValue, forKey: Keys.weeklyRing) }
     }
@@ -336,6 +340,28 @@ final class Preferences: ObservableObject {
     /// The material the expanded notch, tooltip and settings orb are painted with.
     @Published var notchSurfaceStyle: NotchSurfaceStyle {
         didSet { defaults.set(notchSurfaceStyle.rawValue, forKey: Keys.notchSurfaceStyle) }
+    }
+
+    @Published var watchLimit: Double {
+        didSet {
+            let clamped = min(max(watchLimit.isFinite ? watchLimit : 0.50, 0.01), criticalLimit - 0.01)
+            if clamped != watchLimit { watchLimit = clamped }
+            defaults.set(watchLimit, forKey: Keys.watchLimit)
+        }
+    }
+
+    @Published var criticalLimit: Double {
+        didSet {
+            let clamped = min(max(criticalLimit.isFinite ? criticalLimit : 0.70, watchLimit + 0.01), 1.0)
+            if clamped != criticalLimit { criticalLimit = clamped }
+            defaults.set(criticalLimit, forKey: Keys.criticalLimit)
+        }
+    }
+
+    func resetUsageLimits() {
+        watchLimit = 0.01
+        criticalLimit = 0.70
+        watchLimit = 0.50
     }
 
     /// The language the app itself speaks.
@@ -552,10 +578,13 @@ final class Preferences: ObservableObject {
         static let notchAccentColor = "notchAccentColor"
         // A new key, so there is nothing under the old app name to migrate.
         static let weeklyRing = "weeklyRing"
+        static let weeklyRingDashed = "weeklyRingDashed"
         static let showsMoveHandle = "showsMoveHandle"
         static let showsSettingsHandle = "showsSettingsHandle"
         static let claudeDailyPaceRing = "claudeDailyPaceRing"
         static let notchSurfaceStyle = "notchSurfaceStyle"
+        static let watchLimit = "watchLimit"
+        static let criticalLimit = "criticalLimit"
         static let lastSeenVersion = "lastSeenVersion"
         static let order = "providerOrder"
         static let announceSessionEnd = "announceSessionEnd"
@@ -839,6 +868,8 @@ final class Preferences: ObservableObject {
         // Follow the Mac unless the user explicitly chooses a Codenotch colour.
         // Off by default: an extra arc in a 44pt circle is a change to how
         // every reading looks, and nobody asked for it on their behalf.
+        self.weeklyRingDashed = defaults.object(forKey: Keys.weeklyRingDashed) as? Bool ?? false
+
         self.weeklyRing = defaults.string(forKey: Keys.weeklyRing)
             .flatMap(WeeklyRing.init(rawValue:)) ?? .off
         // Preserve this fork's menu-based placement until the handle is enabled.
@@ -860,6 +891,13 @@ final class Preferences: ObservableObject {
         self.notchAccentColor = notchAccentColor
         self.notchSurfaceStyle = defaults.string(forKey: Keys.notchSurfaceStyle)
             .flatMap(NotchSurfaceStyle.init(rawValue:)) ?? .glass
+        let storedWatchLimit = defaults.object(forKey: Keys.watchLimit) as? Double ?? 0.50
+        let storedCriticalLimit = defaults.object(forKey: Keys.criticalLimit) as? Double ?? 0.70
+        // `didSet` does the clamping, and it does not run for these assignments,
+        // so a stored pair that crossed over is repaired here instead.
+        let critical = min(max(storedCriticalLimit.isFinite ? storedCriticalLimit : 0.70, 0.02), 1.0)
+        self.criticalLimit = critical
+        self.watchLimit = min(max(storedWatchLimit.isFinite ? storedWatchLimit : 0.50, 0.01), critical - 0.01)
         // Absent means never chosen, which is follow-the-Mac.
         let language = defaults.string(forKey: L10n.languageDefaultsKey)
             .flatMap(AppLanguage.init(rawValue:)) ?? self.appliedLanguage

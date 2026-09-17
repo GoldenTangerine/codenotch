@@ -1,3 +1,12 @@
+/**
+ @name: 上游功能同步模块
+ @Descripttion: 维护 UsageBand.swift 的上游功能与本地兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-17 11:04:24
+ @LastEditTime: 2026-09-17 11:04:24
+ @FilePath: Sources/Model/UsageBand.swift
+ */
 import SwiftUI
 
 /// The colour a ring or bar takes at a given level of use.
@@ -12,11 +21,11 @@ enum UsageBand: Equatable {
     case critical    // nearly out
     case exhausted   // limit hit, waiting for the reset
 
-    static func band(for usedFraction: Double) -> UsageBand {
+    static func band(for usedFraction: Double, watchLimit: Double = 0.50, criticalLimit: Double = 0.70) -> UsageBand {
         switch usedFraction {
-        case ..<0.50: return .ample
-        case ..<0.70: return .watch
-        case ..<1.00: return .critical
+        case ..<watchLimit: return .ample
+        case ..<criticalLimit: return .watch
+        case ..<1.0: return .critical
         default:      return .exhausted
         }
     }
@@ -31,5 +40,25 @@ enum UsageBand: Equatable {
         case .watch:                 return Palette.watch
         case .critical, .exhausted:  return Palette.critical
         }
+    }
+}
+
+private struct UsageWatchLimitKey: EnvironmentKey {
+    static let defaultValue: Double = 0.50
+}
+
+private struct UsageCriticalLimitKey: EnvironmentKey {
+    static let defaultValue: Double = 0.70
+}
+
+extension EnvironmentValues {
+    var usageWatchLimit: Double {
+        get { self[UsageWatchLimitKey.self] }
+        set { self[UsageWatchLimitKey.self] = newValue }
+    }
+
+    var usageCriticalLimit: Double {
+        get { self[UsageCriticalLimitKey.self] }
+        set { self[UsageCriticalLimitKey.self] = newValue }
     }
 }

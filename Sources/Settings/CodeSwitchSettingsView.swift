@@ -433,6 +433,8 @@ struct CodeSwitchTableQuota: Identifiable {
 }
 
 struct CodeSwitchTableQuotaCell: View {
+    @Environment(\.usageWatchLimit) private var watchLimit
+    @Environment(\.usageCriticalLimit) private var criticalLimit
     let snapshot: ProviderSnapshot?
     let accent: Color
     let resetTimeFormat: ResetTimeFormat
@@ -463,21 +465,22 @@ struct CodeSwitchTableQuotaCell: View {
         VStack(alignment: .leading, spacing: 3) {
             if let window = item.window {
                 if let fraction = window.usedFraction {
+                    let band = UsageBand.band(for: fraction, watchLimit: watchLimit, criticalLimit: criticalLimit)
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .firstTextBaseline, spacing: 8) {
                             Text(item.quota.title).foregroundStyle(.secondary).fixedSize()
                             Spacer(minLength: 0)
-                            quotaPercentage(fraction, band: item.band).fixedSize()
+                            quotaPercentage(fraction, band: band).fixedSize()
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             Text(item.quota.title).foregroundStyle(.secondary)
                                 .fixedSize(horizontal: false, vertical: true)
-                            quotaPercentage(fraction, band: item.band)
+                            quotaPercentage(fraction, band: band)
                                 .frame(maxWidth: .infinity, alignment: .trailing)
                         }
                     }
                     ProgressView(value: min(1, max(0, fraction))).progressViewStyle(.linear)
-                        .tint(item.band.color(accent: accent))
+                        .tint(band.color(accent: accent))
                         .accessibilityLabel(item.quota.title)
                 } else {
                     Text(item.quota.title).foregroundStyle(.secondary)

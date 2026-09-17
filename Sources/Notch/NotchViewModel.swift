@@ -276,6 +276,9 @@ final class NotchViewModel: ObservableObject {
     var ringEdgeOffset: CGFloat { min(0, ringEdgeAdjustment) / sizeScale }
     var bodyDepth: CGFloat { baseBodyDepth + ringEdgePadding }
     var cellAlong: CGFloat { NotchLayout.cellAlong(for: edge, ringGrowth: ringGrowth) }
+    @Published var weeklyRingDashed: Bool = false
+    @Published var watchLimit: Double = 0.50
+    @Published var criticalLimit: Double = 0.70
     /// Whether the move handle is on the notch at all. Mirrored from Settings
     /// like `weeklyRing`.
     @Published var showsMoveHandle = false

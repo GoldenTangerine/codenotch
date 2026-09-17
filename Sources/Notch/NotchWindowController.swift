@@ -135,7 +135,32 @@ final class NotchWindowController {
     /// Determines whether a full-screen application window is active on this notch's display.
     /// Default implementation queries WindowServer and NSWorkspace; overridable for testing.
     lazy var isFullScreenActive: () -> Bool = { [weak self] in
-        FullScreenDetector.isFullScreenAppFrontmost(on: self?.currentScreen())
+        self?.fullScreenReading() ?? false
+    }
+
+    /// The last answer from WindowServer, and when it was asked.
+    ///
+    /// `cursorMoved` runs for every mouse event anywhere on screen, and the
+    /// question behind this is `CGWindowListCopyWindowInfo` — a copy of every
+    /// window's description. Asked afresh on each event it was nearly all of
+    /// the app's CPU while the pointer moved. A reading younger than the
+    /// cursor poll is as good as a new one: the poll would not have noticed
+    /// the change any sooner. A space or app switch drops it, so those
+    /// still answer at once.
+    private var lastFullScreenReading: (at: Date, screen: NSScreen?, value: Bool)?
+    static let fullScreenReadingLifetime: TimeInterval = 0.25
+
+    private func fullScreenReading() -> Bool {
+        let screen = currentScreen()
+        let now = Date()
+        if let last = lastFullScreenReading,
+           last.screen === screen,
+           now.timeIntervalSince(last.at) < Self.fullScreenReadingLifetime {
+            return last.value
+        }
+        let value = FullScreenDetector.isFullScreenAppFrontmost(on: screen)
+        lastFullScreenReading = (now, screen, value)
+        return value
     }
 
     /// Whether a frontmost full-screen app may fold the notch at all. A
@@ -185,6 +210,13 @@ final class NotchWindowController {
     /// frontmost full-screen app, an always-on notch comes straight back.
     func apply(foldsForFullScreen: Bool) {
         self.foldsForFullScreen = foldsForFullScreen
+        if !foldsForFullScreen {
+            // A fold already in flight captured ignoreAlwaysOn and would land
+            // once more against an always-on notch, even as the setting that
+            // caused it is being switched off.
+            foldWork?.cancel()
+            foldWork = nil
+        }
         handleActiveSpaceOrAppChange()
     }
 
@@ -218,7 +250,10 @@ final class NotchWindowController {
             for: NSWorkspace.activeSpaceDidChangeNotification
         )
         .sink { [weak self] _ in
-            MainActor.assumeIsolated { self?.handleActiveSpaceOrAppChange() }
+            MainActor.assumeIsolated {
+                self?.lastFullScreenReading = nil
+                self?.handleActiveSpaceOrAppChange()
+            }
         }
         .store(in: &cancellables)
 
@@ -226,7 +261,10 @@ final class NotchWindowController {
             for: NSWorkspace.didActivateApplicationNotification
         )
         .sink { [weak self] _ in
-            MainActor.assumeIsolated { self?.handleActiveSpaceOrAppChange() }
+            MainActor.assumeIsolated {
+                self?.lastFullScreenReading = nil
+                self?.handleActiveSpaceOrAppChange()
+            }
         }
         .store(in: &cancellables)
 
@@ -617,7 +655,13 @@ final class NotchWindowController {
         }
         hostingView?.interactiveRects = rects
         if let panel {
-            panel.ignoresMouseEvents = dragStart == nil && !rects.contains { $0.contains(localCursor(in: panel.frame)) }
+            // Runs for every mouse event on the screen. AppKit does not skip an
+            // unchanged value: each assignment re-sends the window's event mask
+            // and tags to WindowServer and flushes a layout pass.
+            let ignores = dragStart == nil && !rects.contains { $0.contains(localCursor(in: panel.frame)) }
+            if panel.ignoresMouseEvents != ignores {
+                panel.ignoresMouseEvents = ignores
+            }
         }
     }
 
@@ -676,13 +720,19 @@ final class NotchWindowController {
         return CGPoint(x: mouse.x - frame.minX, y: frame.maxY - mouse.y)
     }
 
-    private func cursorMoved() {
+    // Not private: tests drive the hover fold through it, the same way they
+    // drive the event fold through handleActiveSpaceOrAppChange.
+    func cursorMoved() {
         guard !model.isEditingPosition else { updateInteractiveRects(); return }
         guard let panel, !isOptionDragging else { return }
         let local = localCursor(in: panel.frame)
         let overTooltip = model.hoveredIndex
             .flatMap(tooltipRect(index:))
             .map { model.isExpanded && $0.contains(local) } ?? false
+        // The fold setting gates this check as surely as the one in
+        // handleActiveSpaceOrAppChange: left ungated, the hover fold out-votes
+        // "Always show" under a full-screen app while the other path keeps
+        // restoring it — the notch ends up folding on every poll.
         setExpanded(isInLiveRegion(local) || overTooltip,
                     ignoreAlwaysOn: foldsForFullScreen && isFullScreenActive())
 
@@ -733,7 +783,11 @@ final class NotchWindowController {
 
     /// Opens on contact, folds shut after a pause — unless it has been pinned
     /// open, in which case the pointer is not what decides.
-    private func setExpanded(_ wanted: Bool, ignoreAlwaysOn: Bool = false) {
+    ///
+    /// `ignoreAlwaysOn` is only read when it can change the outcome — a fold
+    /// about to be scheduled on a notch that "Always show" would otherwise
+    /// hold open — because answering it asks WindowServer.
+    private func setExpanded(_ wanted: Bool, ignoreAlwaysOn: @autoclosure () -> Bool = false) {
         if wanted {
             foldWork?.cancel()
             foldWork = nil
@@ -746,13 +800,16 @@ final class NotchWindowController {
         // does the pointer get a say again.
         if isEditingGeometry && visibility != .hidden { return }
         if let peekUntil, peekUntil > Date() { return }
-        let holdsOpen = ignoreAlwaysOn ? model.isPinned : model.staysOpen
-        guard model.isExpanded, !holdsOpen, foldWork == nil else { return }
+        guard model.isExpanded, foldWork == nil, !model.isPinned else { return }
+        // Pinned is settled above; what is left to decide is whether "Always
+        // show" holds it, and only a frontmost full-screen app overrules that.
+        let ignoresAlwaysOn = model.staysOpen && ignoreAlwaysOn()
+        guard ignoresAlwaysOn || !model.staysOpen else { return }
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.foldWork = nil
-                let stillHoldsOpen = ignoreAlwaysOn ? self.model.isPinned : self.model.staysOpen
+                let stillHoldsOpen = ignoresAlwaysOn ? self.model.isPinned : self.model.staysOpen
                 guard !stillHoldsOpen else { return }
                 withAnimation(NotchMotion.unfold) {
                     self.model.isExpanded = false

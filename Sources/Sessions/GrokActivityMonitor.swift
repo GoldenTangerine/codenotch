@@ -1,3 +1,12 @@
+/**
+ @name: Grok 活动监控
+ @Descripttion: 监控 Grok CLI 会话并在停用时清理活动缓存。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-17 16:00:00
+ @LastEditTime: 2026-09-17 16:00:00
+ @FilePath: Sources/Sessions/GrokActivityMonitor.swift
+ */
 import Combine
 import Foundation
 
@@ -44,6 +53,7 @@ final class GrokActivityMonitor: ObservableObject, AgentActivityMonitor {
     func stop() {
         timer?.invalidate()
         timer = nil
+        sessions = []
     }
 
     private func rescan() {

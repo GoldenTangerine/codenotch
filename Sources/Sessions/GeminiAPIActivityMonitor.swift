@@ -63,6 +63,7 @@ final class GeminiAPIActivityMonitor: AgentActivityMonitor {
     func stop() {
         timer?.invalidate()
         timer = nil
+        sessions = []
     }
 
     private func poll() {

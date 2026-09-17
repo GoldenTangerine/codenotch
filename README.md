@@ -40,6 +40,8 @@ Download this fork from [Releases](https://github.com/GoldenTangerine/codenotch/
 ## Windows
 
 A Windows port — Rust/Tauri 2, same design and providers — lives in [`windows/`](windows/README.md).
+Build instructions, including the optional NSIS installer, are in that document.
+Settings include configurable tray layouts with previews and Ukrainian usage cards.
 
 ## Connect your phone
 
@@ -468,6 +470,13 @@ ring. Code Switch R uses the next available period in its supplied order, so a
 weekly main ring can have a monthly second ring. Balance-only, unlimited and
 invalid quotas do not become a second ring. The inside ring temporarily yields
 to the working indicator; the outside ring remains visible.
+
+**Dashed weekly ring** draws this secondary quota ring with dashes, including
+Code Switch R periods. **Usage Limits** sets the colour thresholds for watch
+and critical usage (50% and 70% by default), across rings, quota cards and
+Code Switch R details. Actual limit and reset notifications keep their existing
+rules. **Dark glass** keeps the notch and its cards dark while retaining glass
+transparency; reduced transparency still uses the opaque surface.
 
 **Show usage pace** also applies to Code Switch R details for 5-hour, daily and
 weekly quotas with a reset time. Monthly and custom periods need an exact cycle

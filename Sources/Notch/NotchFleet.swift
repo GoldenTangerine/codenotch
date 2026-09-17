@@ -75,6 +75,9 @@ final class NotchFleet {
     private var codeSwitchQuotaRatiosEnabled = false
     private var showsMoveHandle = false
     private var showsSettingsHandle = false
+    private var watchLimit: Double = 0.50
+    private var criticalLimit: Double = 0.70
+    private var weeklyRingDashed = false
     private var foldsForFullScreen = true
     private var surfaceStyle: NotchSurfaceStyle = .glass
     private var deepSeekPricingEnabled = true
@@ -224,6 +227,13 @@ final class NotchFleet {
         }
     }
 
+    func apply(weeklyRingDashed: Bool) {
+        self.weeklyRingDashed = weeklyRingDashed
+        for controller in controllers.values {
+            controller.model.weeklyRingDashed = weeklyRingDashed
+        }
+    }
+
     func apply(weeklyRing: WeeklyRing) {
         self.weeklyRing = weeklyRing
         for controller in controllers.values {
@@ -237,6 +247,15 @@ final class NotchFleet {
         for controller in controllers.values {
             controller.model.independentInnerRing = independentInnerRing
             controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
+        }
+    }
+
+    func apply(watchLimit: Double, criticalLimit: Double) {
+        self.watchLimit = watchLimit
+        self.criticalLimit = criticalLimit
+        for controller in controllers.values {
+            controller.model.watchLimit = watchLimit
+            controller.model.criticalLimit = criticalLimit
         }
     }
 
@@ -528,6 +547,9 @@ final class NotchFleet {
         controller.model.weeklyRing = weeklyRing
         controller.model.independentInnerRing = independentInnerRing
         controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
+        controller.model.watchLimit = watchLimit
+        controller.model.criticalLimit = criticalLimit
+        controller.model.weeklyRingDashed = weeklyRingDashed
         controller.model.showsMoveHandle = showsMoveHandle
         controller.model.showsSettingsHandle = showsSettingsHandle
         controller.model.surfaceStyle = surfaceStyle
