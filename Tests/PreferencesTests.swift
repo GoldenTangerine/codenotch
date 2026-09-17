@@ -14,6 +14,19 @@ import XCTest
 
 @MainActor
 final class AccentColorPreferencesTests: XCTestCase {
+    func testHoverDelayDefaultsPersistsAndNormalizes() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.notchHoverDelay, 0)
+        for (input, expected) in [(0.35, 0.35), (0.37, 0.35), (-1, 0), (2, 1), (.nan, 0)] {
+            preferences.notchHoverDelay = input
+            XCTAssertEqual(preferences.notchHoverDelay, expected)
+            XCTAssertEqual(Preferences(defaults: defaults).notchHoverDelay, expected)
+        }
+        defaults.set(9.0, forKey: "notchHoverDelay")
+        XCTAssertEqual(Preferences(defaults: defaults).notchHoverDelay, 1)
+    }
+
     private func makeDefaults() -> UserDefaults {
         let name = "AccentColorPreferencesTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

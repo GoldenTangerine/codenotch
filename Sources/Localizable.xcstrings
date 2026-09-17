@@ -24755,6 +24755,39 @@
         }
       }
     },
+    "Hover delay": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬停延迟"
+          }
+        }
+      }
+    },
+    "Set hover delay from 0.00 to 1.00 seconds in 0.05-second steps": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬停延迟支持 0.00～1.00 秒，每次步进 0.05 秒"
+          }
+        }
+      }
+    },
+    "Leaving cancels the delay; data refreshes preserve continuous hovering": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移出即取消计时，数据刷新不打断连续悬停"
+          }
+        }
+      }
+    },
     "Trigger height": {
       "extractionState": "manual",
       "localizations": {

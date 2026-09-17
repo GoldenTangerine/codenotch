@@ -127,6 +127,19 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(notchVisibility.rawValue, forKey: Keys.visibility) }
     }
 
+    static func normalizedHoverDelay(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return (min(1, max(0, value)) * 20).rounded() / 20
+    }
+
+    @Published var notchHoverDelay: Double {
+        didSet {
+            let normalized = Self.normalizedHoverDelay(notchHoverDelay)
+            if notchHoverDelay != normalized { notchHoverDelay = normalized }
+            defaults.set(notchHoverDelay, forKey: Keys.hoverDelay)
+        }
+    }
+
     @Published var notchTriggerHeight: Int {
         didSet {
             let clamped = NotchTriggerHeight.clamp(notchTriggerHeight)
@@ -564,6 +577,7 @@ final class Preferences: ObservableObject {
         static let hasLaunched = "hasLaunchedBefore"
         static let visibility = "notchVisibility"
         static let triggerHeight = "notchTriggerHeight"
+        static let hoverDelay = "notchHoverDelay"
         static let foldsForFullScreen = "foldsForFullScreen"
         static let presence = "appPresence"
         static let edge = "notchEdge"
@@ -806,6 +820,7 @@ final class Preferences: ObservableObject {
         // like it failed to start.
         self.notchVisibility = defaults.string(forKey: Keys.visibility)
             .flatMap(NotchVisibility.init(rawValue:)) ?? .onHover
+        self.notchHoverDelay = Self.normalizedHoverDelay(defaults.double(forKey: Keys.hoverDelay))
         self.notchTriggerHeight = NotchTriggerHeight.clamp(
             (defaults.object(forKey: Keys.triggerHeight) as? NSNumber)?.intValue ?? NotchTriggerHeight.defaultValue)
         // Absent means the fold that has shipped since full-screen detection

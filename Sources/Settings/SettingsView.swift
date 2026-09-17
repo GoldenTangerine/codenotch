@@ -699,6 +699,23 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                VStack(spacing: 6) {
+                    HStack {
+                        Text("Hover delay")
+                        Spacer()
+                        Text(String(format: "%.2fs", preferences.notchHoverDelay))
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .overlay(RoundedRectangle(cornerRadius: 5).stroke(.quaternary))
+                    }
+                    Slider(value: $preferences.notchHoverDelay, in: 0...1, step: 0.05)
+                        .labelsHidden()
+                        .accessibilityLabel(Text("Hover delay"))
+                        .accessibilityValue(Text(String(format: "%.2fs", preferences.notchHoverDelay)))
+                }
+
                 Toggle(L10n.t("Fold for full-screen apps"), isOn: $preferences.foldsForFullScreen)
                 Text(L10n.t("The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps."))
                     .font(.caption)

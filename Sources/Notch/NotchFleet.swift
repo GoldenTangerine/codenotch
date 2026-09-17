@@ -65,6 +65,7 @@ final class NotchFleet {
     private var tooltipHeightMode: TooltipHeightMode = .standard
     private var accentColor: AccentColorChoice = .system
     private var notchTriggerHeight = NotchTriggerHeight.defaultValue
+    private var notchHoverDelay: Double = 0
     /// One choice for the whole fleet, like the edge and the size: a weekly
     /// ring on one display and not another would read as a bug.
     private var weeklyRing: WeeklyRing = .off
@@ -278,6 +279,13 @@ final class NotchFleet {
         if let editing { isEditingGeometry = editing }
         for controller in controllers.values {
             controller.previewGeometry(editing: editing)
+        }
+    }
+
+    func apply(notchHoverDelay: Double) {
+        self.notchHoverDelay = Preferences.normalizedHoverDelay(notchHoverDelay)
+        for controller in controllers.values {
+            controller.apply(notchHoverDelay: self.notchHoverDelay)
         }
     }
 
@@ -544,6 +552,7 @@ final class NotchFleet {
         controller.model.tooltipHeightMode = tooltipHeightMode
         controller.model.accentColor = accentColor
         controller.model.notchTriggerHeight = notchTriggerHeight
+        controller.apply(notchHoverDelay: notchHoverDelay)
         controller.model.weeklyRing = weeklyRing
         controller.model.independentInnerRing = independentInnerRing
         controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled

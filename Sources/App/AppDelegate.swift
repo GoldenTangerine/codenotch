@@ -451,6 +451,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply($0) }
                 .store(in: &cancellables)
 
+            preferences.$notchHoverDelay
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(notchHoverDelay: $0) }
+                .store(in: &cancellables)
+
             preferences.$notchTriggerHeight
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(notchTriggerHeight: $0) }

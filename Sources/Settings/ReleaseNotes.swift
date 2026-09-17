@@ -40,6 +40,14 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.48",
+            headline: L10n.t("Hover delay"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Set hover delay from 0.00 to 1.00 seconds in 0.05-second steps")),
+                ReleaseNote.Change(title: L10n.t("Leaving cancels the delay; data refreshes preserve continuous hovering"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.44",
             headline: L10n.t("More appearance options and smoother activity tracking"),
             changes: [

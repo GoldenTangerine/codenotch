@@ -78,10 +78,15 @@ final class NotchWindowController {
     private var panel: NotchPanel?
     private var hostingView: NotchHostingView<NotchRootView>?
     private let mouseLocation: () -> CGPoint
+    private let scheduleInteractionWork: (TimeInterval, DispatchWorkItem) -> Void
 
-    init(panel: NotchPanel? = nil, mouseLocation: @escaping () -> CGPoint = { NSEvent.mouseLocation }) {
+    init(panel: NotchPanel? = nil, mouseLocation: @escaping () -> CGPoint = { NSEvent.mouseLocation },
+         scheduleInteractionWork: @escaping (TimeInterval, DispatchWorkItem) -> Void = { delay, work in
+             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+         }) {
         self.panel = panel
         self.mouseLocation = mouseLocation
+        self.scheduleInteractionWork = scheduleInteractionWork
     }
 
     /// The display this notch belongs to. Nil follows the menu-bar screen,
@@ -93,6 +98,21 @@ final class NotchWindowController {
     private var clearHoverWork: DispatchWorkItem?
     private var clockTimer: Timer?
     private var cursorTimer: Timer?
+    private var hoverDelay: TimeInterval = 0
+    private var unfoldWork: DispatchWorkItem?
+    private var hoverDelayElapsed = false
+
+    private func cancelPendingUnfold() {
+        unfoldWork?.cancel()
+        unfoldWork = nil
+        hoverDelayElapsed = false
+    }
+
+    func apply(notchHoverDelay: Double) {
+        hoverDelay = Preferences.normalizedHoverDelay(notchHoverDelay)
+        cancelPendingUnfold()
+        cursorMoved()
+    }
 
     /// Hover in is quick; hover out waits, because the pointer has to cross the
     /// gap between the notch and the card without the card vanishing under it.
@@ -192,6 +212,7 @@ final class NotchWindowController {
 
     /// Immediately folds the notch and clears pending hover timers when a full-screen app takes focus.
     func foldForFullScreen() {
+        cancelPendingUnfold()
         if let peekUntil, peekUntil > Date() { return }
         foldWork?.cancel()
         foldWork = nil
@@ -330,6 +351,7 @@ final class NotchWindowController {
     }
 
     func stop() {
+        cancelPendingUnfold()
         isEditingGeometry = false
         pendingRelocate?.cancel()
         pendingRelocate = nil
@@ -366,7 +388,7 @@ final class NotchWindowController {
     }
 
     func relocate(cellCount: Int? = nil) {
-        guard let screen = currentScreen() else { return }
+        guard let screen = currentScreen() else { cancelPendingUnfold(); return }
         model.adopt(screen: screen, joinsHardware: activePosition.joinsHardware)
         let size = model.panelSize(cellCount: cellCount ?? model.snapshots.count)
         let leadingExtent = model.showsMoveHandle ? model.leadingExtent * model.sizeScale : 0
@@ -472,6 +494,8 @@ final class NotchWindowController {
         }
         updateInteractiveRects()
         updatePositionGuides(on: screen, cellCount: cellCount ?? model.snapshots.count)
+        // 数据刷新也会重算布局；鼠标仍在触发区时保留原计时，移出才取消。
+        if unfoldWork != nil { cursorMoved() }
     }
 
     /// Feeds a raw pointer delta from an ⌥-drag into `model.alongOffset` and
@@ -500,6 +524,7 @@ final class NotchWindowController {
     }
 
     private func beginOptionDrag() {
+        cancelPendingUnfold()
         guard !isOptionDragging else { return }
         isOptionDragging = true
         clearHoverWork?.cancel()
@@ -557,6 +582,7 @@ final class NotchWindowController {
     }
 
     func apply(notchTriggerHeight: Int) {
+        cancelPendingUnfold()
         model.notchTriggerHeight = NotchTriggerHeight.clamp(notchTriggerHeight)
         cursorMoved()
     }
@@ -723,8 +749,8 @@ final class NotchWindowController {
     // Not private: tests drive the hover fold through it, the same way they
     // drive the event fold through handleActiveSpaceOrAppChange.
     func cursorMoved() {
-        guard !model.isEditingPosition else { updateInteractiveRects(); return }
-        guard let panel, !isOptionDragging else { return }
+        guard !model.isEditingPosition else { cancelPendingUnfold(); updateInteractiveRects(); return }
+        guard let panel, !isOptionDragging, visibility != .hidden else { cancelPendingUnfold(); return }
         let local = localCursor(in: panel.frame)
         let overTooltip = model.hoveredIndex
             .flatMap(tooltipRect(index:))
@@ -733,7 +759,25 @@ final class NotchWindowController {
         // handleActiveSpaceOrAppChange: left ungated, the hover fold out-votes
         // "Always show" under a full-screen app while the other path keeps
         // restoring it — the notch ends up folding on every poll.
-        setExpanded(isInLiveRegion(local) || overTooltip,
+        let wantsExpansion = isInLiveRegion(local) || overTooltip
+        let waiting = wantsExpansion && !model.isExpanded && hoverDelay > 0 && !hoverDelayElapsed
+        if waiting {
+            if unfoldWork == nil {
+                let work = DispatchWorkItem { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.unfoldWork = nil
+                        self.hoverDelayElapsed = true
+                        self.cursorMoved()
+                    }
+                }
+                unfoldWork = work
+                scheduleInteractionWork(hoverDelay, work)
+            }
+        } else {
+            cancelPendingUnfold()
+        }
+        setExpanded(wantsExpansion && !waiting,
                     ignoreAlwaysOn: foldsForFullScreen && isFullScreenActive())
 
         var target: Int?
@@ -775,7 +819,7 @@ final class NotchWindowController {
                 }
             }
             clearHoverWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + hoverGrace, execute: work)
+            scheduleInteractionWork(hoverGrace, work)
         }
 
         updateInteractiveRects()
@@ -820,7 +864,7 @@ final class NotchWindowController {
             }
         }
         foldWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + foldGrace, execute: work)
+        scheduleInteractionWork(foldGrace, work)
     }
 
     /// The rings are buttons, so they should say so.
@@ -1166,6 +1210,7 @@ final class NotchWindowController {
     }
 
     func apply(_ visibility: NotchVisibility) {
+        cancelPendingUnfold()
         finishPositionEditing(commit: false)
         self.visibility = visibility
         // A standing choice outranks a peek that happens to be in flight.
@@ -1349,6 +1394,7 @@ final class NotchWindowController {
     // MARK: - Position editing
 
     func beginPositionEditing() {
+        cancelPendingUnfold()
         guard !model.isEditingPosition, let panel, let screen = selectedScreen else { return }
         edgeChange += 1
         panel.alphaValue = 1
