@@ -59,8 +59,14 @@ enum NotchLayout {
 
     // A provider cell
     static let ringDiameter  = Design.px(117)   // 44pt, the design spec's anchor
-    static let independentRingGrowth: CGFloat = 20
-    static let independentRingInset: CGFloat = 14
+    static let independentRingGrowth: CGFloat = 10
+    // 复用普通外圈与主轨道之间的净距，避免独立模式额外放大留白。
+    static var independentRingGap: CGFloat {
+        weeklyOutsideRadius - weeklyRingStroke / 2 - ringDiameter / 2
+    }
+    static var independentRingInset: CGFloat {
+        2 * (weeklyRingStroke + independentRingGap) + independentRingStroke / 2
+    }
     static let independentRingStroke: CGFloat = 4
     // 按线条边缘平分空隙，补偿每日预算内圈更粗的线宽。
     static var expandedSecondaryInsideInset: CGFloat {

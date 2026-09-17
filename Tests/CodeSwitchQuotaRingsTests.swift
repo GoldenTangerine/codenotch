@@ -55,9 +55,9 @@ import Testing
             model.snapshots = [raw]
             model.independentInnerRing = true
             #expect(model.ringGrowth == NotchLayout.independentRingGrowth)
-            #expect(model.cellRingDiameter == 64)
+            #expect(model.cellRingDiameter == 54)
             model.codeSwitchQuotaRatiosEnabled = true
-            #expect(model.cellRingDiameter == 64)
+            #expect(model.cellRingDiameter == 54)
             model.independentInnerRing = false
             #expect(model.ringGrowth == 0)
         }
@@ -331,12 +331,15 @@ import Testing
                 weeklyFraction: 0.5, weeklyRing: .outside, innerFraction: fraction, expanded: true))
             renderer.scale = 2
             let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
-            #expect(bitmap.pixelsWide == 128 && bitmap.pixelsHigh == 128)
+            #expect(bitmap.pixelsWide == 108 && bitmap.pixelsHigh == 108)
         }
         #expect(NotchLayout.independentRingStroke > NotchLayout.weeklyRingStroke)
-        let innerOuterEdge = 32 - NotchLayout.independentRingInset + NotchLayout.independentRingStroke / 2
-        let middleInnerEdge = 32 - NotchLayout.expandedSecondaryInsideInset - NotchLayout.weeklyRingStroke / 2
+        let radius = (NotchLayout.ringDiameter + NotchLayout.independentRingGrowth) / 2
+        let innerOuterEdge = radius - NotchLayout.independentRingInset + NotchLayout.independentRingStroke / 2
+        let middleInnerEdge = radius - NotchLayout.expandedSecondaryInsideInset - NotchLayout.weeklyRingStroke / 2
         #expect(innerOuterEdge < middleInnerEdge)
+        #expect(radius - NotchLayout.independentRingInset - NotchLayout.independentRingStroke / 2
+            > NotchLayout.glyphSize / 2)
     }
 
     @Test func independentRingsHaveEqualEdgeClearance() {
@@ -348,6 +351,9 @@ import Testing
         let innerGap = innerOuterEdge - middleInnerEdge
         #expect(outerGap > 0)
         #expect(abs(outerGap - innerGap) < 0.000001)
+        let ordinaryGap = NotchLayout.weeklyOutsideRadius - NotchLayout.weeklyRingStroke / 2
+            - NotchLayout.ringDiameter / 2
+        #expect(abs(outerGap - ordinaryGap) < 0.000001)
     }
 
     @Test func dailyBudgetTooltipRendersAmountAndRemainingProgress() throws {
@@ -523,12 +529,13 @@ import Testing
                     .background(Color.black))
                 renderer.scale = 3
                 let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
-                #expect(bitmap.pixelsWide == 192 && bitmap.pixelsHigh == 192)
+                #expect(bitmap.pixelsWide == 162 && bitmap.pixelsHigh == 162)
+                let center = (NotchLayout.ringDiameter + NotchLayout.independentRingGrowth) / 2
                 let hasThirdRing = secondary != nil && placement != .off
-                for (radius, visible) in [(CGFloat(32) - NotchLayout.weeklyRingStroke / 2, hasThirdRing),
-                                          (32 - NotchLayout.expandedSecondaryInsideInset, true),
-                                          (32 - NotchLayout.independentRingInset, true)] {
-                    let color = try #require(bitmap.colorAt(x: Int((32 + radius) * 3),
+                for (radius, visible) in [(center - NotchLayout.weeklyRingStroke / 2, hasThirdRing),
+                                          (center - NotchLayout.expandedSecondaryInsideInset, true),
+                                          (center - NotchLayout.independentRingInset, true)] {
+                    let color = try #require(bitmap.colorAt(x: Int((center + radius) * 3),
                         y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
                     let channels = [color.redComponent, color.greenComponent, color.blueComponent]
                     let maximum = try #require(channels.max())
