@@ -131,7 +131,7 @@ final class NotchViewModel: ObservableObject {
         let slack = NotchLayout.slack(for: edge, maxCardHeight: NotchLayout.maxCardHeight(sessionCap: 0))
         let room = available - 2 * slack - 2 * flare
             - NotchLayout.padStart(for: edge) - NotchLayout.padEnd(for: edge)
-        let capacity = max(1, Int((room + NotchLayout.cellSpacing) / (cellAlong + NotchLayout.cellSpacing)))
+        let capacity = max(1, Int((room + preferredCellSpacing) / (cellAlong + preferredCellSpacing)))
         return min(count, capacity)
     }
 
@@ -410,7 +410,8 @@ final class NotchViewModel: ObservableObject {
         // the drawn width *is* the shape's length, and that is what has to
         // clear the hardware.
         let drawn = NotchLayout.shapeLength(
-            cellCount: visibleCount(cellCount), edge: edge, flare: flare, ringGrowth: ringGrowth
+            cellCount: visibleCount(cellCount), edge: edge, flare: flare,
+            spacing: cellSpacing(cellCount: cellCount), ringGrowth: ringGrowth
         )
         let wanted = hardwareNotch.width + 2 * NotchLayout.cornerRadius
         return max(0, (wanted - drawn) / 2)
@@ -590,9 +591,12 @@ final class NotchViewModel: ObservableObject {
     var cellSpacing: CGFloat { cellSpacing(cellCount: snapshots.count) }
     var cellPitch: CGFloat { cellAlong + cellSpacing }
 
+    // 圆环增大的占位从供应商间的留白扣除，保持开关前后的排列密度。
+    private var preferredCellSpacing: CGFloat { max(0, NotchLayout.cellSpacing - ringGrowth) }
+
     private func cellSpacing(cellCount: Int) -> CGFloat {
         guard edge.isVertical, screenSize.height > 0, cellCount > 1 else {
-            return NotchLayout.cellSpacing
+            return preferredCellSpacing
         }
         // Extra model cells spend the gaps first. Reserve the cards actually
         // present; assuming four quota windows for every local model overflows laptops.
@@ -602,7 +606,7 @@ final class NotchViewModel: ObservableObject {
             notchScale: sizeScale)
         let packed = NotchLayout.shapeLength(cellCount: cellCount, edge: edge,
                                              flare: flare, spacing: 0, ringGrowth: ringGrowth)
-        return min(NotchLayout.cellSpacing,
+        return min(preferredCellSpacing,
                    max(0, ((screenSize.height - 2 * slack) / sizeScale - packed) / CGFloat(cellCount - 1)))
     }
 

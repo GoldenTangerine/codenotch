@@ -445,6 +445,24 @@ import Testing
         }
     }
 
+    @Test func independentRingPreservesProviderPitch() {
+        for edge in NotchEdge.allCases {
+            let model = NotchViewModel()
+            model.edge = edge
+            model.snapshots = (0..<11).map { _ in snapshot([weekly, monthly]) }
+            let originalPitch = model.cellPitch
+            let originalLength = model.bodyLength
+            let originalSpacing = model.cellSpacing
+            model.independentInnerRing = true
+            #expect(abs(model.cellPitch - originalPitch) < 0.000001)
+            #expect(abs(model.cellSpacing - originalSpacing + model.ringGrowth) < 0.000001)
+            #expect(abs(model.bodyLength - originalLength - model.ringGrowth) < 0.000001)
+            #expect(model.cellSpacing > 0)
+            model.independentInnerRing = false
+            #expect(model.cellSpacing == originalSpacing)
+        }
+    }
+
     @Test func missingClaudeSessionKeepsOriginalQuotaDeclarations() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let ids: [(String?, String?)] = [("session", "weekly_all"), ("missing", nil), (nil, nil)]
