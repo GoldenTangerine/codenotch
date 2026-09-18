@@ -1635,6 +1635,7 @@ private struct SoundRow: View {
 }
 
 private struct AccountRow: View {
+    @State private var editingBotAppearance = false
     let provider: ProviderSummary
     @ObservedObject var preferences: Preferences
     let signOut: (String) -> Void
@@ -1740,6 +1741,10 @@ private struct AccountRow: View {
 
                 Spacer(minLength: 8)
 
+                Button { editingBotAppearance = true } label: {
+                    Image(systemName: "paintpalette")
+                }.buttonStyle(.borderless).help("Appearance")
+
                 // Per-provider threshold alerts, muted here rather than in a
                 // separate notifications pane — the thing being muted is this
                 // row's reading, so the control belongs on the row.
@@ -1824,6 +1829,10 @@ private struct AccountRow: View {
         // pointer is over.
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
+        .sheet(isPresented: $editingBotAppearance) {
+            BotAppearanceEditor(preferences: preferences, providerID: provider.sourceProviderID ?? provider.id,
+                                name: provider.name, glyph: provider.glyph)
+        }
         .dropDestination(for: String.self) { ids, _ in
             defer { drag.id = nil }
             guard isOrderable else { return false }

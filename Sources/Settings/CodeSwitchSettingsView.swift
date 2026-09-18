@@ -242,13 +242,13 @@ private func codeSwitchSummaryColumns<Controls: View, Identity: View, Today: Vie
     width: CGFloat, @ViewBuilder controls: () -> Controls, @ViewBuilder identity: () -> Identity,
     @ViewBuilder today: () -> Today, @ViewBuilder quota: () -> Quota, @ViewBuilder details: () -> Details
 ) -> some View {
-    let available = max(0, width - 108)
+    let available = max(0, width - 132)
     return HStack(alignment: .center, spacing: 10) {
         controls().frame(width: 48, alignment: .leading)
         identity().frame(width: available * 0.40, alignment: .leading)
         today().frame(width: available * 0.24, alignment: .leading)
         VStack(alignment: .leading) { quota() }.frame(width: available * 0.36, alignment: .leading)
-        details().frame(width: 20)
+        details().frame(width: 44)
     }
 }
 
@@ -261,6 +261,7 @@ struct CodeSwitchSettingsProviderRow: View {
     @ObservedObject var drag: CodeSwitchProviderDrag
     let acceptDrop: ([String], CodeSwitchProviderOrder.Placement) -> Bool
     @State var expanded = false
+    @State private var editingAppearance = false
     @State private var insertion: CodeSwitchProviderOrder.Placement?
     @State private var rowHeight: CGFloat = 0
 
@@ -300,6 +301,10 @@ struct CodeSwitchSettingsProviderRow: View {
         }
         .onChange(of: drag.isActive) { _, active in if !active { insertion = nil } }
         .accessibilityElement(children: .contain)
+        .sheet(isPresented: $editingAppearance) {
+            BotAppearanceEditor(preferences: preferences, providerID: row.id, name: row.name,
+                                icon: row.snapshot?.icon, glyph: row.snapshot?.glyph ?? .third)
+        }
     }
 
     private var summary: some View {
@@ -357,12 +362,17 @@ struct CodeSwitchSettingsProviderRow: View {
             CodeSwitchTableQuotaCell(snapshot: row.currentSnapshot, accent: preferences.accentColor.color,
                                      resetTimeFormat: preferences.resetTimeFormat, showsReset: false)
         } details: {
-            Button { expanded.toggle() } label: {
-                Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                    .frame(width: 20, height: 32).contentShape(Rectangle())
-            }.buttonStyle(.plain).foregroundStyle(.secondary)
-                .accessibilityLabel(expanded ? L10n.t("Hide details") : L10n.t("Show details"))
-                .help(expanded ? L10n.t("Hide details") : L10n.t("Show details"))
+            HStack(spacing: 4) {
+                Button { editingAppearance = true } label: {
+                    Image(systemName: "paintpalette").frame(width: 20, height: 32)
+                }.buttonStyle(.plain).help("Appearance").accessibilityLabel(Text("Appearance"))
+                Button { expanded.toggle() } label: {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .frame(width: 20, height: 32).contentShape(Rectangle())
+                }.buttonStyle(.plain).foregroundStyle(.secondary)
+                    .accessibilityLabel(expanded ? L10n.t("Hide details") : L10n.t("Show details"))
+                    .help(expanded ? L10n.t("Hide details") : L10n.t("Show details"))
+            }
         }
     }
 

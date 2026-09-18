@@ -15,6 +15,21 @@ import os
 /// What the user has chosen, kept in `UserDefaults`.
 @MainActor
 final class Preferences: ObservableObject {
+    @Published private(set) var botAppearances: [String: BotAppearance] {
+        didSet {
+            if let data = try? JSONEncoder().encode(botAppearances) {
+                defaults.set(data, forKey: "botAppearances")
+            }
+        }
+    }
+
+    func botAppearance(for id: String) -> BotAppearance { botAppearances[id] ?? BotAppearance() }
+
+    func setBotAppearance(_ appearance: BotAppearance, for id: String) {
+        guard botAppearance(for: id) != appearance else { return }
+        botAppearances[id] = appearance
+    }
+
     @Published var codexRolloutCompletionEnabled: Bool {
         didSet { defaults.set(codexRolloutCompletionEnabled, forKey: "codexRolloutCompletionEnabled") }
     }
@@ -721,6 +736,8 @@ final class Preferences: ObservableObject {
     }
 
     init(defaults: UserDefaults = .standard, domainName: String? = nil) {
+        self.botAppearances = defaults.data(forKey: "botAppearances")
+            .flatMap { try? JSONDecoder().decode([String: BotAppearance].self, from: $0) } ?? [:]
         self.tooltipHeightMode = defaults.string(forKey: "tooltipHeightMode")
             .flatMap(TooltipHeightMode.init(rawValue:)) ?? .standard
         self.defaults = defaults

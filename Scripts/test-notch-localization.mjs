@@ -81,6 +81,10 @@ assert.equal(evaluate('locale()'), 'uk-UA');
 assert.deepEqual(evaluate('Object.keys(TEXT.ru).filter(key => !TEXT.uk[key])'), vm.runInContext('[]', context));
 for (const key of evaluate('Object.keys(ZH)')) {
   context.testKey = key;
+  if (key === 'Grok Build') {
+    assert.equal(evaluate('tr(testKey)'), key, 'Product names retain their spelling');
+    continue;
+  }
   assert.notEqual(evaluate('tr(testKey)'), key, `Missing Ukrainian notch copy: ${key}`);
 }
 context.stateSnap.lang = 'auto';

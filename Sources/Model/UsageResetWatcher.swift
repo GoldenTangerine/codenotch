@@ -68,13 +68,16 @@ final class UsageResetWatcher {
     private var states: [String: TrackedState] = [:]
     private let isMuted: (String) -> Bool
     private let deliver: (UsageResetEvent) -> Void
+    private let onReset: (UsageResetEvent) -> Void
 
     init(
         isMuted: @escaping (String) -> Bool = { _ in false },
+        onReset: @escaping (UsageResetEvent) -> Void = { _ in },
         deliver: @escaping (UsageResetEvent) -> Void = { _ in }
     ) {
         self.isMuted = isMuted
         self.deliver = deliver
+        self.onReset = onReset
     }
 
     func observe(_ snapshots: [ProviderSnapshot]) {
@@ -108,7 +111,7 @@ final class UsageResetWatcher {
 
         let hadSignificantUsage = previous.peakFraction >= 0.15
 
-        if (isDateRolled || droppedSignificantly) && hadSignificantUsage && !isMuted(snapshot.id) {
+        if (isDateRolled || droppedSignificantly) && hadSignificantUsage {
             let event = UsageResetEvent(
                 providerID: snapshot.id,
                 providerName: snapshot.displayName,
@@ -118,7 +121,8 @@ final class UsageResetWatcher {
                 currentFraction: fraction,
                 resetsAt: headline.resetsAt
             )
-            deliver(event)
+            onReset(event)
+            if !isMuted(snapshot.id) { deliver(event) }
 
             previous.fraction = fraction
             previous.peakFraction = fraction

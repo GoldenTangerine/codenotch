@@ -85,7 +85,7 @@ struct QueryManagementView: View {
             }
         } header: { Text("Providers") }
         .sheet(item: $editing) { entry in
-            QueryEntryEditor(catalog: catalog, initial: entry)
+            QueryEntryEditor(catalog: catalog, preferences: preferences, initial: entry)
         }
         .alert("Delete provider?", isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } })) {
             Button("Cancel", role: .cancel) { deleting = nil }
@@ -114,6 +114,8 @@ struct QueryManagementView: View {
 
 struct QueryEntryEditor: View {
     @ObservedObject var catalog: QueryCatalog
+    @ObservedObject var preferences: Preferences
+    @State private var botAppearance = BotAppearance()
     @Environment(\.dismiss) private var dismiss
     @State private var entry: QueryEntry
     @State private var secrets = QuerySecrets()
@@ -127,8 +129,10 @@ struct QueryEntryEditor: View {
     @State private var pendingImage: Data?
     @State private var previewImage: NSImage?
 
-    init(catalog: QueryCatalog, initial: QueryEntry) {
+    init(catalog: QueryCatalog, preferences: Preferences, initial: QueryEntry) {
         self.catalog = catalog
+        self.preferences = preferences
+        _botAppearance = State(initialValue: preferences.botAppearance(for: initial.id))
         _entry = State(initialValue: initial)
     }
 
@@ -143,6 +147,9 @@ struct QueryEntryEditor: View {
             Divider()
             Form {
                 identity
+                Section("Appearance") {
+                    BotAppearanceFields(appearance: $botAppearance, providerID: entry.id, icon: entry.icon)
+                }
                 query
                 Section("Refresh") {
                     Toggle("Automatic refresh", isOn: $entry.schedule.enabled)
@@ -374,6 +381,7 @@ struct QueryEntryEditor: View {
                 entry.icon.value = name
             }
             try catalog.save(entry, secrets: loadedSecrets && secrets != originalSecrets ? secrets : nil)
+            preferences.setBotAppearance(botAppearance, for: entry.id)
             dismiss()
         } catch {
             if let writtenImage { try? FileManager.default.removeItem(at: writtenImage) }

@@ -52,9 +52,10 @@ struct CodeSwitchSessionBinding: Codable, Equatable {
     let sequence: UInt64
     let updatedAt: Double
 
-    func snapshot(platform: CodeSwitchPlatform, retaining previous: ProviderSnapshot? = nil) -> ProviderSnapshot {
+    func snapshot(platform: CodeSwitchPlatform, retaining previous: ProviderSnapshot? = nil,
+                  loading: Bool = false) -> ProviderSnapshot {
         CodeSwitchProvider(providerId: providerId, providerName: providerName, icon: icon,
-                           activeRequests: 0, status: "session", loading: false, updatedAt: updatedAt,
+                           activeRequests: 0, status: "session", loading: loading, updatedAt: updatedAt,
                            quotas: previous?.linked?.provider.quotas ?? [], stats: previous?.linked?.provider.stats,
                            quotaState: previous?.linked?.provider.quotaState,
                            quotaAutoDisabled: previous?.linked?.provider.quotaAutoDisabled).snapshot(platform: platform)
@@ -270,7 +271,8 @@ struct CodeSwitchSnapshotState {
                     ?? previousByID[id]
                     ?? previousBindings[binding.sessionKey].flatMap { $0.snapshot.id == id ? $0.snapshot : nil }
                 bindings[binding.sessionKey] = CodeSwitchSessionLink(platform: platform.platform, binding: binding,
-                                                                     snapshot: binding.snapshot(platform: platform, retaining: previous))
+                    snapshot: binding.snapshot(platform: platform, retaining: previous,
+                                               loading: providers[binding.providerId]?.loading ?? false))
             }
         }
         var seen = Set<String>()
@@ -297,6 +299,7 @@ struct CodeSwitchSnapshotState {
 final class CodeSwitchBridge: ObservableObject {
     @Published private(set) var snapshots: [ProviderSnapshot] = []
     @Published private(set) var displayedSnapshots: [ProviderSnapshot] = []
+    @Published private(set) var refreshing: Set<String> = []
     private var trayIDs = Set<String>()
     @Published private(set) var bindings: [String: CodeSwitchSessionLink] = [:]
     private let file: URL
@@ -344,7 +347,7 @@ final class CodeSwitchBridge: ObservableObject {
         connection = .waiting
         refresh()
         let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            Task { @MainActor in self?.refresh() }
+            Task { @MainActor in self?.refresh(showActivity: false) }
         }
         self.timer = timer
         RunLoop.main.add(timer, forMode: .common)
@@ -352,6 +355,7 @@ final class CodeSwitchBridge: ObservableObject {
 
     func stop() {
         running = false
+        refreshing = []
         timer?.invalidate()
         timer = nil
         watcher?.cancel()
@@ -367,9 +371,14 @@ final class CodeSwitchBridge: ObservableObject {
         if !bindings.isEmpty { bindings = [:] }
     }
 
-    func refresh() {
-        guard running else { return }
-        if readTask != nil { pending = true; return }
+    @discardableResult
+    func refresh(showActivity: Bool = true) -> Task<Void, Never>? {
+        guard running else { return nil }
+        if showActivity {
+            refreshing.formUnion(snapshots.map(\.providerID))
+            refreshing.formUnion(bindings.values.map { $0.snapshot.providerID })
+        }
+        if let readTask { pending = true; return readTask }
         readTask = Task { [weak self] in
             guard let self else { return }
             while self.running {
@@ -378,7 +387,9 @@ final class CodeSwitchBridge: ObservableObject {
                 if !self.pending { break }
             }
             self.readTask = nil
+            self.refreshing = []
         }
+        return readTask
     }
 
     func stopAndWait() async {
@@ -399,7 +410,7 @@ final class CodeSwitchBridge: ObservableObject {
                             self?.watcher?.cancel()
                             self?.watcher = nil
                         }
-                        self?.refresh()
+                        self?.refresh(showActivity: false)
                     }
                 }
                 source.setCancelHandler { close(descriptor) }

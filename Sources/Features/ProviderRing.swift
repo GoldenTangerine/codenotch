@@ -30,6 +30,7 @@ struct ProviderRing: View {
     var activity: ActivitySummary?
     /// A fetch this cell asked for, in flight.
     var isRefreshing: Bool = false
+    var bot: BotPresentation?
     var icon: ProviderIcon?
     var localPerformance: LocalModelPerformance?
     /// A local model's arc: how full its context was on the last request. Nil
@@ -63,7 +64,17 @@ struct ProviderRing: View {
     @Environment(\.usageCriticalLimit) private var criticalLimit
     @Environment(\.codenotchAccentColor) private var accentColor
     @Environment(\.weeklyRingDashed) private var weeklyRingDashed
-    @State private var spin: Double = 0
+
+    private var refreshReadingOpacity: Double {
+        isRefreshing ? (reduceTransparency ? 0.75 : 0.3) : 1
+    }
+
+    private var refreshColor: Color {
+        if localPerformance != nil || localContextFraction != nil {
+            return localPerformance?.band.color ?? Palette.textSecondary
+        }
+        return usedFraction == nil ? Palette.textSecondary : band.color(accent: accentColor)
+    }
 
     private var band: UsageBand {
         guard !isBlocked else { return .exhausted }
@@ -115,6 +126,8 @@ struct ProviderRing: View {
                             style: StrokeStyle(lineWidth: mainProgressStroke, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
+                        .opacity(refreshReadingOpacity)
+                        .animation(.easeOut(duration: 0.2), value: isRefreshing)
                         .animation(NotchMotion.reading, value: localSweep)
                         .animation(NotchMotion.reading, value: localPerformance?.band)
                 } else if usedFraction != nil {
@@ -125,11 +138,14 @@ struct ProviderRing: View {
                             band.color(accent: accentColor),
                             style: StrokeStyle(lineWidth: mainProgressStroke, lineCap: .round)
                         )
+                        // 以下保留旧版旋转读数的设计说明；现已由独立刷新短弧替代。
                         // Refreshing spins the reading itself rather than
                         // overlaying a separate spinner: the thing being
                         // refetched is the thing that should move, and a second
                         // arc on the same track only competes with it.
-                        .rotationEffect(.degrees(-90 + spin))
+                        .rotationEffect(.degrees(-90))
+                        .opacity(refreshReadingOpacity)
+                        .animation(.easeOut(duration: 0.2), value: isRefreshing)
                         // A ring that snaps to a new value reads as a glitch; one
                         // that sweeps reads as a measurement being taken.
                         .animation(NotchMotion.reading, value: sweep)
@@ -173,7 +189,8 @@ struct ProviderRing: View {
                                                lineCap: weeklyRingDashed ? .butt : .round,
                                                dash: weeklyRingDashed ? [4, 2] : [])
                         )
-                        .opacity(reduceTransparency ? 1 : 0.8)
+                        .opacity((reduceTransparency ? 1 : 0.8) * refreshReadingOpacity)
+                        .animation(.easeOut(duration: 0.2), value: isRefreshing)
                         .rotationEffect(.degrees(-90))
                         .animation(NotchMotion.reading, value: weeklySweep)
                         .animation(NotchMotion.reading, value: weeklyBand)
@@ -189,17 +206,36 @@ struct ProviderRing: View {
                         .stroke(UsageBand.band(for: innerFraction, watchLimit: watchLimit, criticalLimit: criticalLimit).color(accent: accentColor),
                                 style: StrokeStyle(lineWidth: NotchLayout.independentRingStroke, lineCap: .round))
                         .rotationEffect(.degrees(-90))
+                        .opacity(refreshReadingOpacity)
+                        .animation(.easeOut(duration: 0.2), value: isRefreshing)
                         .animation(NotchMotion.reading, value: innerFraction)
                 }
 
-                QueryIconView(icon: icon, fallback: glyph, isStale: isStale,
-                              onDarkBackground: true, dimsStaleIcon: false)
-                    .foregroundStyle(Palette.textPrimary)
-                    // A spent limit dims its glyph so the ring reads as "waiting".
-                    // Under reduce-transparency, boost opacity so it stays legible without low alpha.
-                    .opacity(band == .exhausted ? (reduceTransparency ? 0.7 : 0.35) : 1)
+                if bot == nil {
+                    QueryIconView(icon: icon, fallback: glyph, isStale: isStale,
+                                  onDarkBackground: true, dimsStaleIcon: false)
+                        .foregroundStyle(Palette.textPrimary)
+                        // A spent limit dims its glyph so the ring reads as "waiting".
+                        // Under reduce-transparency, boost opacity so it stays legible without low alpha.
+                        .opacity(band == .exhausted ? (reduceTransparency ? 0.7 : 0.35) : 1)
+                }
             }
             .opacity(isStale ? (reduceTransparency ? 0.75 : 0.45) : 1)
+
+            if let bot {
+                BotMarkView(presentation: bot)
+                    .frame(width: NotchLayout.glyphSize * 1.4, height: NotchLayout.glyphSize * 1.4)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+
+            if isRefreshing {
+                SpinningArc(color: refreshColor, arcFraction: 0.16, dashed: false,
+                            inset: mainInset + mainTrackStroke / 2, turns: !reduceMotion,
+                            lineWidth: mainProgressStroke, duration: 0.85, startAngle: .pi / 2)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
 
             if let activity, activity.state != .idle {
                 ActivityArc(summary: activity)
@@ -216,10 +252,9 @@ struct ProviderRing: View {
         .frame(width: diameter, height: diameter)
         // Pressed in while it works, and released when the answer lands. The
         // ring is the button, so the ring is what should feel pressed.
-        .scaleEffect(isRefreshing ? 0.93 : 1)
-        .animation(.spring(response: 0.3, dampingFraction: 0.62), value: isRefreshing)
-        .onChange(of: isRefreshing) { _, refreshing in
-            guard refreshing, !reduceMotion else { return }
+        .scaleEffect(isRefreshing && !reduceMotion ? 0.93 : 1)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.62), value: isRefreshing)
+            // 以下保留旧版有限旋转的说明；现在通过移除动画层结束刷新动画。
             // Exactly one turn, and it stops by itself.
             //
             // The obvious spelling is a `repeatForever` linear spin started on
@@ -232,10 +267,6 @@ struct ProviderRing: View {
             // A single finite turn has no cancellation problem at all: 360° is
             // the same angle as 0°, so it lands exactly where the reading
             // belongs. It eases out, so it settles rather than stopping dead.
-            withAnimation(.timingCurve(0.32, 0, 0.14, 1, duration: 0.95)) {
-                spin += 360
-            }
-        }
     }
 }
 
@@ -307,6 +338,7 @@ struct ProviderCell: View {
     let snapshot: ProviderSnapshot
     var activity: ActivitySummary?
     var isRefreshing: Bool = false
+    var bot: BotPresentation?
     var weeklyRing: WeeklyRing = .off
     var codeSwitchQuotaRatiosEnabled: Bool = false
     var independentInnerRing: Bool = false
@@ -356,7 +388,7 @@ struct ProviderCell: View {
                 isStale: snapshot.status.isStale || !snapshot.hasReading,
                 isBlocked: snapshot.block != nil,
                 activity: activity,
-                isRefreshing: isRefreshing, icon: snapshot.icon,
+                isRefreshing: isRefreshing, bot: bot, icon: snapshot.icon,
                 localPerformance: snapshot.localPerformance,
                 localContextFraction: snapshot.localContextFraction,
                 weeklyFraction: snapshot.hasReading
@@ -465,12 +497,20 @@ private struct SpinningArc: NSViewRepresentable {
     let dashed: Bool
     let inset: CGFloat
     let turns: Bool
+    var lineWidth: CGFloat = NotchLayout.activityStroke
+    var duration: CFTimeInterval = SpinningArcView.turnDuration
+    var startAngle: CGFloat = 0
 
     func makeNSView(context: Context) -> SpinningArcView { SpinningArcView() }
 
     func updateNSView(_ view: SpinningArcView, context: Context) {
         view.configure(color: NSColor(color), arcFraction: arcFraction,
-                       dashed: dashed, inset: inset, turns: turns)
+                       dashed: dashed, inset: inset, turns: turns,
+                       lineWidth: lineWidth, duration: duration, startAngle: startAngle)
+    }
+
+    static func dismantleNSView(_ view: SpinningArcView, coordinator: ()) {
+        view.arc.removeAnimation(forKey: SpinningArcView.animationKey)
     }
 }
 
@@ -482,6 +522,8 @@ final class SpinningArcView: NSView {
     private var color: NSColor = .white
     private var inset: CGFloat = 0
     private var turns = true
+    private var duration: CFTimeInterval = SpinningArcView.turnDuration
+    private var startAngle: CGFloat = 0
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -498,12 +540,20 @@ final class SpinningArcView: NSView {
     /// Decoration only: clicks belong to the ring and the notch beneath it.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func configure(color: NSColor, arcFraction: CGFloat, dashed: Bool, inset: CGFloat, turns: Bool) {
+    func configure(color: NSColor, arcFraction: CGFloat, dashed: Bool, inset: CGFloat, turns: Bool,
+                   lineWidth: CGFloat = NotchLayout.activityStroke,
+                   duration: CFTimeInterval = SpinningArcView.turnDuration, startAngle: CGFloat = 0) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         self.color = color
         self.inset = inset
         self.turns = turns
+        if self.duration != duration {
+            arc.removeAnimation(forKey: Self.animationKey)
+        }
+        self.duration = duration
+        self.startAngle = startAngle
+        arc.lineWidth = lineWidth
         arc.strokeEnd = arcFraction
         arc.lineDashPattern = dashed
             ? [0.01, NSNumber(value: Double(NotchLayout.activityStroke * 2.2))]
@@ -546,7 +596,7 @@ final class SpinningArcView: NSView {
         let radius = max(0, min(bounds.width, bounds.height) / 2 - inset)
         let path = CGMutablePath()
         path.addArc(center: CGPoint(x: bounds.midX, y: bounds.midY), radius: radius,
-                    startAngle: 0, endAngle: -2 * .pi, clockwise: true)
+                    startAngle: startAngle, endAngle: startAngle - 2 * .pi, clockwise: true)
         arc.path = path
     }
 
@@ -561,7 +611,8 @@ final class SpinningArcView: NSView {
         let turn = CABasicAnimation(keyPath: "transform.rotation.z")
         turn.fromValue = 0
         turn.toValue = -2 * Double.pi
-        turn.duration = Self.turnDuration
+        turn.duration = duration
+        turn.timingFunction = CAMediaTimingFunction(name: .linear)
         turn.repeatCount = .infinity
         turn.isRemovedOnCompletion = false
         arc.add(turn, forKey: Self.animationKey)

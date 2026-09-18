@@ -17,10 +17,11 @@ final class CodeSwitchBridgeTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_788_886_800)
 
     private func fixture(session: String = "one", sequence: UInt64 = 1, heartbeat: Date? = nil,
-                         id: String = "42", version: Int = 1) throws -> CodeSwitchSnapshot {
+                         id: String = "42", version: Int = 1, loading: Bool = false) throws -> CodeSwitchSnapshot {
         let json = #"{"providerId":"42","providerName":"Shared","icon":"openai","activeRequests":2,"status":"active","loading":false,"updatedAt":1788886800000,"quotas":[{"key":"daily","used":3,"total":10,"active":true,"displayKind":"progress","valueMode":"currency"},{"key":"balance","used":0,"total":12.34,"active":true,"displayKind":"balance","valueMode":"currency"}],"stats":null}"#
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any])
         object["providerId"] = id
+        object["loading"] = loading
         let provider = try JSONDecoder().decode(CodeSwitchProvider.self, from: JSONSerialization.data(withJSONObject: object))
         return CodeSwitchSnapshot(version: version, session: session, sequence: sequence,
             heartbeatAt: (heartbeat ?? now).timeIntervalSince1970 * 1000,
@@ -38,6 +39,50 @@ final class CodeSwitchBridgeTests: XCTestCase {
         XCTAssertEqual(snapshot.windows[1].quantity?.unit, "USD")
         let other = CodeSwitchPlatform(platform: "claude", name: "Claude", icon: "claude", error: false, providers: [provider])
         XCTAssertNotEqual(snapshot.id, provider.snapshot(platform: other).id)
+    }
+
+    func testProviderLoadingDrivesRefreshPresentation() throws {
+        let source = try fixture(loading: true)
+        let snapshot = source.platforms[0].providers[0].snapshot(platform: source.platforms[0])
+        let model = NotchViewModel()
+        XCTAssertTrue(model.isRefreshing(snapshot))
+        let binding = CodeSwitchSessionBinding(sessionKey: String(repeating: "a", count: 64),
+            providerId: "42", providerName: "Shared", icon: "openai", sequence: 1, updatedAt: 0)
+        var platform = source.platforms[0]
+        platform.sessionBindings = [binding]
+        var state = CodeSwitchSnapshotState()
+        state.accept(source, now: now, platforms: [platform])
+        let bound = try XCTUnwrap(state.bindings[binding.sessionKey]?.snapshot)
+        XCTAssertTrue(model.isRefreshing(bound))
+        let missing = CodeSwitchPlatform(platform: platform.platform, name: platform.name, icon: platform.icon,
+            error: false, providers: [], sessionBindings: [binding])
+        state.accept(source, now: now, platforms: [missing])
+        XCTAssertFalse(model.isRefreshing(try XCTUnwrap(state.bindings[binding.sessionKey]?.snapshot)))
+    }
+
+    func testManualRefreshTracksCompletionAndBackgroundPollingStaysQuiet() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("snapshot.json")
+        try JSONEncoder().encode(fixture(heartbeat: Date())).write(to: file, options: .atomic)
+        let bridge = CodeSwitchBridge(file: file)
+        defer { bridge.stop() }
+        bridge.setEnabled(true)
+        await bridge.refresh(showActivity: false)?.value
+        XCTAssertEqual(bridge.snapshots.count, 1)
+        let background = bridge.refresh(showActivity: false)
+        XCTAssertTrue(bridge.refreshing.isEmpty)
+        let manual = bridge.refresh()
+        XCTAssertEqual(bridge.refreshing, Set(bridge.snapshots.map(\.providerID)))
+        XCTAssertFalse(bridge.refreshing.isEmpty)
+        await background?.value
+        await manual?.value
+        XCTAssertTrue(bridge.refreshing.isEmpty)
+        _ = bridge.refresh()
+        bridge.stop()
+        XCTAssertTrue(bridge.refreshing.isEmpty)
+        XCTAssertNil(bridge.refresh())
     }
 
     func testInactiveQuotaDoesNotBecomeHeadlineReading() throws {

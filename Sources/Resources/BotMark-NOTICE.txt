@@ -1,0 +1,9 @@
+Dynamic robot artwork and animation engine adapted from the local Pulse project.
+Source: Pulse/Sources/Pulse/Panel/BotMark and Pulse/Sources/Pulse/Resources/bot-data.json.
+Pulse's Swift runtime is supplied under Apache License 2.0; see BotMark-LICENSE.txt.
+The geometry and behavior data in bot-data.json originate from iduu/grokbot-animation,
+an unofficial study of x.ai/bot. Pulse's Docs/decisions/bot-mark-geometry.md explicitly
+records that these reference-derived assets have no open-source redistribution grant.
+The Apache license above does not grant rights to those assets.
+Upstream references: https://github.com/iduu/grokbot-animation and https://x.ai/bot
+Modifications: Codenotch integration, resource validation, localized controls, AppKit rendering and visibility-driven 60 Hz scheduling.

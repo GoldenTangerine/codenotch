@@ -697,6 +697,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let resetWatcher = UsageResetWatcher(
                 isMuted: { [weak preferences] in preferences?.isMutedAlerts(for: $0) ?? false },
+                onReset: { [weak fleet] event in
+                    MainActor.assumeIsolated { fleet?.animateBot(.limitReset, providerID: event.providerID) }
+                },
                 deliver: { [weak self] event in
                     MainActor.assumeIsolated {
                         self?.announceUsageReset(event: event)
@@ -736,6 +739,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.$codeSwitchProviderOrder.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
+            preferences.$botAppearances.receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(botAppearances: $0) }
+                .store(in: &cancellables)
             codeSwitch.$bindings.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
@@ -745,16 +751,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 codeSwitch?.refresh()
             }
             fleet.onRefreshProvider = { [weak store, weak codeSwitch] id in
-                if id.hasPrefix("code-switch:") { codeSwitch?.refresh() }
+                if id.hasPrefix("code-switch:") { await codeSwitch?.refresh()?.value }
                 else { await store?.refresh(providerID: id)?.value }
             }
             statusItem.onRefreshAll = fleet.onRefresh
             statusItem.onRefreshProvider = { [weak fleet] id in
                 Task { await fleet?.onRefreshProvider?(id) }
             }
-            store.$refreshing
+            store.$refreshing.combineLatest(codeSwitch.$refreshing)
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet] ids in fleet?.setRefreshing(ids) }
+                .sink { [weak fleet] local, linked in fleet?.setRefreshing(local.union(linked)) }
                 .store(in: &cancellables)
 
             // CODENOTCH_DISCOVER=<url> loads that page in the signed-in WebView
@@ -939,6 +945,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func announceCompletions(sessions: [String: [AgentSession]]) {
         let events = completions.absorb(sessions)
+        for event in events where event.reason == .finished {
+            let targets = activityRouting?.sessions.filter { _, live in
+                live.contains { $0.id == event.session.id }
+            }.map(\.key) ?? [event.providerID]
+            for id in targets { notchFleet?.animateBot(.workFinished, providerID: id) }
+        }
         guard !events.isEmpty else { return }
         pendingAnnouncements.append(contentsOf: events)
         guard announcementWork == nil else { return }
@@ -958,6 +970,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateActivity() {
         hookMonitor.reconcile(nativeSessions)
         let merged = hookMonitor.state.merging(nativeSessions)
+        notchFleet?.recordBotActivity(merged.values.flatMap { $0 })
         let routing = ActivityRouting(local: localSnapshots, linked: codeSwitch?.displayedSnapshots ?? [],
                                       sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:],
                                       hiddenLinked: preferences?.hiddenCodeSwitchProviders ?? [],

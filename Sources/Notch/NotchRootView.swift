@@ -339,6 +339,7 @@ struct NotchRootView: View {
                 snapshot: snapshot,
                 activity: model.activity(for: snapshot),
                 isRefreshing: model.isRefreshing(snapshot),
+                bot: model.botPresentation(for: snapshot),
                 weeklyRing: model.weeklyRing,
                 codeSwitchQuotaRatiosEnabled: model.codeSwitchQuotaRatiosEnabled,
                 independentInnerRing: model.independentInnerRing,

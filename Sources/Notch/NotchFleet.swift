@@ -52,6 +52,36 @@ final class NotchFleet {
         for model in models { model.setLocalMetricsEnabled(enabled) }
     }
     private var refreshing: Set<String> = []
+    private var botAppearances: [String: BotAppearance] = [:]
+    private var botLastActivity: Date?
+    private var botGloballyBusy = false
+
+    func recordBotActivity(_ sessions: [AgentSession], now: Date = Date()) {
+        // 会话消失后保留已观测的活动；视图重建、路由和窗口数量不改变安静计时。
+        let busy = sessions.contains { $0.state == .busy }
+        if botGloballyBusy && !busy { botLastActivity = max(botLastActivity ?? now, now) }
+        if let latest = sessions.map(\.since).max() {
+            botLastActivity = max(botLastActivity ?? latest, latest)
+        }
+        botGloballyBusy = busy
+        for model in models {
+            if model.botLastActivity != botLastActivity { model.botLastActivity = botLastActivity }
+            if model.botGloballyBusy != botGloballyBusy { model.botGloballyBusy = botGloballyBusy }
+        }
+    }
+
+    func apply(botAppearances: [String: BotAppearance]) {
+        self.botAppearances = botAppearances
+        for model in models { model.botAppearances = botAppearances }
+    }
+
+    func animateBot(_ kind: BotMarkEvent, providerID: String) {
+        let event = BotAnimationEvent(kind: kind)
+        for model in models where model.isExpanded {
+            model.botEvents = model.botEvents.filter { Date().timeIntervalSince($0.value.occurredAt) < 7 }
+            model.botEvents[providerID] = event
+        }
+    }
     /// Exposed read-only rather than private: completion-watching needs the
     /// merged dict after a fan-out, the same way it read `controller.model
     /// .sessions` before there was more than one controller.
@@ -549,6 +579,9 @@ final class NotchFleet {
         controller.model.topAvoidanceAdjustment = topAvoidanceAdjustment
         controller.model.ringEdgeAdjustment = ringEdgeAdjustment
         controller.model.resetTimeFormat = resetTimeFormat
+        controller.model.botAppearances = botAppearances
+        controller.model.botLastActivity = botLastActivity
+        controller.model.botGloballyBusy = botGloballyBusy
         controller.model.tooltipHeightMode = tooltipHeightMode
         controller.model.accentColor = accentColor
         controller.model.notchTriggerHeight = notchTriggerHeight

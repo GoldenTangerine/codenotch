@@ -12,6 +12,29 @@ import Combine
 
 @MainActor
 final class NotchViewModel: ObservableObject {
+    @Published var botAppearances: [String: BotAppearance] = [:]
+    @Published var botEvents: [String: BotAnimationEvent] = [:]
+    @Published var botLastActivity: Date?
+    @Published var botGloballyBusy = false
+
+    func botPresentation(for snapshot: ProviderSnapshot) -> BotPresentation? {
+        let appearance = botAppearances[snapshot.providerID] ?? BotAppearance()
+        guard appearance.enabled, BotMarkLibrary.available != nil else { return nil }
+        let activity = activity(for: snapshot)?.state
+        let quota = IndependentQuotaRing.originalQuotas(in: snapshot)
+        let spent = snapshot.block != nil || (quota.usedFraction ?? 0) >= 1
+            || snapshot.linked?.provider.effectiveQuotaState == "exhausted"
+        return BotPresentation(
+            id: snapshot.providerID, brand: snapshot.icon?.value ?? snapshot.glyph.rawValue,
+            appearance: appearance,
+            mood: BotPresentation.mood(activity: activity, refreshing: isRefreshing(snapshot),
+                                      spent: spent, hasReading: snapshot.hasReading),
+            waiting: activity == .waiting, active: isExpanded,
+            gazeBias: edge == .left ? 7 : edge == .right ? -7 : 0,
+            event: botEvents[snapshot.id] ?? botEvents[snapshot.providerID],
+            lastActivity: botLastActivity, globallyBusy: botGloballyBusy)
+    }
+
     // 两端入口统一移入右键菜单，绘制和热区必须同时关闭。
     // 保留默认隐藏，用户可独立恢复设置入口。
     @Published var showsSettingsHandle = false
@@ -188,7 +211,8 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var refreshingCells: Set<String> = []
 
     func isRefreshing(_ snapshot: ProviderSnapshot) -> Bool {
-        snapshot.localModel == nil
+        if snapshot.linked?.provider.loading == true { return true }
+        return snapshot.localModel == nil
             ? refreshing.contains(snapshot.providerID)
             : refreshingCells.contains(snapshot.id)
     }
