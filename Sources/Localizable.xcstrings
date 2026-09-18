@@ -1,13 +1,79 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Smoother robot gaze and clearer expressions": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "小机器人转向更流畅，表情更清晰"
+          }
+        }
+      }
+    },
+    "Look inward on the left and right edges, and forward at the top and bottom": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "左右贴边时看向屏幕内侧，上下贴边时朝向正面"
+          }
+        }
+      }
+    },
+    "Turn smoothly between edges and follow the pointer across the capsule center": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换贴边方向时平滑转向，鼠标穿过胶囊中心时准确跟随"
+          }
+        }
+      }
+    },
+    "Keep both eyes inside the face and prevent overlapping expressions": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "防止眼睛越出脸部或双眼重叠"
+          }
+        }
+      }
+    },
+    "Improve reduced-motion gaze and reuse capsule hit regions": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "优化减少动态效果时的朝向显示，复用胶囊命中区域"
+          }
+        }
+      }
+    },
+    "Clarify Chinese robot settings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "优化小机器人相关的中文设置文案"
+          }
+        }
+      }
+    },
     "Show robot": {
       "extractionState": "manual",
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "显示机器人"
+            "value": "显示小机器人"
           }
         }
       }
@@ -18,7 +84,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "机器人预览"
+            "value": "小机器人预览"
           }
         }
       }
@@ -29,7 +95,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "机器人性格"
+            "value": "小机器人性格"
           }
         }
       }
@@ -40,7 +106,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "机器人形状"
+            "value": "小机器人形状"
           }
         }
       }
@@ -51,7 +117,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "机器人颜色"
+            "value": "小机器人颜色"
           }
         }
       }
@@ -73,7 +139,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "平和"
+            "value": "沉稳"
           }
         }
       }
@@ -84,7 +150,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "热情"
+            "value": "热切"
           }
         }
       }
@@ -95,7 +161,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "稳重"
+            "value": "踏实"
           }
         }
       }
@@ -117,7 +183,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "困倦"
+            "value": "迟缓"
           }
         }
       }
@@ -128,7 +194,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "活泼"
+            "value": "顽皮"
           }
         }
       }
@@ -139,7 +205,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "沉稳"
+            "value": "冷面"
           }
         }
       }
@@ -150,7 +216,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "自信"
+            "value": "得意"
           }
         }
       }
@@ -161,7 +227,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "圆润"
+            "value": "圆形"
           }
         }
       }
@@ -183,7 +249,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "豆子"
+            "value": "豆形"
           }
         }
       }
@@ -216,7 +282,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "平板"
+            "value": "圆角矩形"
           }
         }
       }
@@ -282,7 +348,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "楔形"
+            "value": "三角楔形"
           }
         }
       }
@@ -304,7 +370,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "穹顶"
+            "value": "拱顶"
           }
         }
       }
@@ -315,7 +381,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "拱形"
+            "value": "拱门"
           }
         }
       }
@@ -348,7 +414,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "叶子"
+            "value": "叶片"
           }
         }
       }

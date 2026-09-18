@@ -56,6 +56,7 @@ struct BotMarkConfig {
     /// head that is turned. In the upstream's units, where its own gaze swings
     /// ±15 and the pointer reaches ±22.
     var gazeBias = 0.0
+    var gaze: BotMarkGaze = .ahead
     /// Which one-shot effect this state morphs into. Nil is the plain
     /// character.
     var morph: String?

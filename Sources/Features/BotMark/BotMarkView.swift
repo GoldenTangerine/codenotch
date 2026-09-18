@@ -125,7 +125,7 @@ final class BotDrawingView: NSView {
     private var engine: BotMarkEngine?
     private var presentation: BotPresentation?
     private var programme = BotMarkProgramme(states: ["idle"])
-    private var displayFrame: BotMarkFrame?
+    private(set) var displayFrame: BotMarkFrame?
     private var config = BotMarkConfig()
     private var reduceMotion = false
     private(set) var clockActive = false
@@ -140,6 +140,7 @@ final class BotDrawingView: NSView {
         let shape: String
         let persona: String
         let gaze: Double
+        let direction: BotMarkGaze
         let mood: String
         let size: CGFloat
     }
@@ -184,7 +185,8 @@ final class BotDrawingView: NSView {
                 let state = still.states[0]
                 let key = StillKey(state: state, shape: still.shape,
                                    persona: next.appearance.persona(for: next.id).rawValue,
-                                   gaze: still.gazeBias, mood: still.mood.rawValue, size: bounds.width)
+                                   gaze: still.gazeBias, direction: still.gaze,
+                                   mood: still.mood.rawValue, size: bounds.width)
                 if let cached = Self.stills[key] {
                     displayFrame = cached
                 } else {
@@ -301,6 +303,7 @@ final class BotDrawingView: NSView {
         programme.gazeScale = persona.gazeScale
         programme.eyeScale = persona.eyeScale
         programme.gazeBias = presentation.gazeBias
+        programme.gaze = presentation.gaze
         programme.rotationScale = presentation.mood.rotationEmphasis
         programme.squashScale = presentation.mood.squashEmphasis
         programme.color = presentation.appearance.color(for: presentation.id, brand: presentation.brand)
@@ -312,6 +315,21 @@ final class BotDrawingView: NSView {
 
     private var pointed = false
 
+    func pointer(at pointInWindow: CGPoint) -> CGPoint? {
+        let local = convert(pointInWindow, from: nil)
+        let inside: Bool
+        if let region = presentation?.pointerRegion, let window {
+            let point = CGPoint(x: pointInWindow.x, y: window.contentLayoutRect.height - pointInWindow.y)
+            inside = region.contains(point)
+        } else {
+            inside = bounds.contains(local)
+        }
+        guard inside else { return nil }
+        let radius = max(1, bounds.width / 2)
+        return CGPoint(x: (local.x - bounds.midX) / (radius * 4),
+                       y: (local.y - bounds.midY) / (radius * 4))
+    }
+
     func advance(to timestamp: Double, date: Date, pointerInWindow: CGPoint) {
         guard clockActive, let engine, let presentation else { return }
         let local = convert(pointerInWindow, from: nil)
@@ -320,10 +338,7 @@ final class BotDrawingView: NSView {
             pointed = isPointed
             updateProgramme(date: date, pointed: isPointed)
         }
-        let radius = max(1, bounds.width / 2)
-        let near = bounds.insetBy(dx: -radius * 4, dy: -radius * 4).contains(local)
-        programme.pointer = near ? CGPoint(x: (local.x - bounds.midX) / (radius * 4),
-                                           y: (local.y - bounds.midY) / (radius * 4)) : nil
+        programme.pointer = pointer(at: pointerInWindow)
         programme.event = nil
         if let event = presentation.event, event.id != consumedEvent {
             consumedEvent = event.id

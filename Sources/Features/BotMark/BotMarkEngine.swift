@@ -30,6 +30,8 @@ final class BotMarkEngine {
     private var clockTime = 0.0
     private var lastTimestamp: Double?
     private var delta = 1.0 / 60
+    private var facing: BotMarkSpring?
+    private var attention = BotMarkSpring(1)
 
     // MARK: Expression
 
@@ -234,6 +236,9 @@ final class BotMarkEngine {
 
         pointer = programme.pointer
         let config = step(programme: programme)
+        if facing == nil { facing = BotMarkSpring(config.gaze.rawValue) }
+        facing?.target = config.gaze.rawValue
+        attention.target = config.pointer && pointer != nil ? 0 : 1
         updateMorph(now: clockTime, config: config)
         updateStateTargets(now: clockTime, config: config)
         stepPhysics(delta: delta)
@@ -386,6 +391,8 @@ final class BotMarkEngine {
         for _ in 0..<steps {
             expressionSpring.step(frequency: expressionFrequency, damping: 1, delta: step)
             rotation.step(frequency: 5, damping: 0.9, delta: step)
+            facing?.step(frequency: 9, damping: 0.85, delta: step)
+            attention.step(frequency: 13, damping: 1, delta: step)
             headX.step(frequency: 3.5, damping: 1, delta: step)
             headY.step(frequency: 4, damping: 1, delta: step)
             scaleY.step(frequency: 10, damping: 0.8, delta: step)
@@ -1074,8 +1081,11 @@ final class BotMarkEngine {
                 BotMarkGeometry.lerpRing(shapeRing, morphRing, BotMath.cubicInOut(morphPathAmount)))
         }
 
+        let eyeBoundary = morphPathAmount > 0
+            ? BotMarkGeometry.lerpRing(shapeRing, morphRing, BotMath.cubicInOut(morphPathAmount)) : shapeRing
         let eyes = renderEyes(now: now, config: config, shape: shape, face: geometry.face,
-                              shapeRing: shapeRing, spanSamples: spanSamples,
+                              shapeRing: eyeBoundary, spanSamples: morphPathAmount > 0 ? nil : spanSamples,
+                              headPath: headPath,
                               top: top, bottom: bottom, turnAngle: turnAngle,
                               morphAmount: morphAmount)
 
@@ -1148,23 +1158,27 @@ final class BotMarkEngine {
         return BotMarkFrame(headPath: headPath, transform: transform, opacity: pose.opacity,
                         eyes: eyes, badge: badge, shapes: shapes,
                         viewBoxRadius: viewBoxRadius, morphAmount: morphAmount,
-                        flipX: config.flipX)
+                        flipX: config.flipX, facing: facing?.value ?? 0)
     }
 
     private func renderEyes(now: Double, config: BotMarkConfig, shape: BotMarkShape,
                             face: BotMarkFace, shapeRing: [CGPoint],
                             spanSamples: [(Double, Double)]?,
+                            headPath: CGPath,
                             top: Double, bottom: Double, turnAngle: Double,
                             morphAmount: Double) -> [BotMarkFrame.Eye] {
+        guard morphAmount < 0.5 else { return [] }
         let amount = BotMath.clamp(expressionSpring.value, 0, 1)
         let eyeRings = [
             BotMarkGeometry.lerpRing(expressionFrom[0], expressionTo[0], amount),
             BotMarkGeometry.lerpRing(expressionFrom[1], expressionTo[1], amount),
         ]
         let centres = eyeRings.map(BotMarkGeometry.centroid)
+        let pairOffset = (centres[0].x + centres[1].x) / 2 - headCentre
+        let direction = BotMath.clamp(facing?.value ?? 0, -1, 1)
         var scanTop = top
         var scanBottom = bottom
-        if abs(turnAngle) > 0.001 {
+        if abs(turnAngle) > 0.001 || spanSamples == nil {
             scanTop = shapeRing.map { Double($0.y) }.min() ?? top
             scanBottom = shapeRing.map { Double($0.y) }.max() ?? bottom
         }
@@ -1197,7 +1211,7 @@ final class BotMarkEngine {
 
             let ring = eyeRings[index]
             let centre = centres[index]
-            var localCentre = headCentre + face.x
+            var localCentre = headCentre + face.x * attention.value
             var offsetX = (centre.x - headCentre) * face.sx
             var perspectiveX = 1.0
             var visible = true
@@ -1220,21 +1234,28 @@ final class BotMarkEngine {
             let pulse = 1 + 0.07 * sin(amount * .pi)
             var driftX = 1.4 * sin(0.00042 * now + Double(index)) + 0.5 * sin(0.001 * now + 2 * Double(index))
             var driftY = 0.9 * sin(0.00058 * now + Double(index))
-            let autonomousGazeWeight = config.pointer && pointer != nil ? 0.2 : 1.0
-            driftX += pointerX + aimX.value * autonomousGazeWeight + directGazeX + config.gazeBias
-            driftY += pointerY + aimY.value * autonomousGazeWeight + directGazeY
+            let autonomousGazeWeight = attention.value
+            // 表情眼形本身带有侧视：移动整对眼睛的中心，保留眼形与眼距，不翻转身体。
+            let wander = aimX.value + directGazeX
+            let directed = abs(pairOffset) * direction
+                + (abs(wander) + config.gazeBias) * direction
+                + wander * 0.2 * (1 - abs(direction))
+            driftX = pointerX + (driftX + directed) * autonomousGazeWeight - pairOffset
+            let reach = library.eyeReach
+            driftX = BotMath.clamp(pairOffset + driftX, -reach, reach) - pairOffset
+            driftY = pointerY + (driftY + aimY.value + directGazeY) * autonomousGazeWeight
             let notification = BotMath.clamp(notify.value, 0, 1)
-            driftX -= 10 * notification
-            driftY += 7 * notification
+            driftX -= 10 * notification * autonomousGazeWeight
+            driftY += 7 * notification * autonomousGazeWeight
 
             let scaledEye = min(BotMath.clamp(eyeScale.value, 0.2, 2) * face.eye, fit / pulse)
-            let scaleX = BotMath.clamp(perspectiveX * scaledEye * pulse, 0.02, 2.4)
+            var scaleX = BotMath.clamp(perspectiveX * scaledEye * pulse, 0.02, 2.4)
             var winkScale = 1.0
             if index == winkEye, now < winkAt + 320 {
                 let phase = (now - winkAt) / 320
                 winkScale = max(phase < 0.42 ? 1 - phase / 0.42 : (phase - 0.42) / 0.58, 0.04)
             }
-            let scaleYValue = BotMath.clamp(max(eyeOpen.value * winkScale, 0.04) * scaledEye * pulse, 0.02, 2.4)
+            var scaleYValue = BotMath.clamp(max(eyeOpen.value * winkScale, 0.04) * scaledEye * pulse, 0.02, 2.4)
             let halfHeight = library.eyeHalf * scaleYValue + 2
             let y = BotMath.clamp(headCentre + face.y + (centre.y + driftY - headCentre) * face.sy,
                           scanTop + halfHeight, scanBottom - halfHeight)
@@ -1246,7 +1267,7 @@ final class BotMarkEngine {
             for pointIndex in stride(from: 0, to: ring.count, by: 2) {
                 let scaledX = (ring[pointIndex].x - centre.x) * scaleX
                 let sampleY = y + (ring[pointIndex].y - centre.y) * scaleYValue
-                let span = abs(turnAngle) > 0.001
+                let span = abs(turnAngle) > 0.001 || spanSamples == nil
                     ? BotMarkGeometry.spanAt(shapeRing, sampleY, headCentre: headCentre)
                     : BotMarkGeometry.shapeSpanAt(shape, spanSamples: spanSamples, sampleY, headCentre: headCentre)
                 maxLeft = max(maxLeft, span.0 - scaledX)
@@ -1276,6 +1297,59 @@ final class BotMarkEngine {
                 }
             }
 
+            // 徽标避让和形变之后再次约束完整眼形；空间不足时缩小眼睛，而不是交给裁剪。
+            var eyeTop = Double.infinity
+            var eyeBottom = -Double.infinity
+            for point in ring {
+                eyeTop = min(eyeTop, point.y - centre.y)
+                eyeBottom = max(eyeBottom, point.y - centre.y)
+            }
+            var needsBoundaryCheck = true
+            for _ in 0..<12 {
+                let upper = eyeTop * scaleYValue
+                let lower = eyeBottom * scaleYValue
+                let minY = scanTop - upper + 2
+                let maxY = scanBottom - lower - 2
+                finalY = minY <= maxY ? BotMath.clamp(finalY, minY, maxY) : (scanTop + scanBottom) / 2
+                var left = -Double.infinity
+                var right = Double.infinity
+                for point in ring {
+                    let sampleY = finalY + (point.y - centre.y) * scaleYValue
+                    let span = abs(turnAngle) > 0.001 || spanSamples == nil
+                        ? BotMarkGeometry.spanAt(shapeRing, sampleY, headCentre: headCentre)
+                        : BotMarkGeometry.shapeSpanAt(shape, spanSamples: spanSamples, sampleY, headCentre: headCentre)
+                    let dx = (point.x - centre.x) * scaleX
+                    left = max(left, span.0 - dx + 2)
+                    right = min(right, span.1 - dx - 2)
+                }
+                if minY <= maxY && left <= right {
+                    finalX = BotMath.clamp(finalX, left, right)
+                    needsBoundaryCheck = min(finalX - left, right - finalX, finalY - minY, maxY - finalY) < 4
+                    break
+                }
+                scaleX *= 0.8
+                scaleYValue *= 0.8
+                finalY += ((scanTop + scanBottom) / 2 - finalY) * 0.25
+            }
+
+            // 预采样宽度在云朵等凹轮廓附近存在误差，最终用实际路径校验并向脸中央收拢。
+            for _ in 0..<(needsBoundaryCheck ? 12 : 0) {
+                let fits = ring.indices.allSatisfy { index in
+                    let point = ring[index]
+                    let next = ring[(index + 1) % ring.count]
+                    let vertex = CGPoint(x: finalX + (point.x - centre.x) * scaleX,
+                                         y: finalY + (point.y - centre.y) * scaleYValue)
+                    let midpoint = CGPoint(x: finalX + ((point.x + next.x) / 2 - centre.x) * scaleX,
+                                           y: finalY + ((point.y + next.y) / 2 - centre.y) * scaleYValue)
+                    return headPath.contains(vertex) && headPath.contains(midpoint)
+                }
+                if fits { break }
+                finalX += (headCentre - finalX) * 0.1
+                finalY += ((scanTop + scanBottom) / 2 - finalY) * 0.1
+                scaleX *= 0.95
+                scaleYValue *= 0.95
+            }
+
             var transform = CGAffineTransform(translationX: finalX, y: finalY)
             transform = transform.scaledBy(x: scaleX, y: scaleYValue)
             transform = transform.translatedBy(x: -centre.x, y: -centre.y)
@@ -1283,7 +1357,57 @@ final class BotMarkEngine {
                                        transform: transform,
                                        visible: visible && morphAmount < 0.5))
         }
-        return output
+        return fitEyePair(output, rings: eyeRings, inside: headPath)
+    }
+
+    private func fitEyePair(_ eyes: [BotMarkFrame.Eye], rings: [[CGPoint]],
+                            inside head: CGPath) -> [BotMarkFrame.Eye] {
+        guard eyes.count == 2, eyes.allSatisfy(\.visible) else { return eyes }
+        let boxes = eyes.indices.map { index -> CGRect in
+            var minX = Double.infinity, minY = Double.infinity
+            var maxX = -Double.infinity, maxY = -Double.infinity
+            for point in rings[index] {
+                let p = point.applying(eyes[index].transform)
+                minX = min(minX, p.x); maxX = max(maxX, p.x)
+                minY = min(minY, p.y); maxY = max(maxY, p.y)
+            }
+            return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }
+        let left = boxes[0].midX <= boxes[1].midX ? 0 : 1
+        let right = 1 - left
+        let gap = 3.0
+        guard boxes[right].minX - boxes[left].maxX < gap else { return eyes }
+        let points = eyes.indices.map { index in rings[index].map { $0.applying(eyes[index].transform) } }
+
+        // 两只眼睛作为整体留出间距，同时验证脸部轮廓；不允许独立收拢后再次重叠。
+        var pairX = (boxes[left].minX + boxes[right].maxX) / 2
+        var pairY = (boxes[0].midY + boxes[1].midY) / 2
+        let originalY = pairY
+        var scale = 1.0
+        var result = eyes
+        for _ in 0..<24 {
+            let targets = [pairX - (boxes[right].width * scale + gap) / 2,
+                           pairX + (boxes[left].width * scale + gap) / 2]
+            var fits = true
+            for (slot, index) in [left, right].enumerated() {
+                let box = boxes[index]
+                let y = pairY + (box.midY - originalY) * scale
+                let correction = CGAffineTransform(a: scale, b: 0, c: 0, d: scale,
+                    tx: targets[slot] - box.midX * scale, ty: y - box.midY * scale)
+                result[index].transform = eyes[index].transform.concatenating(correction)
+                let ring = points[index]
+                fits = fits && ring.indices.allSatisfy { i in
+                    let next = ring[(i + 1) % ring.count]
+                    let midpoint = CGPoint(x: (ring[i].x + next.x) / 2, y: (ring[i].y + next.y) / 2)
+                    return head.contains(ring[i].applying(correction)) && head.contains(midpoint.applying(correction))
+                }
+            }
+            if fits { return result }
+            pairX += (headCentre - pairX) * 0.15
+            pairY += (head.boundingBoxOfPath.midY - pairY) * 0.15
+            scale *= 0.9
+        }
+        return result
     }
 }
 
@@ -1340,6 +1464,7 @@ struct BotMarkFrame {
     /// shrinks the character to a fifth on purpose and that is not a squash.
     var morphAmount: Double
     var flipX: Bool
+    var facing: Double = 0
 
     /// The centre of the upstream viewBox, `-15 -15 259 259`.
     static let viewBoxCentre = 114.5

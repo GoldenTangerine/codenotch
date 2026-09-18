@@ -69,6 +69,10 @@ struct BotAppearance: Codable, Equatable {
     }
 }
 
+enum BotMarkGaze: Double, CaseIterable {
+    case left = -1, ahead = 0, right = 1
+}
+
 struct BotPresentation: Equatable {
     var id: String
     var brand: String
@@ -77,6 +81,8 @@ struct BotPresentation: Equatable {
     var waiting = false
     var active = true
     var gazeBias = 0.0
+    var gaze: BotMarkGaze = .ahead
+    var pointerRegion: CGPath?
     var event: BotAnimationEvent?
     var lastActivity: Date?
     var globallyBusy = false

@@ -13,6 +13,210 @@ import XCTest
 
 @MainActor
 final class BotMarkTests: XCTestCase {
+    private func assertEyesSeparated(_ frame: BotMarkFrame, file: StaticString = #filePath, line: UInt = #line) {
+        guard frame.eyes.count == 2, frame.eyes.allSatisfy(\.visible) else { return }
+        let boxes = frame.eyes.map { eye -> CGRect in
+            var transform = eye.transform
+            return eye.path.copy(using: &transform)!.boundingBoxOfPath
+        }
+        let gap = max(boxes[1].minX - boxes[0].maxX, boxes[0].minX - boxes[1].maxX)
+        XCTAssertGreaterThanOrEqual(gap, 2.99, "Visible eyes must retain their separation", file: file, line: line)
+    }
+
+    func testCapsulePointerPathIsSharedUntilLayoutChanges() throws {
+        let model = NotchViewModel()
+        let snapshot = try XCTUnwrap(Fixtures.snapshots().first)
+        var appearance = BotAppearance()
+        appearance.enabled = true
+        model.botAppearances[snapshot.providerID] = appearance
+        model.isExpanded = true
+        let first = try XCTUnwrap(model.botPresentation(for: snapshot)?.pointerRegion)
+        model.botLastActivity = Date()
+        let same = try XCTUnwrap(model.botPresentation(for: snapshot)?.pointerRegion)
+        XCTAssertTrue(first === same)
+        model.sizeScale = 1.25
+        let scaled = try XCTUnwrap(model.botPresentation(for: snapshot)?.pointerRegion)
+        XCTAssertFalse(first === scaled)
+        XCTAssertTrue(scaled === (try XCTUnwrap(model.botPresentation(for: snapshot)?.pointerRegion)))
+        model.edge = model.edge == .left ? .right : .left
+        XCTAssertFalse(scaled === (try XCTUnwrap(model.botPresentation(for: snapshot)?.pointerRegion)))
+    }
+    func testAllEdgesChooseTheInwardGaze() throws {
+        let model = NotchViewModel()
+        let snapshot = try XCTUnwrap(Fixtures.snapshots().first)
+        var appearance = BotAppearance()
+        appearance.enabled = true
+        model.botAppearances[snapshot.providerID] = appearance
+        for (edge, gaze) in [(NotchEdge.top, BotMarkGaze.ahead), (.bottom, .ahead),
+                             (.left, .right), (.right, .left)] {
+            model.edge = edge
+            XCTAssertEqual(model.botPresentation(for: snapshot)?.gaze, gaze)
+        }
+    }
+
+    func testGazeCrossesSmoothlyWithoutMirroringTheBody() {
+        let engine = BotMarkEngine()
+        var programme = BotMarkProgramme(states: ["idle"])
+        programme.gaze = .left
+        var frame = engine.advance(to: 0, programme: programme)
+        XCTAssertEqual(frame.facing, -1)
+        programme.gaze = .right
+        frame = engine.advance(to: 1.0 / 60, programme: programme)
+        XCTAssertGreaterThan(frame.facing, -1)
+        XCTAssertLessThan(frame.facing, 0)
+        for i in 2...90 { frame = engine.advance(to: Double(i) / 60, programme: programme) }
+        XCTAssertEqual(frame.facing, 1, accuracy: 0.001)
+        XCTAssertFalse(frame.flipX)
+        programme.gaze = .ahead
+        frame = engine.advance(to: 91.0 / 60, programme: programme)
+        XCTAssertGreaterThan(frame.facing, 0.5)
+        for i in 92...180 { frame = engine.advance(to: Double(i) / 60, programme: programme) }
+        XCTAssertEqual(frame.facing, 0, accuracy: 0.001)
+        XCTAssertFalse(frame.flipX)
+    }
+
+    func testEveryExpressionStaysInsideEveryBody() throws {
+        let library = try XCTUnwrap(BotMarkLibrary.available)
+        for body in BotMarkBody.allCases {
+            for expression in library.expressions.indices {
+                for gaze in BotMarkGaze.allCases {
+                    let engine = BotMarkEngine()
+                    var config = BotMarkConfig()
+                    config.expressionPool = [expression]
+                    config.expressionCadence = (100_000, 100_000)
+                    engine.setState("expression-test", config: config)
+                    var programme = BotMarkProgramme(states: ["expression-test"])
+                    programme.shape = body.rawValue
+                    programme.gaze = gaze
+                    programme.gazeBias = 7
+                    for step in 0...60 {
+                        if step == 30 { programme.pointer = CGPoint(x: -0.6, y: 0.6) }
+                        let frame = engine.advance(to: Double(step) / 60, programme: programme)
+                        assertEyesSeparated(frame)
+                        for eye in frame.eyes where eye.visible {
+                            eye.path.applyWithBlock { element in
+                                let element = element.pointee
+                                guard element.type == .moveToPoint || element.type == .addLineToPoint else { return }
+                                XCTAssertTrue(frame.headPath.contains(element.points[0].applying(eye.transform)),
+                                              "\(body.rawValue), expression \(expression), \(gaze), frame \(step)")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testPointerOverridesBothSideDirectionsAndAheadRemainsCentred() {
+        func offset(_ frame: BotMarkFrame) -> Double {
+            let centres = frame.eyes.map { eye -> Double in
+                var points: [CGPoint] = []
+                eye.path.applyWithBlock { element in
+                    let element = element.pointee
+                    if element.type == .moveToPoint || element.type == .addLineToPoint {
+                        points.append(element.points[0].applying(eye.transform))
+                    }
+                }
+                return points.map(\.x).reduce(0, +) / Double(points.count)
+            }
+            return centres.reduce(0, +) / Double(centres.count) - BotMarkLibrary.shared.headCentre
+        }
+        let combinations = BotMarkBody.allCases.flatMap { body in BotMarkGaze.allCases.map { (body, $0) } }
+        for (body, gaze) in combinations {
+            let engine = BotMarkEngine()
+            var config = BotMarkConfig()
+            config.expressionPool = [19]
+            config.expressionCadence = (100_000, 100_000)
+            engine.setState("expression-test", config: config)
+            var programme = BotMarkProgramme(states: ["expression-test"])
+            programme.shape = body.rawValue
+            programme.gaze = gaze
+            programme.gazeBias = 7
+            var frame = engine.advance(to: 0, programme: programme)
+            for step in 1...90 { frame = engine.advance(to: Double(step) / 60, programme: programme) }
+            if gaze == .ahead { XCTAssertLessThan(abs(offset(frame)), 8) }
+            else { XCTAssertGreaterThan(offset(frame) * gaze.rawValue, 0) }
+            programme.pointer = CGPoint(x: -0.6, y: 0)
+            for step in 91...180 { frame = engine.advance(to: Double(step) / 60, programme: programme) }
+            XCTAssertLessThan(offset(frame), 0)
+            programme.pointer = CGPoint(x: 0.6, y: 0)
+            for step in 181...270 { frame = engine.advance(to: Double(step) / 60, programme: programme) }
+            XCTAssertGreaterThan(offset(frame), 0)
+            var step = 271
+            for x in [-0.05, 0.0, 0.05, -0.005, 0.005] {
+                programme.pointer = CGPoint(x: x, y: 0)
+                for i in step..<(step + 90) { frame = engine.advance(to: Double(i) / 60, programme: programme) }
+                XCTAssertEqual(offset(frame), 22 * x * BotMarkLibrary.shared.shape(body.rawValue).face.sx, accuracy: 0.02,
+                               "The cursor must own the gaze near the centre, including when it crosses zero")
+                step += 90
+            }
+            programme.pointer = nil
+            for i in step..<(step + 90) { frame = engine.advance(to: Double(i) / 60, programme: programme) }
+            if gaze == .ahead { XCTAssertLessThan(abs(offset(frame)), 8) }
+            else { XCTAssertGreaterThan(offset(frame) * gaze.rawValue, 0) }
+        }
+    }
+
+    func testAnimatedStatesKeepVisibleEyesInsideDuringTurnsAndMorphs() {
+        for body in BotMarkBody.allCases {
+            for state in BotMarkLibrary.shared.states {
+                let engine = BotMarkEngine()
+                var programme = BotMarkProgramme(states: [state.id])
+                programme.shape = body.rawValue
+                programme.gaze = .left
+                programme.gazeBias = 7
+                for step in 0..<120 {
+                    if step == 30 { programme.gaze = .right }
+                    if step == 60 { programme.gaze = .ahead }
+                    if step == 90 { programme.pointer = CGPoint(x: 0.6, y: -0.6) }
+                    let frame = engine.advance(to: Double(step) / 60, programme: programme)
+                    assertEyesSeparated(frame)
+                    for eye in frame.eyes where eye.visible {
+                        eye.path.applyWithBlock { element in
+                            let element = element.pointee
+                            guard element.type == .moveToPoint || element.type == .addLineToPoint else { return }
+                            XCTAssertTrue(frame.headPath.contains(element.points[0].applying(eye.transform)),
+                                          "\(body.rawValue), \(state.id), frame \(step)")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testPointerUsesTheCapsulePathAndPreviewBounds() {
+        let window = VisibleWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 200),
+                                   styleMask: .borderless, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let view = BotDrawingView(frame: NSRect(x: 80, y: 80, width: 40, height: 40))
+        window.contentView?.addSubview(view)
+        var presentation = BotPresentation(id: "test", brand: "claude", appearance: BotAppearance())
+        presentation.pointerRegion = CGPath(roundedRect: CGRect(x: 20, y: 60, width: 160, height: 80),
+                                             cornerWidth: 30, cornerHeight: 30, transform: nil)
+        view.configure(presentation, reduceMotion: false)
+        XCTAssertNotNil(view.pointer(at: CGPoint(x: 30, y: 100)))
+        XCTAssertNil(view.pointer(at: CGPoint(x: 21, y: 139)))
+        XCTAssertNil(view.pointer(at: CGPoint(x: 10, y: 100)))
+        presentation.pointerRegion = nil
+        view.configure(presentation, reduceMotion: false)
+        XCTAssertNil(view.pointer(at: CGPoint(x: 30, y: 100)))
+        XCTAssertNotNil(view.pointer(at: CGPoint(x: 100, y: 100)))
+        view.detach()
+    }
+
+    func testReducedMotionCacheKeepsDirectionsSeparate() throws {
+        let view = BotDrawingView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
+        var presentation = BotPresentation(id: "test", brand: "claude", appearance: BotAppearance())
+        for gaze in [BotMarkGaze.left, .right, .ahead, .left] {
+            presentation.gaze = gaze
+            view.configure(presentation, reduceMotion: true)
+            XCTAssertEqual(try XCTUnwrap(view.displayFrame).facing, gaze.rawValue, accuracy: 0.001)
+            XCTAssertFalse(view.canAnimate)
+        }
+        XCTAssertEqual(view.renderedFrames, 0)
+    }
+
     private final class VisibleWindow: NSWindow {
         override var isVisible: Bool { true }
         override var occlusionState: NSWindow.OcclusionState { [.visible] }

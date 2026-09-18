@@ -367,19 +367,16 @@ struct NotchRootView: View {
                 )).animation(motion(NotchMotion.unfold)))
         }
 
-        Group {
-            if model.edge.isVertical {
-                VStack(spacing: model.cellSpacing) { stack }
-                    .padding(.top, leadIn)
-                    // The contents keep the expanded layout while folding, so
-                    // the stack does not reflow on its way out; the shape clips it.
-                    .frame(width: model.baseBodyDepth)
-            } else {
-                HStack(spacing: model.cellSpacing) { stack }
-                    .padding(.leading, leadIn)
-                    .frame(height: model.baseBodyDepth)
-            }
-        }
+        // 切换横纵布局时保留机器人实例，朝向弹簧才能连续转动。
+        let layout = model.edge.isVertical
+            ? AnyLayout(VStackLayout(spacing: model.cellSpacing))
+            : AnyLayout(HStackLayout(spacing: model.cellSpacing))
+        layout { stack }
+        .padding(model.edge.isVertical ? .top : .leading, leadIn)
+        // The contents keep the expanded layout while folding, so
+        // the stack does not reflow on its way out; the shape clips it.
+        .frame(width: model.edge.isVertical ? model.baseBodyDepth : nil,
+               height: model.edge.isVertical ? nil : model.baseBodyDepth)
         .allowsHitTesting(model.isExpanded)
         .offset(x: -model.edge.outward.x * model.ringEdgeOffset,
                 y: -model.edge.outward.y * model.ringEdgeOffset)

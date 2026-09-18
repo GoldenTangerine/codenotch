@@ -40,6 +40,7 @@ struct BotMarkProgramme {
     var gazeScale = 1.0
     var eyeScale = 1.0
     var gazeBias = 0.0
+    var gaze: BotMarkGaze = .ahead
     var rotationScale = 1.0
     var squashScale = 1.0
     var particlesEnabled = true
@@ -59,6 +60,7 @@ struct BotMarkProgramme {
         config.gazeScale = gazeScale
         config.eyeScale = eyeScale
         config.gazeBias = gazeBias
+        config.gaze = gaze
         config.rotationScale = rotationScale
         config.squashScale = squashScale
         config.particlesEnabled = particlesEnabled

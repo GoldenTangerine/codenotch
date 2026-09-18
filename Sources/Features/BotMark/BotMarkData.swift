@@ -32,6 +32,7 @@ struct BotMarkLibrary {
     let shapeLabels: [String: BotMarkLabel]
     /// 25 expressions, each a pair of eye rings.
     let expressions: [[[CGPoint]]]
+    let eyeReach: Double
     let states: [BotMarkStateInfo]
 
     /// Loaded once and never written to afterwards; the drawing code that
@@ -203,6 +204,9 @@ extension BotMarkLibrary {
         shapeOrder = raw.shapeOrder
         shapeLabels = raw.shapeLabels
         expressions = raw.expressions.map { $0.map { $0.map(BotMarkLibrary.point) } }
+        eyeReach = expressions.map {
+            abs((BotMarkGeometry.centroid($0[0]).x + BotMarkGeometry.centroid($0[1]).x) / 2 - raw.headC)
+        }.max() ?? 0
         states = raw.states.map { state in
             BotMarkStateInfo(
                 id: state.id, en: state.en, zh: state.zh, morph: state.morph,

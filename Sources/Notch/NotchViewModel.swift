@@ -16,6 +16,25 @@ final class NotchViewModel: ObservableObject {
     @Published var botEvents: [String: BotAnimationEvent] = [:]
     @Published var botLastActivity: Date?
     @Published var botGloballyBusy = false
+    private struct BotPointerLayout: Equatable {
+        let edge: NotchEdge
+        let rect: CGRect
+        let scale: CGFloat
+        let joining: HardwareNotch?
+    }
+    private var botPointerLayout: BotPointerLayout?
+    private var botPointerPath: CGPath?
+
+    private func botPointerRegion() -> CGPath {
+        let rect = NotchPlacement(edge: edge, panelSize: panelSize).rect(
+            along: slack, across: 0, length: shapeLength * sizeScale, depth: notchDepth * sizeScale)
+        let layout = BotPointerLayout(edge: edge, rect: rect, scale: sizeScale, joining: joinedNotch)
+        if layout == botPointerLayout, let botPointerPath { return botPointerPath }
+        let path = SideNotchShape(edge: edge, joining: joinedNotch).renderedPath(in: rect, scale: sizeScale).cgPath
+        botPointerLayout = layout
+        botPointerPath = path
+        return path
+    }
 
     func botPresentation(for snapshot: ProviderSnapshot) -> BotPresentation? {
         let appearance = botAppearances[snapshot.providerID] ?? BotAppearance()
@@ -30,7 +49,9 @@ final class NotchViewModel: ObservableObject {
             mood: BotPresentation.mood(activity: activity, refreshing: isRefreshing(snapshot),
                                       spent: spent, hasReading: snapshot.hasReading),
             waiting: activity == .waiting, active: isExpanded,
-            gazeBias: edge == .left ? 7 : edge == .right ? -7 : 0,
+            gazeBias: 7,
+            gaze: edge == .left ? .right : edge == .right ? .left : .ahead,
+            pointerRegion: botPointerRegion(),
             event: botEvents[snapshot.id] ?? botEvents[snapshot.providerID],
             lastActivity: botLastActivity, globallyBusy: botGloballyBusy)
     }

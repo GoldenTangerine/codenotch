@@ -40,6 +40,17 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.51",
+            headline: L10n.t("Smoother robot gaze and clearer expressions"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Look inward on the left and right edges, and forward at the top and bottom")),
+                ReleaseNote.Change(title: L10n.t("Turn smoothly between edges and follow the pointer across the capsule center")),
+                ReleaseNote.Change(title: L10n.t("Keep both eyes inside the face and prevent overlapping expressions")),
+                ReleaseNote.Change(title: L10n.t("Improve reduced-motion gaze and reuse capsule hit regions")),
+                ReleaseNote.Change(title: L10n.t("Clarify Chinese robot settings"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.49",
             headline: L10n.t("Less background work and more reliable usage readings"),
             changes: [
