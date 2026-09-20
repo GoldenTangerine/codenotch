@@ -389,6 +389,53 @@ final class BotMarkTests: XCTestCase {
         XCTAssertEqual(BotPresentation.mood(activity: nil, refreshing: false, spent: false, hasReading: false), .asleep)
     }
 
+    func testFleetStartsQuietBaselineFromAnEmptyMonitor() {
+        let fleet = NotchFleet(scope: .allDisplays, edge: .top)
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        fleet.recordBotActivity([], now: start)
+        fleet.recordBotActivity([], now: start.addingTimeInterval(600))
+        fleet.setSnapshots([], now: start.addingTimeInterval(1201))
+        XCTAssertEqual(fleet.menuModel.botLastActivity, start)
+        XCTAssertFalse(fleet.menuModel.botGloballyBusy)
+        var presentation = BotPresentation(id: "test", brand: "kimi", appearance: BotAppearance())
+        presentation.lastActivity = fleet.menuModel.botLastActivity
+        XCTAssertTrue(presentation.isQuiet(at: start.addingTimeInterval(1201)))
+    }
+
+    func testFleetTracksOverlappingCLIModelsAndLinkedRequests() {
+        let fleet = NotchFleet(scope: .allDisplays, edge: .top)
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        fleet.recordBotActivity([], now: start.addingTimeInterval(-3600))
+        fleet.recordBotActivity([AgentSession(id: "cli", name: "CLI", detail: "", state: .busy,
+                                             waitingFor: nil, since: start)], now: start)
+        fleet.setThinkingModels(["model": start], now: start)
+        fleet.setLocalActivities(["local": LocalModelActivity(phase: .generating, queued: 0, since: start)], now: start)
+        let platform = CodeSwitchPlatform(platform: "claude", name: "Claude", icon: "claude",
+                                          error: false, providers: [])
+        let provider = CodeSwitchProvider(providerId: "linked", providerName: "Linked", icon: "openai",
+            activeRequests: 1, status: "active", loading: false, updatedAt: 0, quotas: [], stats: nil)
+        fleet.setSnapshots([provider.snapshot(platform: platform)], now: start)
+        XCTAssertTrue(fleet.menuModel.botGloballyBusy)
+        fleet.recordBotActivity([], now: start.addingTimeInterval(1))
+        XCTAssertTrue(fleet.menuModel.botGloballyBusy)
+        XCTAssertEqual(fleet.menuModel.botLastActivity, start.addingTimeInterval(1))
+        fleet.setThinkingModels([:], now: start.addingTimeInterval(2))
+        XCTAssertTrue(fleet.menuModel.botGloballyBusy)
+        XCTAssertEqual(fleet.menuModel.botLastActivity, start.addingTimeInterval(2))
+        fleet.setLocalActivities([:], now: start.addingTimeInterval(3))
+        XCTAssertTrue(fleet.menuModel.botGloballyBusy)
+        XCTAssertEqual(fleet.menuModel.botLastActivity, start.addingTimeInterval(3))
+        fleet.setSnapshots([], now: start.addingTimeInterval(4))
+        XCTAssertFalse(fleet.menuModel.botGloballyBusy)
+        XCTAssertEqual(fleet.menuModel.botLastActivity, start.addingTimeInterval(4))
+        fleet.setSnapshots([], now: start.addingTimeInterval(500))
+        XCTAssertEqual(fleet.menuModel.botLastActivity, start.addingTimeInterval(4))
+        fleet.setThinkingModels(["model": start.addingTimeInterval(600)], now: start.addingTimeInterval(600))
+        fleet.setLocalMetricsEnabled(false, now: start.addingTimeInterval(601))
+        XCTAssertFalse(fleet.menuModel.botGloballyBusy)
+        XCTAssertEqual(fleet.menuModel.botLastActivity, start.addingTimeInterval(601))
+    }
+
     func testGeometryAndPersonalityCatalogAreComplete() throws {
         let library = try XCTUnwrap(BotMarkLibrary.available)
         XCTAssertEqual(library.shapes.count, 18)
@@ -397,7 +444,7 @@ final class BotMarkTests: XCTestCase {
         let states = Set(library.states.map(\.id))
         for persona in BotMarkPersona.allCases {
             for mood in BotMarkMood.allCases { XCTAssertTrue(states.contains(persona.state(for: mood))) }
-            for state in persona.workingStates(overtime: true) + persona.idleStates(quiet: true, overtime: true) {
+            for state in persona.workingStates(overtime: true) + persona.idleStates() {
                 XCTAssertTrue(states.contains(state))
             }
         }

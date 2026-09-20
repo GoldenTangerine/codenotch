@@ -46,7 +46,7 @@ struct BotAppearance: Codable, Equatable {
         let name = brand.lowercased()
         let brands: [(String, UInt32)] = [
             ("claude", 0xD97757), ("deepseek", 0x4D6BFE), ("gemini", 0x4285F4),
-            ("antigravity", 0x4285F4), ("minimax", 0xE8483F), ("kimi", 0x2F6BFF),
+            ("antigravity", 0x4285F4), ("minimax", 0xE8483F), ("kimi", 0x7AA5FF),
             ("glm", 0x3A7BF7), ("volcengine", 0x1664FF)
         ]
         if let color = brands.first(where: { name.contains($0.0) })?.1 { return BotMarkPalette.rgb(color) }
@@ -73,6 +73,22 @@ enum BotMarkGaze: Double, CaseIterable {
     case left = -1, ahead = 0, right = 1
 }
 
+struct BotActivityTimeline {
+    enum Source: CaseIterable { case cli, ollama, lmStudio, codeSwitch }
+
+    private var busySources: Set<Source> = []
+    private(set) var lastActivity: Date?
+    var isBusy: Bool { !busySources.isEmpty }
+
+    mutating func record(_ source: Source, busy: Bool, latest: Date? = nil, now: Date = Date()) {
+        // 首次收到空闲状态才建立基线；后续空轮询不延后睡眠。
+        if lastActivity == nil { lastActivity = latest ?? now }
+        if let latest { lastActivity = max(lastActivity ?? latest, latest) }
+        if busySources.contains(source), !busy { lastActivity = max(lastActivity ?? now, now) }
+        if busy { busySources.insert(source) } else { busySources.remove(source) }
+    }
+}
+
 struct BotPresentation: Equatable {
     var id: String
     var brand: String
@@ -87,8 +103,12 @@ struct BotPresentation: Equatable {
     var lastActivity: Date?
     var globallyBusy = false
 
+    var quietDeadline: Date? {
+        globallyBusy ? nil : lastActivity?.addingTimeInterval(20 * 60)
+    }
+
     func isQuiet(at date: Date) -> Bool {
-        !globallyBusy && lastActivity.map { date.timeIntervalSince($0) > 1200 } == true
+        quietDeadline.map { date > $0 } == true
     }
 
     static func mood(activity: ActivitySummary.State?, refreshing: Bool,

@@ -124,7 +124,7 @@ final class BotWindowClock: NSObject {
 final class BotDrawingView: NSView {
     private var engine: BotMarkEngine?
     private var presentation: BotPresentation?
-    private var programme = BotMarkProgramme(states: ["idle"])
+    private(set) var programme = BotMarkProgramme(states: ["idle"])
     private(set) var displayFrame: BotMarkFrame?
     private var config = BotMarkConfig()
     private var reduceMotion = false
@@ -133,6 +133,7 @@ final class BotDrawingView: NSView {
     private var consumedEvent: UUID?
     private var visibilityObservers: [NSObjectProtocol] = []
     private var lastProgrammeUpdate = Date.distantPast
+    private var quietTimer: Timer?
     private var colors: [Color: CGColor] = [:]
     private(set) var renderedFrames = 0
     private struct StillKey: Hashable {
@@ -162,9 +163,10 @@ final class BotDrawingView: NSView {
             && !visibleRect.intersection(bounds).isEmpty && engine != nil
     }
 
-    func configure(_ next: BotPresentation, reduceMotion: Bool) {
+    func configure(_ next: BotPresentation, reduceMotion: Bool, now: Date = Date()) {
         guard BotMarkLibrary.available != nil else { return }
-        let changed = presentation != next || self.reduceMotion != reduceMotion
+        let quietChanged = presentation?.isQuiet(at: lastProgrammeUpdate) != next.isQuiet(at: now)
+        let changed = presentation != next || self.reduceMotion != reduceMotion || quietChanged
         if presentation?.id != next.id {
             engine = BotMarkEngine()
             displayFrame = nil
@@ -174,7 +176,7 @@ final class BotDrawingView: NSView {
         presentation = next
         self.reduceMotion = reduceMotion
         if changed {
-            updateProgramme(date: Date(), pointed: pointed)
+            updateProgramme(date: now, pointed: reduceMotion ? false : pointed)
             if reduceMotion {
                 // 状态或外观改变时才求解静态姿态，指针移动不会重复求解。
                 var still = programme
@@ -211,7 +213,36 @@ final class BotDrawingView: NSView {
             setClockActive(false)
             consumedEvent = next.event?.id
         }
+        updateQuietTimer(at: now)
         clock?.update()
+    }
+
+    private func updateQuietTimer(at now: Date) {
+        guard reduceMotion, let presentation, presentation.active, !presentation.waiting,
+              presentation.mood == .idle || presentation.mood == .spent,
+              !isHiddenOrHasHiddenAncestor,
+              let deadline = presentation.quietDeadline, deadline >= now else {
+            quietTimer?.invalidate()
+            quietTimer = nil
+            return
+        }
+        let fireDate = deadline.addingTimeInterval(0.01)
+        guard quietTimer?.fireDate != fireDate else { return }
+        quietTimer?.invalidate()
+        // 仅在睡眠期限到达时重算静态姿态，不恢复逐帧时钟。
+        let timer = Timer(fire: fireDate, interval: 0, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.quietTimer = nil
+                self.refreshStaticPresentation()
+            }
+        }
+        quietTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func refreshStaticPresentation() {
+        if reduceMotion, let presentation { configure(presentation, reduceMotion: true) }
     }
 
     override func viewDidMoveToWindow() {
@@ -219,6 +250,7 @@ final class BotDrawingView: NSView {
         detach()
         if let window { clock = BotWindowClock.attach(self, to: window) }
         observeVisibility()
+        if window != nil { refreshStaticPresentation() }
     }
 
     override func viewDidMoveToSuperview() {
@@ -229,11 +261,14 @@ final class BotDrawingView: NSView {
 
     override func viewDidHide() {
         super.viewDidHide()
+        quietTimer?.invalidate()
+        quietTimer = nil
         clock?.update()
     }
 
     override func viewDidUnhide() {
         super.viewDidUnhide()
+        refreshStaticPresentation()
         clock?.update()
     }
 
@@ -248,7 +283,10 @@ final class BotDrawingView: NSView {
             for name in [NSView.boundsDidChangeNotification, NSView.frameDidChangeNotification] {
                 visibilityObservers.append(NotificationCenter.default.addObserver(
                     forName: name, object: view, queue: .main) { [weak self] _ in
-                        MainActor.assumeIsolated { self?.clock?.update() }
+                        MainActor.assumeIsolated {
+                            self?.refreshStaticPresentation()
+                            self?.clock?.update()
+                        }
                     })
             }
             ancestor = view.superview
@@ -256,6 +294,7 @@ final class BotDrawingView: NSView {
     }
 
     deinit {
+        quietTimer?.invalidate()
         for observer in visibilityObservers { NotificationCenter.default.removeObserver(observer) }
     }
 
@@ -265,6 +304,8 @@ final class BotDrawingView: NSView {
     }
 
     func detach() {
+        quietTimer?.invalidate()
+        quietTimer = nil
         for observer in visibilityObservers { NotificationCenter.default.removeObserver(observer) }
         visibilityObservers.removeAll()
         setClockActive(false)
@@ -284,28 +325,12 @@ final class BotDrawingView: NSView {
     private func updateProgramme(date: Date, pointed: Bool) {
         guard let presentation else { return }
         let persona = presentation.appearance.persona(for: presentation.id)
-        let overtime = BotMarkHours.isOvertime(at: date)
-        if presentation.waiting {
-            programme.states = ["listening"]
-        } else {
-            switch presentation.mood {
-            case .working: programme.states = persona.workingStates(overtime: overtime)
-            case .idle:
-                programme.states = pointed ? ["listening"] : persona.idleStates(
-                    quiet: presentation.isQuiet(at: date), overtime: overtime)
-            case .fetching, .spent, .asleep: programme.states = [persona.state(for: presentation.mood)]
-            }
-        }
-        programme.mood = presentation.mood
+        programme = BotMarkProgramme.forMood(presentation.mood, persona: persona,
+            isQuiet: presentation.isQuiet(at: date), isPointedAt: pointed,
+            isWaiting: presentation.waiting, at: date)
         programme.shape = presentation.appearance.shape
-        programme.tempo = persona.tempo * presentation.mood.tempoEmphasis
-        programme.motionScale = persona.motionScale
-        programme.gazeScale = persona.gazeScale
-        programme.eyeScale = persona.eyeScale
         programme.gazeBias = presentation.gazeBias
         programme.gaze = presentation.gaze
-        programme.rotationScale = presentation.mood.rotationEmphasis
-        programme.squashScale = presentation.mood.squashEmphasis
         programme.color = presentation.appearance.color(for: presentation.id, brand: presentation.brand)
         programme.eyeColor = BotAppearance.eyeColor(for: programme.color)
         programme.viewWidth = max(1, bounds.width)

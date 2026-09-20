@@ -46,24 +46,27 @@ final class NotchFleet {
     private var ledger = LocalTokenLedger()
     private var localMetricsEnabled = false
 
-    func setLocalMetricsEnabled(_ enabled: Bool) {
+    func setLocalMetricsEnabled(_ enabled: Bool, now: Date = Date()) {
         localMetricsEnabled = enabled
         if !enabled { performances[NotchViewModel.ollamaSource] = nil; thinkingModels = [:] }
+        if !enabled { recordBotActivity(source: .ollama, busy: false, now: now) }
         for model in models { model.setLocalMetricsEnabled(enabled) }
     }
     private var refreshing: Set<String> = []
     private var botAppearances: [String: BotAppearance] = [:]
-    private var botLastActivity: Date?
-    private var botGloballyBusy = false
+    private var botActivity = BotActivityTimeline()
+    private var botLastActivity: Date? { botActivity.lastActivity }
+    private var botGloballyBusy: Bool { botActivity.isBusy }
 
     func recordBotActivity(_ sessions: [AgentSession], now: Date = Date()) {
         // 会话消失后保留已观测的活动；视图重建、路由和窗口数量不改变安静计时。
-        let busy = sessions.contains { $0.state == .busy }
-        if botGloballyBusy && !busy { botLastActivity = max(botLastActivity ?? now, now) }
-        if let latest = sessions.map(\.since).max() {
-            botLastActivity = max(botLastActivity ?? latest, latest)
-        }
-        botGloballyBusy = busy
+        recordBotActivity(source: .cli, busy: sessions.contains { $0.state == .busy },
+                          latest: sessions.map(\.since).max(), now: now)
+    }
+
+    private func recordBotActivity(source: BotActivityTimeline.Source, busy: Bool,
+                                   latest: Date? = nil, now: Date) {
+        botActivity.record(source, busy: busy, latest: latest, now: now)
         for model in models {
             if model.botLastActivity != botLastActivity { model.botLastActivity = botLastActivity }
             if model.botGloballyBusy != botGloballyBusy { model.botGloballyBusy = botGloballyBusy }
@@ -384,17 +387,20 @@ final class NotchFleet {
 
     // MARK: - Readings
 
-    func setSnapshots(_ snapshots: [ProviderSnapshot]) {
+    func setSnapshots(_ snapshots: [ProviderSnapshot], now: Date = Date()) {
         self.snapshots = snapshots
-        let now = Date()
+        recordBotActivity(source: .codeSwitch, busy: snapshots.contains {
+            $0.linked.map { $0.provider.status == "active" && $0.provider.activeRequests > 0 } ?? false
+        }, now: now)
         for model in models {
             model.updateSnapshots(snapshots)
             model.now = now
         }
     }
 
-    func setThinkingModels(_ thinking: [String: Date]) {
+    func setThinkingModels(_ thinking: [String: Date], now: Date = Date()) {
         thinkingModels = thinking
+        recordBotActivity(source: .ollama, busy: !thinking.isEmpty, latest: thinking.values.max(), now: now)
         for model in models {
             model.thinkingModels = thinking
         }
@@ -408,8 +414,10 @@ final class NotchFleet {
         }
     }
 
-    func setLocalActivities(_ activities: [String: LocalModelActivity]) {
+    func setLocalActivities(_ activities: [String: LocalModelActivity], now: Date = Date()) {
         localActivities = activities
+        recordBotActivity(source: .lmStudio, busy: !activities.isEmpty,
+                          latest: activities.values.map(\.since).max(), now: now)
         for model in models {
             model.localActivities = activities
         }

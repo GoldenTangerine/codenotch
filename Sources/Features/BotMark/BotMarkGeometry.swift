@@ -128,11 +128,13 @@ enum BotMarkGeometry {
     private static func smooth(_ values: [Double]) -> [Double] {
         let count = values.count
         return (0..<count).map { index in
-            (values[(index - 2 + count) % count]
-             + 4 * values[(index - 1 + count) % count]
-             + 6 * values[index]
-             + 4 * values[(index + 1) % count]
-             + values[(index + 2) % count]) / 16
+            // 拆开求和，避免 Swift 6.2 的类型推断超时。
+            let twoBefore = values[(index - 2 + count) % count]
+            let before = values[(index - 1 + count) % count]
+            let centre = values[index]
+            let after = values[(index + 1) % count]
+            let twoAfter = values[(index + 2) % count]
+            return (twoBefore + 4 * before + 6 * centre + 4 * after + twoAfter) / 16
         }
     }
 

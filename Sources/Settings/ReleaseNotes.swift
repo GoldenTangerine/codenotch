@@ -40,6 +40,18 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.52",
+            headline: L10n.t("Complete robot routines and reliable sleep"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Play all eight personalities' routines in order and keep work ribbons out of idle actions")),
+                ReleaseNote.Change(title: L10n.t("Sleep without quota readings or after 20 minutes of inactivity")),
+                ReleaseNote.Change(title: L10n.t("Track CLI, local model and Code Switch R activity together")),
+                ReleaseNote.Change(title: L10n.t("Keep sleep states current with reduced motion and after restoring hidden views")),
+                ReleaseNote.Change(title: L10n.t("Preserve complete eyes during animation and brighten Kimi's default blue")),
+                ReleaseNote.Change(title: L10n.t("Reduce repeated animation calculations and unnecessary idle updates"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.51",
             headline: L10n.t("Smoother robot gaze and clearer expressions"),
             changes: [

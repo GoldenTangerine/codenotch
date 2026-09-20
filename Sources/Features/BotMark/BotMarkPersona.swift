@@ -38,6 +38,36 @@ enum BotMarkPersona: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
+    private var choreography: BotMarkChoreography {
+        switch self {
+        case .calm: .calm
+        case .eager: .eager
+        case .steady: .steady
+        case .curious: .curious
+        case .sleepy: .sleepy
+        case .playful: .playful
+        case .stoic: .stoic
+        case .proud: .proud
+        }
+    }
+
+    func routine(for mood: BotMarkMood) -> BotMarkRoutine {
+        switch mood {
+        case .idle: choreography.idle
+        case .working: choreography.working
+        case .fetching: choreography.fetching
+        case .spent: choreography.spent
+        case .asleep: BotMarkChoreography.sleep
+        }
+    }
+
+    func workingRoutine(overtime: Bool) -> BotMarkRoutine {
+        overtime ? choreography.overtime : choreography.working
+    }
+
+    var attentionRoutine: BotMarkRoutine { choreography.attention }
+    var completionState: String { choreography.completion }
+
     /// How the mood is played.
     ///
     /// Every state named here means the same thing as the mood it stands for.
@@ -45,41 +75,8 @@ enum BotMarkPersona: String, CaseIterable, Identifiable, Sendable {
     /// working where a stoic one is merely working, and a sleepy one is
     /// *drowsy* about a spent limit where a proud one is *sad* about it.
     func state(for mood: BotMarkMood) -> String {
-        switch mood {
-        case .working:
-            switch self {
-            case .eager, .playful: "excited"
-            case .curious: "searching"
-            case .sleepy, .stoic, .calm, .steady, .proud: "working"
-            }
-        case .fetching:
-            switch self {
-            case .curious, .eager: "curious"
-            case .sleepy, .steady: "listening"
-            case .calm, .playful, .stoic, .proud: "searching"
-            }
-        case .spent:
-            switch self {
-            case .sleepy: "drowsy"
-            case .stoic, .steady: "bored"
-            case .calm, .eager, .curious, .playful, .proud: "sad"
-            }
-        case .asleep:
-            switch self {
-            case .stoic: "powering-down"
-            case .sleepy: "drowsy"
-            default: "sleeping"
-            }
-        case .idle:
-            switch self {
-            case .eager: "curious"
-            case .steady: "humming"
-            case .sleepy: "bored"
-            case .playful: "playful"
-            case .proud: "proud"
-            case .calm, .curious, .stoic: "idle"
-            }
-        }
+        // 顺序编排的首个动作也是减少动态效果时的静态姿态。
+        routine(for: mood).states.first ?? "idle"
     }
 
     /// What a working mark takes in turn.
@@ -96,19 +93,7 @@ enum BotMarkPersona: String, CaseIterable, Identifiable, Sendable {
     /// the one state here that says nothing about the work itself, which is
     /// why it is never in the list during the day.
     func workingStates(overtime: Bool) -> [String] {
-        var states: [String]
-        switch self {
-        case .calm: states = ["working", "spawning", "writing"]
-        case .eager: states = ["excited", "spawning", "working"]
-        case .steady: states = ["working", "writing", "spawning"]
-        case .curious: states = ["searching", "spawning", "working"]
-        case .sleepy: states = ["working", "writing", "searching"]
-        case .playful: states = ["excited", "writing", "spawning"]
-        case .stoic: states = ["working", "writing", "thinking"]
-        case .proud: states = ["working", "spawning", "excited"]
-        }
-        if overtime { states.append("angry") }
-        return Self.distinct(states)
+        workingRoutine(overtime: overtime).states
     }
 
     /// What an idle mark takes in turn.
@@ -119,13 +104,13 @@ enum BotMarkPersona: String, CaseIterable, Identifiable, Sendable {
     /// sleepy about it late at night, is the same reading with a day in it.
     /// Neither replaces the persona's own idle state — they join it, so a
     /// bored mark still comes back to itself.
-    func idleStates(quiet: Bool, overtime: Bool) -> [String] {
-        let resting = state(for: .idle)
-        guard quiet else { return [resting] }
+    /// 以上为早期编排说明；当前只返回清醒动作，睡眠统一由 Programme 判断。
+    func idleStates() -> [String] {
         // Deduplicated, because the sleepy character rests *at* `bored`: its
         // quiet playlist would otherwise be that state twice, which rotates
         // between two identical entries.
-        return Self.distinct([resting, overtime ? "drowsy" : "bored"])
+        // 本项目覆盖早期的夜间打盹规则：全部性格长时间闲置都睡觉。
+        return Self.distinct(routine(for: .idle).states)
     }
 
     /// First occurrences, in order. `Set` would lose the order, and the order

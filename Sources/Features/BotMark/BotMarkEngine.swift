@@ -37,7 +37,7 @@ final class BotMarkEngine {
 
     private var expressionFrom: [[CGPoint]]
     private var expressionTo: [[CGPoint]]
-    private var expressionIndex = 0
+    private(set) var expressionIndex = 0
     private var expressionSpring = BotMarkSpring(1)
     private var expressionFrequency = 7.0
     private var expressionCursor = 0
@@ -114,12 +114,14 @@ final class BotMarkEngine {
     // MARK: Programme
 
     private var playlist: [String] = []
+    private var playlistOrder: BotMarkProgramme.Order = .random
     private var playlistCursor = 0
     private var playlistNext = 0.0
     private var playedMood: BotMarkMood?
     private var playedEvent: BotMarkEvent?
     private var eventUntil = 0.0
     private var particleSpinAngle = 0.0
+    private var expressionEntries: [String: Int] = [:]
 
     /// The unit circle the head blends into for every morph but the pencil.
     let circlePath: CGPath
@@ -286,35 +288,38 @@ final class BotMarkEngine {
             playedEvent = event
             eventUntil = clockTime + event.duration
             playlist = []
-            let config = programme.configuration(for: event.state)
-            setState(event.state, config: config)
+            let eventState = programme.state(for: event)
+            let config = programme.configuration(for: eventState, isEvent: true)
+            setState(eventState, config: config)
             return config
         }
         if programme.event == nil { playedEvent = nil }
         if clockTime < eventUntil {
             // Mid-event: hold it, and keep its own table.
-            return programme.configuration(for: state)
+            return programme.configuration(for: state, isEvent: true)
         }
 
         let due = clockTime >= playlistNext
-        if playlist != programme.states || programme.mood != playedMood {
+        if playlist != programme.states || programme.mood != playedMood || playlistOrder != programme.order {
             playlist = programme.states
+            playlistOrder = programme.order
             playedMood = programme.mood
-            playlistCursor = programme.states.count > 1
+            playlistCursor = programme.order == .random && programme.mood != .idle && programme.states.count > 1
                 ? Int(BotMath.random(0, Double(programme.states.count)))
                 : 0
         } else if due, programme.states.count > 1 {
             // A different one every time, so a two-state playlist alternates
             // instead of sometimes repeating.
-            let step = 1 + Int(BotMath.random(0, Double(programme.states.count - 1)))
+            let step = programme.order == .sequence
+                ? 1 : 1 + Int(BotMath.random(0, Double(programme.states.count - 1)))
             playlistCursor = (playlistCursor + step) % programme.states.count
         } else if !due {
             return programme.configuration(for: state)
         }
 
-        playlistNext = clockTime + BotMath.random(programme.hold.lowerBound,
-                                                  programme.hold.upperBound)
         let next = programme.states[min(playlistCursor, programme.states.count - 1)]
+        let hold = programme.holdDuration(for: next)
+        playlistNext = clockTime + BotMath.random(hold.lowerBound, hold.upperBound)
         let config = programme.configuration(for: next)
         setState(next, config: config)
         return config
@@ -329,7 +334,9 @@ final class BotMarkEngine {
         let now = clockTime
         state = identifier
         stateStartedAt = now
-        expressionCursor = 0
+        let pool = config.expressionPool
+        expressionCursor = pool.isEmpty ? 0 : (expressionEntries[identifier] ?? 0) % pool.count
+        if !pool.isEmpty { expressionEntries[identifier] = (expressionCursor + 1) % pool.count }
         expressionNext = now + BotMath.random(config.expressionCadence.0, config.expressionCadence.1) * config.tempo
         blinkNext = now + BotMath.random(1500, 7000)
         gazeNext = now + BotMath.random(500, 1400)
@@ -338,6 +345,7 @@ final class BotMarkEngine {
         behaviorNext = now + (identifier == "excited" ? BotMath.random(400, 1100)
                               : identifier == "searching" ? BotMath.random(800, 1600)
                               : identifier == "working" ? BotMath.random(1200, 2400)
+                              : identifier == "playful" ? BotMath.random(1200, 2400)
                               : BotMath.random(6000, 10000))
         winkNext = now + BotMath.random(3000, 8000)
         blinkQueue = []
@@ -351,7 +359,7 @@ final class BotMarkEngine {
             turnDirection = Double.random(in: 0...1) < 0.5 ? 1 : -1
             celebrateCycle = -1
         }
-        let firstExpression = config.expressionPool.first ?? 0
+        let firstExpression = pool.isEmpty ? 0 : pool[expressionCursor]
         if identifier != "waking" && identifier != "sleeping" {
             if identifier != "drowsy" { scheduleBlink(now) }
             setExpression(firstExpression, frequency: identifier == "excited" ? 10 : 8)
@@ -1184,6 +1192,8 @@ final class BotMarkEngine {
         }
         var leftHalf = 0.0
         var rightHalf = 0.0
+        // 沿用上游宽度 2.5% 的内边距，避免小圆环中的抗锯齿裁掉贴边眼睛。
+        let edgeClearance = max(2, headPath.boundingBoxOfPath.width * 0.025)
         for point in eyeRings[0] { leftHalf = max(leftHalf, abs(point.x - centres[0].x)) }
         for point in eyeRings[1] { rightHalf = max(rightHalf, abs(point.x - centres[1].x)) }
         let distance = abs(centres[1].x - centres[0].x) * face.sx
@@ -1270,8 +1280,8 @@ final class BotMarkEngine {
                 let span = abs(turnAngle) > 0.001 || spanSamples == nil
                     ? BotMarkGeometry.spanAt(shapeRing, sampleY, headCentre: headCentre)
                     : BotMarkGeometry.shapeSpanAt(shape, spanSamples: spanSamples, sampleY, headCentre: headCentre)
-                maxLeft = max(maxLeft, span.0 - scaledX)
-                minRight = min(minRight, span.1 - scaledX)
+                maxLeft = max(maxLeft, span.0 + edgeClearance - scaledX)
+                minRight = min(minRight, span.1 - edgeClearance - scaledX)
             }
             let desired = localCentre + offsetX + driftX * face.sx
             let bounded = maxLeft <= minRight
@@ -1304,7 +1314,6 @@ final class BotMarkEngine {
                 eyeTop = min(eyeTop, point.y - centre.y)
                 eyeBottom = max(eyeBottom, point.y - centre.y)
             }
-            var needsBoundaryCheck = true
             for _ in 0..<12 {
                 let upper = eyeTop * scaleYValue
                 let lower = eyeBottom * scaleYValue
@@ -1319,12 +1328,11 @@ final class BotMarkEngine {
                         ? BotMarkGeometry.spanAt(shapeRing, sampleY, headCentre: headCentre)
                         : BotMarkGeometry.shapeSpanAt(shape, spanSamples: spanSamples, sampleY, headCentre: headCentre)
                     let dx = (point.x - centre.x) * scaleX
-                    left = max(left, span.0 - dx + 2)
-                    right = min(right, span.1 - dx - 2)
+                    left = max(left, span.0 - dx + edgeClearance)
+                    right = min(right, span.1 - dx - edgeClearance)
                 }
                 if minY <= maxY && left <= right {
                     finalX = BotMath.clamp(finalX, left, right)
-                    needsBoundaryCheck = min(finalX - left, right - finalX, finalY - minY, maxY - finalY) < 4
                     break
                 }
                 scaleX *= 0.8
@@ -1333,7 +1341,8 @@ final class BotMarkEngine {
             }
 
             // 预采样宽度在云朵等凹轮廓附近存在误差，最终用实际路径校验并向脸中央收拢。
-            for _ in 0..<(needsBoundaryCheck ? 12 : 0) {
+            // 凹轮廓的预采样可能高估安全空间，不能据此跳过最终校验。
+            for _ in 0..<12 {
                 let fits = ring.indices.allSatisfy { index in
                     let point = ring[index]
                     let next = ring[(index + 1) % ring.count]
@@ -1341,7 +1350,8 @@ final class BotMarkEngine {
                                          y: finalY + (point.y - centre.y) * scaleYValue)
                     let midpoint = CGPoint(x: finalX + ((point.x + next.x) / 2 - centre.x) * scaleX,
                                            y: finalY + ((point.y + next.y) / 2 - centre.y) * scaleYValue)
-                    return headPath.contains(vertex) && headPath.contains(midpoint)
+                    return eyePointFits(vertex, inside: headPath, clearance: edgeClearance)
+                        && eyePointFits(midpoint, inside: headPath, clearance: edgeClearance)
                 }
                 if fits { break }
                 finalX += (headCentre - finalX) * 0.1
@@ -1357,11 +1367,11 @@ final class BotMarkEngine {
                                        transform: transform,
                                        visible: visible && morphAmount < 0.5))
         }
-        return fitEyePair(output, rings: eyeRings, inside: headPath)
+        return fitEyePair(output, rings: eyeRings, inside: headPath, clearance: edgeClearance)
     }
 
     private func fitEyePair(_ eyes: [BotMarkFrame.Eye], rings: [[CGPoint]],
-                            inside head: CGPath) -> [BotMarkFrame.Eye] {
+                            inside head: CGPath, clearance: Double) -> [BotMarkFrame.Eye] {
         guard eyes.count == 2, eyes.allSatisfy(\.visible) else { return eyes }
         let boxes = eyes.indices.map { index -> CGRect in
             var minX = Double.infinity, minY = Double.infinity
@@ -1399,7 +1409,10 @@ final class BotMarkEngine {
                 fits = fits && ring.indices.allSatisfy { i in
                     let next = ring[(i + 1) % ring.count]
                     let midpoint = CGPoint(x: (ring[i].x + next.x) / 2, y: (ring[i].y + next.y) / 2)
-                    return head.contains(ring[i].applying(correction)) && head.contains(midpoint.applying(correction))
+                    let vertex = ring[i].applying(correction)
+                    let middle = midpoint.applying(correction)
+                    return eyePointFits(vertex, inside: head, clearance: clearance)
+                        && eyePointFits(middle, inside: head, clearance: clearance)
                 }
             }
             if fits { return result }
@@ -1408,6 +1421,12 @@ final class BotMarkEngine {
             scale *= 0.9
         }
         return result
+    }
+
+    private func eyePointFits(_ point: CGPoint, inside head: CGPath, clearance: Double) -> Bool {
+        head.contains(point)
+            && head.contains(CGPoint(x: point.x - clearance, y: point.y))
+            && head.contains(CGPoint(x: point.x + clearance, y: point.y))
     }
 }
 

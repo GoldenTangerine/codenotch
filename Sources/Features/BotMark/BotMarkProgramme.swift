@@ -23,8 +23,14 @@ import SwiftUI
 /// carries) has to be rebuilt every time the state changes, which the view
 /// cannot do without knowing when that happens.
 struct BotMarkProgramme {
+    // 生产入口 forMood 使用顺序编排；保留原始随机播放能力供单独动作调用。
+    enum Order { case random, sequence }
+
     /// The states to take in turn. One entry is held; more are rotated.
     var states: [String]
+    var order: Order = .random
+    var stateHolds: [String: ClosedRange<Double>] = [:]
+    var completionState = "excited"
     /// Milliseconds a state is held before another is taken.
     var hold: ClosedRange<Double> = 2500...4500
     /// A one-shot that interrupts the playlist, for something that just
@@ -51,9 +57,53 @@ struct BotMarkProgramme {
     var color = Color.white
     var eyeColor = Color(white: 0.06)
 
+    static func forMood(
+        _ mood: BotMarkMood,
+        persona: BotMarkPersona,
+        isQuiet: Bool = false,
+        isPointedAt: Bool = false,
+        isWaiting: Bool = false,
+        at date: Date = Date(),
+        calendar: Calendar = .current
+    ) -> BotMarkProgramme {
+        // 活动和刷新优先；鼠标可唤醒闲置睡眠，无读数仍保留睡眠含义。
+        let resting = (mood == .idle || mood == .spent) && isQuiet && !isPointedAt
+        let effectiveMood: BotMarkMood = isWaiting ? .idle : resting ? .asleep : mood
+        let routine: BotMarkRoutine
+        if isWaiting {
+            routine = BotMarkRoutine(.init("listening", 3_000...4_000))
+        } else {
+            routine = switch effectiveMood {
+            case .working: persona.workingRoutine(overtime: BotMarkHours.isOvertime(at: date, calendar: calendar))
+            case .idle: isPointedAt ? persona.attentionRoutine : persona.routine(for: .idle)
+            case .fetching, .spent, .asleep: persona.routine(for: effectiveMood)
+            }
+        }
+        var programme = BotMarkProgramme(states: routine.states)
+        programme.order = .sequence
+        programme.stateHolds = routine.holds
+        programme.completionState = persona.completionState
+        programme.mood = effectiveMood
+        programme.tempo = persona.tempo * effectiveMood.tempoEmphasis
+        programme.motionScale = persona.motionScale
+        programme.gazeScale = persona.gazeScale
+        programme.eyeScale = persona.eyeScale
+        programme.rotationScale = effectiveMood.rotationEmphasis
+        programme.squashScale = effectiveMood.squashEmphasis
+        return programme
+    }
+
+    func state(for event: BotMarkEvent) -> String {
+        event == .workFinished ? completionState : event.state
+    }
+
+    func holdDuration(for state: String) -> ClosedRange<Double> {
+        stateHolds[state] ?? hold
+    }
+
     /// The config for one state of the playlist: the upstream's own table for
     /// that state, with this programme's scales on top.
-    func configuration(for state: String) -> BotMarkConfig {
+    func configuration(for state: String, isEvent: Bool = false) -> BotMarkConfig {
         var config = BotMarkConfig.forState(BotMarkLibrary.shared.state(state), shape: shape)
         config.tempo = tempo
         config.motionScale = motionScale
@@ -63,7 +113,7 @@ struct BotMarkProgramme {
         config.gaze = gaze
         config.rotationScale = rotationScale
         config.squashScale = squashScale
-        config.particlesEnabled = particlesEnabled
+        config.particlesEnabled = particlesEnabled && (mood == .working || mood == .fetching || isEvent)
         config.pointer = pointer != nil
         config.viewWidth = viewWidth
         config.color = color

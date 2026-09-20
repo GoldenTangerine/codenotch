@@ -1,6 +1,83 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Complete robot routines and reliable sleep": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "小机器人动作更完整，睡眠更准确"
+          }
+        }
+      }
+    },
+    "Play all eight personalities' routines in order and keep work ribbons out of idle actions": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "八种性格按顺序播放完整动作，日常动作不再显示工作彩带"
+          }
+        }
+      }
+    },
+    "Sleep without quota readings or after 20 minutes of inactivity": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无额度读数或超过 20 分钟无活动时进入睡眠"
+          }
+        }
+      }
+    },
+    "Track CLI, local model and Code Switch R activity together": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "统一 CLI、本地模型和 Code Switch R 的活动计时"
+          }
+        }
+      }
+    },
+    "Keep sleep states current with reduced motion and after restoring hidden views": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "减少动态效果及恢复显示时准确更新睡眠状态"
+          }
+        }
+      }
+    },
+    "Preserve complete eyes during animation and brighten Kimi's default blue": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "动画中保持完整眼形，调亮 Kimi 默认蓝色"
+          }
+        }
+      }
+    },
+    "Reduce repeated animation calculations and unnecessary idle updates": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "减少重复动画计算与不必要的闲置更新"
+          }
+        }
+      }
+    },
     "Smoother robot gaze and clearer expressions": {
       "extractionState": "manual",
       "localizations": {
