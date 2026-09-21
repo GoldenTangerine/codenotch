@@ -100,12 +100,12 @@ final class NotchWindowController {
     private var clockTimer: Timer?
     private var cursorTimer: Timer?
     private var collapsedActivitySleeping = false
-    private(set) var isPreviewingCollapsedGeometry = false
+    var isPreviewingCollapsedGeometry: Bool { model.isPreviewingCollapsedGeometry }
     private var isEditingCollapsedGeometry = false
     private var collapsedPreviewWork: DispatchWorkItem?
 
     private func updateCollapsedActivity() {
-        if isPreviewingCollapsedGeometry && !model.hasCollapsedSummary { endCollapsedPreview() }
+        if isPreviewingCollapsedGeometry && !model.canShowCollapsedSummary { endCollapsedPreview() }
         let visible = !collapsedActivitySleeping && panel?.isVisible == true
             && panel?.occlusionState.contains(.visible) == true
         model.updateCollapsedRotation(at: Date(), visible: visible)
@@ -1167,14 +1167,23 @@ final class NotchWindowController {
         updateInteractiveRects()
     }
 
+    func apply(showsIdleNotch: Bool) {
+        guard model.showsIdleNotch != showsIdleNotch else { return }
+        model.showsIdleNotch = showsIdleNotch
+        if !showsIdleNotch, model.collapsedProviders.isEmpty { endCollapsedPreview() }
+        if !model.isExpanded { cancelPendingUnfold() }
+        updateCollapsedActivity()
+        updateInteractiveRects()
+    }
+
     func previewCollapsedGeometry(editing: Bool? = nil) {
         if editing == false { endCollapsedPreview(); return }
-        guard model.hasCollapsedSummary, !model.isEditingPosition, visibility != .hidden else { return }
+        guard model.canShowCollapsedSummary, !model.isEditingPosition, visibility != .hidden else { return }
         if let editing { isEditingCollapsedGeometry = editing }
         collapsedPreviewWork?.cancel()
         collapsedPreviewWork = nil
         if !isPreviewingCollapsedGeometry {
-            isPreviewingCollapsedGeometry = true
+            model.isPreviewingCollapsedGeometry = true
             cancelPendingUnfold()
             foldWork?.cancel()
             foldWork = nil
@@ -1200,7 +1209,7 @@ final class NotchWindowController {
         collapsedPreviewWork = nil
         isEditingCollapsedGeometry = false
         guard isPreviewingCollapsedGeometry else { return }
-        isPreviewingCollapsedGeometry = false
+        model.isPreviewingCollapsedGeometry = false
         guard restore, visibility != .hidden else { return }
         model.isExpanded = model.isPinned || (model.isAlwaysOn && !(foldsForFullScreen && isFullScreenActive()))
         cursorMoved()

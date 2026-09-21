@@ -15,6 +15,9 @@ import os
 /// What the user has chosen, kept in `UserDefaults`.
 @MainActor
 final class Preferences: ObservableObject {
+    @Published var showsIdleNotch: Bool {
+        didSet { defaults.set(showsIdleNotch, forKey: "showsIdleNotch") }
+    }
     @Published var idleBotAppearance: BotAppearance {
         didSet {
             guard oldValue != idleBotAppearance else { return }
@@ -796,6 +799,7 @@ final class Preferences: ObservableObject {
     }
 
     init(defaults: UserDefaults = .standard, domainName: String? = nil) {
+        self.showsIdleNotch = defaults.object(forKey: "showsIdleNotch") as? Bool ?? true
         self.idleBotAppearance = defaults.data(forKey: "idleBotAppearance")
             .flatMap { try? JSONDecoder().decode(BotAppearance.self, from: $0) } ?? BotAppearance()
         self.botAppearances = defaults.data(forKey: "botAppearances")

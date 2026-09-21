@@ -113,6 +113,7 @@ final class NotchFleet {
     private var ringEdgeAdjustment: CGFloat = 0
     private var collapsedSideWidth: CGFloat = 64
     private var collapsedHeightAdjustment: CGFloat = 0
+    private var showsIdleNotch = true
     private var isEditingCollapsedGeometry = false
     private var isEditingGeometry = false
     private var codeSwitchQuotaRatiosEnabled = false
@@ -337,6 +338,11 @@ final class NotchFleet {
         for controller in controllers.values {
             controller.apply(collapsedHeightAdjustment: self.collapsedHeightAdjustment)
         }
+    }
+
+    func apply(showsIdleNotch: Bool) {
+        self.showsIdleNotch = showsIdleNotch
+        for controller in controllers.values { controller.apply(showsIdleNotch: showsIdleNotch) }
     }
 
     func previewCollapsedGeometry(editing: Bool? = nil) {
@@ -619,6 +625,7 @@ final class NotchFleet {
         controller.model.ringEdgeAdjustment = ringEdgeAdjustment
         controller.model.collapsedSideWidth = collapsedSideWidth
         controller.model.collapsedHeightAdjustment = collapsedHeightAdjustment
+        controller.model.showsIdleNotch = showsIdleNotch
         controller.model.resetTimeFormat = resetTimeFormat
         controller.model.botAppearances = botAppearances
         controller.model.idleBotAppearance = idleBotAppearance

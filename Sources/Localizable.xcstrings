@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "When off, idle sides retract. Hover still opens the notch; active calls restore the sides.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭后空闲时收回两侧，悬停仍可展开，有调用时自动恢复。"
+          }
+        }
+      }
+    },
+    "Show notch when idle": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空闲时显示刘海"
+          }
+        }
+      }
+    },
     "Custom idle robot": {
       "extractionState": "manual",
       "localizations": {

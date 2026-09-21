@@ -817,6 +817,9 @@ struct SettingsView: View {
                         .accessibilityValue(Text(String(format: "%.0f pt", preferences.collapsedSideWidth)))
                     Text(L10n.t("Space on each side of the hardware notch when collapsed. Changes preview live."))
                         .font(.caption).foregroundStyle(.secondary)
+                    Toggle(L10n.t("Show notch when idle"), isOn: $preferences.showsIdleNotch)
+                    Text(L10n.t("When off, idle sides retract. Hover still opens the notch; active calls restore the sides."))
+                        .font(.caption).foregroundStyle(.secondary)
                     Picker(L10n.t("Idle notch display"), selection: $preferences.idleBotAppearance.enabled) {
                         Text(L10n.t("Follow first provider")).tag(false)
                         Text(L10n.t("Custom idle robot")).tag(true)

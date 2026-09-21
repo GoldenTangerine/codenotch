@@ -43,6 +43,13 @@ animation (or its icon when robots are disabled), and the count becomes zero.
 **Idle notch display** defaults to **Follow first provider**. Choose
 **Custom idle robot** to set its personality, shape and colour independently;
 active calls still show the calling providers' own robots or icons.
+**Show notch when idle** is on by default. Turn it off to retract the sides,
+robot and count when no providers are working or waiting for input. Hovering
+over the hardware notch still opens it; calls restore the sides automatically.
+This setting only affects the collapsed hardware notch and preserves your
+idle robot appearance.
+Width and height adjustments temporarily reveal the sides for live preview,
+then restore the idle visibility setting when the preview ends.
 Colour changes preview immediately and are saved after a short pause, or when
 settings close. Windows showing only sleeping robots request 30 FPS; awake
 animations retain 60 FPS, and hidden animations remain paused.

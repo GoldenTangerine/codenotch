@@ -760,6 +760,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.$idleBotAppearance.removeDuplicates().receive(on: DispatchQueue.main)
                 .sink { [weak fleet] in fleet?.apply(idleBotAppearance: $0) }
                 .store(in: &cancellables)
+            preferences.$showsIdleNotch.removeDuplicates().receive(on: DispatchQueue.main)
+                .sink { [weak fleet] in fleet?.apply(showsIdleNotch: $0) }
+                .store(in: &cancellables)
             codeSwitch.$bindings.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
@@ -923,6 +926,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     ringEdgeAdjustment: CGFloat(preferences.ringEdgeAdjustment))
         fleet.apply(collapsedSideWidth: CGFloat(preferences.collapsedSideWidth))
         fleet.apply(collapsedHeightAdjustment: CGFloat(preferences.collapsedHeightAdjustment))
+        fleet.apply(showsIdleNotch: preferences.showsIdleNotch)
         fleet.apply(resetTimeFormat: preferences.resetTimeFormat)
         fleet.apply(tooltipHeightMode: preferences.tooltipHeightMode)
         Self.bindNotchAccentColor(preferences, to: fleet)

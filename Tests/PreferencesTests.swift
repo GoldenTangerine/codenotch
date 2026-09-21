@@ -14,6 +14,20 @@ import XCTest
 
 @MainActor
 final class AccentColorPreferencesTests: XCTestCase {
+    func testIdleNotchDefaultsVisibleAndPersistsWithoutChangingAppearance() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertTrue(preferences.showsIdleNotch)
+        preferences.idleBotAppearance.enabled = true
+        preferences.idleBotAppearance.personality = "calm"
+        let appearance = preferences.idleBotAppearance
+        preferences.showsIdleNotch = false
+        let restored = Preferences(defaults: defaults)
+        XCTAssertFalse(restored.showsIdleNotch)
+        XCTAssertEqual(restored.idleBotAppearance, appearance)
+        restored.showsIdleNotch = true
+        XCTAssertTrue(Preferences(defaults: defaults).showsIdleNotch)
+    }
     func testIdleRobotDefaultsToFirstProviderAndPersistsIndependentAppearance() {
         let defaults = makeDefaults()
         let preferences = Preferences(defaults: defaults)

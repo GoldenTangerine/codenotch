@@ -343,6 +343,8 @@ final class NotchViewModel: ObservableObject {
     @Published var ringEdgeAdjustment: CGFloat = 0
     @Published var collapsedSideWidth: CGFloat = 64
     @Published var collapsedHeightAdjustment: CGFloat = 0
+    @Published var showsIdleNotch = true
+    @Published var isPreviewingCollapsedGeometry = false
     @Published private(set) var collapsedProviderID: String?
     private var collapsedRotationStarted: Date?
     let collapsedPlayback = BotPlaybackStore()
@@ -383,8 +385,13 @@ final class NotchViewModel: ObservableObject {
         return result
     }
 
-    var hasCollapsedSummary: Bool {
+    var canShowCollapsedSummary: Bool {
         edge == .top && hardwareNotch != nil && !snapshots.isEmpty
+    }
+
+    var hasCollapsedSummary: Bool {
+        canShowCollapsedSummary
+            && (isPreviewingCollapsedGeometry || showsIdleNotch || !collapsedProviders.isEmpty)
     }
 
     var showsCollapsedSummary: Bool { !isExpanded && hasCollapsedSummary }

@@ -16,6 +16,180 @@ import XCTest
 final class CollapsedNotchActivityTests: XCTestCase {
     private let epoch = Date(timeIntervalSince1970: 1_000)
 
+    func testGeometryDragTemporarilyShowsHiddenIdleSidesWithoutResizingTheWindow() {
+        let panel = NotchPanel(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600))
+        let controller = NotchWindowController(panel: panel, mouseLocation: { CGPoint(x: -1000, y: -1000) })
+        defer { controller.stop() }
+        controller.isFullScreenActive = { false }
+        controller.model.edge = .top
+        controller.model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+        controller.model.snapshots = model().snapshots
+        controller.apply(showsIdleNotch: false)
+        XCTAssertFalse(controller.model.showsCollapsedSummary)
+        var previewUpdates = 0
+        let observer = controller.model.$isPreviewingCollapsedGeometry.sink { _ in previewUpdates += 1 }
+        defer { observer.cancel() }
+        let frame = panel.frame
+        controller.previewCollapsedGeometry(editing: true)
+        for height: CGFloat in [-20, 20, 40] {
+            controller.apply(collapsedSideWidth: 100)
+            controller.apply(collapsedHeightAdjustment: height)
+            controller.previewCollapsedGeometry()
+            controller.cursorMoved()
+            XCTAssertTrue(controller.model.showsCollapsedSummary)
+            XCTAssertFalse(controller.model.showsIdleNotch)
+            XCTAssertEqual(controller.model.notchLength, 420)
+            XCTAssertEqual(controller.model.notchDepth, max(16, 32 + height))
+            XCTAssertEqual(panel.frame, frame)
+            XCTAssertTrue(panel.ignoresMouseEvents)
+        }
+        XCTAssertEqual(previewUpdates, 2)
+        controller.model.sessions = ["a": [session("a1", .busy)]]
+        controller.previewCollapsedGeometry()
+        controller.model.sessions = [:]
+        controller.previewCollapsedGeometry()
+        XCTAssertTrue(controller.model.showsCollapsedSummary)
+        controller.previewCollapsedGeometry(editing: false)
+        XCTAssertEqual(previewUpdates, 3)
+        XCTAssertFalse(controller.isPreviewingCollapsedGeometry)
+        XCTAssertFalse(controller.model.showsCollapsedSummary)
+        XCTAssertEqual(controller.model.notchLength, 220)
+        XCTAssertEqual(controller.model.notchDepth, 32)
+    }
+
+    func testHiddenIdleKeyboardPreviewExpiresAndKeepsNewCallsVisible() {
+        let panel = NotchPanel(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600))
+        var scheduled: [DispatchWorkItem] = []
+        let controller = NotchWindowController(panel: panel, mouseLocation: { CGPoint(x: -1000, y: -1000) },
+            scheduleInteractionWork: { _, work in scheduled.append(work) })
+        defer { controller.stop() }
+        controller.isFullScreenActive = { false }
+        controller.model.edge = .top
+        controller.model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+        controller.model.snapshots = model().snapshots
+        controller.apply(showsIdleNotch: false)
+        controller.previewCollapsedGeometry()
+        controller.previewCollapsedGeometry()
+        XCTAssertTrue(scheduled[0].isCancelled)
+        XCTAssertTrue(controller.model.showsCollapsedSummary)
+        for work in scheduled where !work.isCancelled { work.perform() }
+        XCTAssertFalse(controller.model.showsCollapsedSummary)
+        scheduled.removeAll()
+        controller.previewCollapsedGeometry()
+        controller.model.sessions = ["a": [session("a1", .waiting)]]
+        for work in scheduled where !work.isCancelled { work.perform() }
+        XCTAssertFalse(controller.isPreviewingCollapsedGeometry)
+        XCTAssertTrue(controller.model.showsCollapsedSummary)
+        controller.model.sessions = [:]
+        XCTAssertFalse(controller.model.showsCollapsedSummary)
+    }
+
+    func testHiddenIdlePreviewClearsWhenHiddenStoppedOrProvidersDisappear() {
+        for ending in ["hidden", "stopped", "empty"] {
+            let panel = NotchPanel(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600))
+            var scheduled: [DispatchWorkItem] = []
+            let controller = NotchWindowController(panel: panel, mouseLocation: { CGPoint(x: -1000, y: -1000) },
+                scheduleInteractionWork: { _, work in scheduled.append(work) })
+            defer { controller.stop() }
+            controller.isFullScreenActive = { false }
+            controller.model.edge = .top
+            controller.model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+            controller.model.snapshots = model().snapshots
+            controller.apply(showsIdleNotch: false)
+            controller.previewCollapsedGeometry()
+            XCTAssertTrue(controller.isPreviewingCollapsedGeometry)
+            switch ending {
+            case "hidden": controller.apply(.hidden)
+            case "stopped": controller.stop()
+            default:
+                controller.model.snapshots = []
+                controller.apply(showsIdleNotch: true)
+            }
+            XCTAssertFalse(controller.isPreviewingCollapsedGeometry)
+            XCTAssertFalse(controller.model.showsCollapsedSummary)
+            XCTAssertTrue(scheduled[0].isCancelled)
+        }
+    }
+
+    func testIdleVisibilityRetractsOnlyAtRestAndRestoresForWorkingOrWaiting() {
+        let model = model()
+        model.sessions = [:]
+        XCTAssertTrue(model.showsIdleNotch)
+        XCTAssertTrue(model.showsCollapsedSummary)
+        model.collapsedHeightAdjustment = 20
+        model.showsIdleNotch = false
+        XCTAssertFalse(model.showsCollapsedSummary)
+        XCTAssertEqual(model.restingLength, 220)
+        XCTAssertEqual(model.restingDepth, 38)
+        for state: AgentSession.State in [.busy, .waiting] {
+            model.sessions = ["b": [session("b1", state)]]
+            XCTAssertTrue(model.showsCollapsedSummary)
+            XCTAssertEqual(model.collapsedProviders.count, 1)
+            XCTAssertEqual(model.restingLength, 348)
+            XCTAssertEqual(model.restingDepth, 58)
+        }
+        model.sessions = ["b": [session("b1", .success)]]
+        model.refreshing = ["a"]
+        XCTAssertFalse(model.showsCollapsedSummary)
+        model.isExpanded = true
+        let length = model.notchLength
+        let depth = model.notchDepth
+        model.showsIdleNotch = true
+        XCTAssertEqual(model.notchLength, length)
+        XCTAssertEqual(model.notchDepth, depth)
+        for edge in [NotchEdge.left, .right, .bottom] {
+            model.edge = edge
+            model.isExpanded = false
+            let length = model.notchLength
+            let depth = model.notchDepth
+            model.showsIdleNotch.toggle()
+            XCTAssertEqual(model.notchLength, length)
+            XCTAssertEqual(model.notchDepth, depth)
+        }
+    }
+
+    func testHiddenIdleSidesPassThroughButHardwareHoverStillOpens() {
+        for active in [false, true] {
+            let panel = NotchPanel(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600))
+            var pointer = CGPoint(x: 260, y: 590)
+            let controller = NotchWindowController(panel: panel, mouseLocation: { pointer })
+            defer { controller.stop() }
+            controller.isFullScreenActive = { false }
+            controller.model.edge = .top
+            controller.model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+            controller.model.snapshots = model().snapshots
+            controller.model.positionedLeading = 400 - controller.model.shapeLength / 2
+            controller.apply(showsIdleNotch: false)
+            if active { controller.model.sessions = ["a": [session("a1", .busy)]] }
+            controller.cursorMoved()
+            XCTAssertEqual(controller.model.isExpanded, active)
+            XCTAssertEqual(panel.ignoresMouseEvents, !active)
+            if !active {
+                pointer = CGPoint(x: 400, y: 599)
+                controller.cursorMoved()
+                XCTAssertTrue(controller.model.isExpanded)
+                XCTAssertFalse(panel.ignoresMouseEvents)
+            }
+        }
+    }
+
+    func testDisablingIdleVisibilityEndsCollapsedPreviewAndPreservesPinnedState() {
+        let panel = NotchPanel(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600))
+        let controller = NotchWindowController(panel: panel, mouseLocation: { CGPoint(x: -1000, y: -1000) })
+        defer { controller.stop() }
+        controller.isFullScreenActive = { false }
+        controller.model.edge = .top
+        controller.model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+        controller.model.snapshots = model().snapshots
+        controller.model.isPinned = true
+        controller.previewCollapsedGeometry(editing: true)
+        XCTAssertTrue(controller.isPreviewingCollapsedGeometry)
+        controller.apply(showsIdleNotch: false)
+        XCTAssertFalse(controller.isPreviewingCollapsedGeometry)
+        XCTAssertTrue(controller.model.isExpanded)
+        XCTAssertTrue(controller.model.isPinned)
+    }
+
     func testCustomIdleRobotIsIndependentAndYieldsToActiveProviders() throws {
         let model = model()
         model.sessions = [:]
