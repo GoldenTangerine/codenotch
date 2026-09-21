@@ -974,9 +974,9 @@ final class OllamaRenderTests: XCTestCase {
             model.edge = edge
             XCTAssertGreaterThan(model.cellSpacing, 0)
             for index in model.snapshots.indices {
-                let centre = model.slack + model.ringCenter(index: index)
-                XCTAssertEqual(controller.cellIndex(along: centre), index)
-                XCTAssertEqual(controller.cellIndex(along: centre + model.cellPitch / 2 - 0.01), index)
+                let rect = controller.cellRect(index: index)
+                XCTAssertEqual(controller.cellIndex(at: CGPoint(x: rect.midX, y: rect.midY)), index)
+                XCTAssertEqual(controller.cellIndex(at: CGPoint(x: rect.midX, y: rect.maxY - 0.01)), index)
             }
             for index in [3, 5] {
                 model.hoveredIndex = index

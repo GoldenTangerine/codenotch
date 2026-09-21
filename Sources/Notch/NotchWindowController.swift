@@ -149,7 +149,7 @@ final class NotchWindowController {
     /// The standing visibility choice, so a peek never overrides Hidden.
     private var visibility: NotchVisibility = .onHover
     /// Whether we have pushed the pointing hand onto the cursor stack.
-    private var isPointing = false
+    private(set) var isPointing = false
     /// Option-drag moves the whole notch under the pointer. Hovering rings
     /// while that happens is accidental — the pointer necessarily crosses
     /// them as the panel follows it — so cursor tracking is suspended until
@@ -815,9 +815,10 @@ final class NotchWindowController {
         setExpanded(wantsExpansion && !waiting,
                     ignoreAlwaysOn: foldsForFullScreen && isFullScreenActive())
 
+        let providerTarget = model.isExpanded ? cellIndex(at: local) : nil
         var target: Int?
-        if model.isExpanded, notchRect.contains(local) {
-            target = cellIndex(along: placement.along(of: local))
+        if let providerTarget {
+            target = providerTarget
         } else if model.isExpanded, let current = model.hoveredIndex,
                   let card = tooltipRect(index: current),
                   card.contains(local) {
@@ -833,7 +834,7 @@ final class NotchWindowController {
             model.isHoveringMove = overMove
         }
         setPointing(
-            Self.wantsPointingHand(isExpanded: model.isExpanded, cellIndex: target)
+            Self.wantsPointingHand(isExpanded: model.isExpanded, cellIndex: providerTarget)
                 || overHandle || overMove
         )
 
@@ -997,7 +998,7 @@ final class NotchWindowController {
             return
         }
         if notchRect.contains(local),
-           let index = cellIndex(along: placement.along(of: local)),
+           let index = cellIndex(at: local),
            model.snapshots.indices.contains(index) {
             if let onRefreshProvider {
                 let snapshot = model.snapshots[index]
@@ -1417,13 +1418,35 @@ final class NotchWindowController {
         onToggleKeepOpen?()
     }
 
-    func cellIndex(along: CGFloat) -> Int? {
-        let pitch = model.cellPitch * model.sizeScale
-        for index in model.visibleIndices {
-            let centre = model.slack + model.ringCenter(index: index) * model.sizeScale
-            if abs(along - centre) <= pitch / 2 { return index }
+    func cellRect(index: Int) -> CGRect {
+        let diameter = model.cellRingDiameter
+        let size = NotchLayout.cellSize(ringDiameter: diameter,
+                                       isLocal: model.snapshots[index].localModel != nil)
+        let labelExtent = size.height - diameter
+        let scale = model.sizeScale
+        // 标签始终位于圆环下方；侧边排列的 ringCenter 不是整个单元格的中心。
+        let centre = placement.point(
+            along: model.slack + (model.ringCenter(index: index)
+                + (model.edge.isVertical ? labelExtent / 2 : 0)) * scale,
+            across: (model.contentInset + model.ringEdgePadding + model.ringEdgeOffset
+                + model.baseBodyDepth / 2) * scale - SideNotchShape.bezelBleed)
+        var rect = CGRect(x: centre.x - size.width * scale / 2,
+                          y: centre.y - size.height * scale / 2,
+                          width: size.width * scale, height: size.height * scale)
+        // 普通外周环超出布局框，命中范围也要包含可见线条。
+        if !model.independentInnerRing, model.weeklyRing == .outside,
+           model.snapshots[index].secondaryWindow != nil {
+            let radius = (NotchLayout.weeklyOutsideRadius + NotchLayout.weeklyRingStroke / 2) * scale
+            let ringCentre = CGPoint(x: centre.x, y: centre.y - labelExtent * scale / 2)
+            rect = rect.union(CGRect(x: ringCentre.x - radius, y: ringCentre.y - radius,
+                                     width: 2 * radius, height: 2 * radius))
         }
-        return nil
+        return rect.intersection(notchRect)
+    }
+
+    func cellIndex(at point: CGPoint) -> Int? {
+        // SwiftUI 按供应商顺序绘制，后绘制的外周环在重叠处应优先接收鼠标。
+        model.visibleIndices.reversed().first { cellRect(index: $0).contains(point) }
     }
 
     // MARK: - Position editing

@@ -256,6 +256,15 @@ enum NotchLayout {
     /// Ring plus its percent label.
     static var cellExtent: CGFloat { ringDiameter + ringLabelGap + percentLineHeight }
 
+    static func cellLabelWidth(isLocal: Bool) -> CGFloat {
+        ringDiameter + (isLocal ? 0 : 4)
+    }
+
+    static func cellSize(ringDiameter: CGFloat, isLocal: Bool) -> CGSize {
+        CGSize(width: max(ringDiameter, cellLabelWidth(isLocal: isLocal)),
+               height: ringDiameter + ringLabelGap + percentLineHeight)
+    }
+
     /// What one cell claims along the stack.
     ///
     /// Down a side edge, the ring *and the label underneath it*: both are on

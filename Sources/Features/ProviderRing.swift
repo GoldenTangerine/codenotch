@@ -378,6 +378,8 @@ struct ProviderCell: View {
         let reading = quotaReading
         let cellDiameter = max(cellRingDiameter, NotchLayout.ringDiameter
             + (independentInnerRing ? NotchLayout.independentRingGrowth : 0))
+        let isLocal = snapshot.localModel != nil
+        let cellSize = NotchLayout.cellSize(ringDiameter: cellDiameter, isLocal: isLocal)
         let readingText = makeReadingText(reading)
         let ringText = makeRingText(reading)
         VStack(spacing: NotchLayout.ringLabelGap) {
@@ -407,12 +409,12 @@ struct ProviderCell: View {
                 .lineLimit(1)
                 .minimumScaleFactor(snapshot.localModel == nil ? 0.65 : 0.5)
                 .fixedSize(horizontal: false, vertical: false)
-                .frame(width: snapshot.localModel == nil ? NotchLayout.ringDiameter + 4 : NotchLayout.ringDiameter,
+                .frame(width: NotchLayout.cellLabelWidth(isLocal: isLocal),
                        height: NotchLayout.percentLineHeight)
                 .contentTransition(.numericText())
                 .animation(NotchMotion.reading, value: readingText)
         }
-        .frame(height: cellDiameter + NotchLayout.ringLabelGap + NotchLayout.percentLineHeight)
+        .frame(width: cellSize.width, height: cellSize.height)
         .help(ringText ?? snapshot.headline?.summary ?? snapshot.statusMessage ?? snapshot.displayName)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(makeAccessibilityText(ringText: ringText, readingText: readingText))
