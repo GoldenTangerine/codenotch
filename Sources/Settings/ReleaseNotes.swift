@@ -40,6 +40,17 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.57",
+            headline: L10n.t("Active providers beside the hardware notch"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Rotate provider robots or icons and show the active provider count while collapsed")),
+                ReleaseNote.Change(title: L10n.t("Adjust and save the width on each side of the notch")),
+                ReleaseNote.Change(title: L10n.t("Resume robot animations between rotations and release finished providers from memory")),
+                ReleaseNote.Change(title: L10n.t("Keep active calls counted after a session completes and make both side indicators respond to hover")),
+                ReleaseNote.Change(title: L10n.t("Reuse activity calculations and reduce unnecessary interface updates"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.52",
             headline: L10n.t("Complete robot routines and reliable sleep"),
             changes: [

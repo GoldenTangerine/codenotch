@@ -69,13 +69,15 @@ enum NotchGeometry {
         restingLength: CGFloat,
         restingDepth: CGFloat,
         hardwareNotch: HardwareNotch?,
-        triggerHeight: Int
+        triggerHeight: Int,
+        activityWidth: CGFloat? = nil
     ) -> CGRect {
         if placement.edge == .top, let hardwareNotch {
+            let width = max(hardwareNotch.width, activityWidth ?? hardwareNotch.width)
             return placement.rect(
-                along: slack + (shapeLength - hardwareNotch.width) / 2,
+                along: slack + (shapeLength - width) / 2,
                 across: 0,
-                length: hardwareNotch.width,
+                length: width,
                 depth: max(1, hardwareNotch.height + CGFloat(NotchTriggerHeight.clamp(triggerHeight)))
             )
         }

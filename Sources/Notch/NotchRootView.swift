@@ -223,7 +223,7 @@ struct NotchRootView: View {
                 // No `else`: the solid fill below is mounted in every style anyway,
                 // and below macOS 26 `glassy` is always false, so it is simply left
                 // at full opacity.
-                shape.fill(Palette.notch).opacity(glassy ? 0 : 1)
+                shape.fill(Palette.notch).opacity(glassy && model.isExpanded ? 0 : 1)
 
                 // The band at the hardware's height is the strip beside a hole in
                 // the screen. Glass there makes the cutout read as a black
@@ -259,6 +259,12 @@ struct NotchRootView: View {
             // ring inside the hole in the display.
             .overlay(alignment: contentAlignment) {
                 cells.padding(bezelSide, model.contentInset)
+            }
+            .overlay {
+                if model.showsCollapsedActivity, let provider = model.collapsedProvider,
+                   let hardware = model.hardwareNotch {
+                    collapsedActivity(provider, hardware: hardware)
+                }
             }
             // Masked by the notch itself, not by its bounding box. Without this
             // the cells simply sit on top of a shrinking shape and appear to
@@ -327,6 +333,39 @@ struct NotchRootView: View {
     /// notch is not visibly shallower for it, large enough to swallow a
     /// rounding error at any size.
     private static let bezelBleed = SideNotchShape.bezelBleed
+
+    private func collapsedActivity(_ provider: NotchViewModel.CollapsedProvider,
+                                   hardware: HardwareNotch) -> some View {
+        let scale = model.sizeScale
+        let side = model.resolvedCollapsedSideWidth / scale
+        let markSize = max(0, min(24, hardware.height - 8, model.resolvedCollapsedSideWidth - 16)) / scale
+        return HStack(spacing: 0) {
+            Group {
+                if let bot = model.botPresentation(for: provider.snapshot,
+                                                    activityOverride: provider.activity, active: true) {
+                    BotMarkView(presentation: bot, playbackStore: model.collapsedPlayback)
+                        .frame(width: markSize, height: markSize)
+                } else {
+                    QueryIconView(icon: provider.snapshot.icon, fallback: provider.snapshot.glyph,
+                                  size: markSize, onDarkBackground: true)
+                }
+            }
+            .frame(width: side)
+            .id(provider.snapshot.providerID)
+            Color.clear.frame(width: hardware.width / scale)
+            Text("\(model.collapsedProviders.count)")
+                .font(.system(size: 14 / scale, weight: .semibold, design: .rounded).monospacedDigit())
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .frame(width: side)
+        }
+        .foregroundStyle(.white)
+        .frame(height: hardware.height / scale)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text(String(format: L10n.t("%d active providers"), model.collapsedProviders.count)))
+        .accessibilityValue(Text(provider.snapshot.displayName + ", " + provider.activity.label))
+    }
 
     /// The cells fade and lift into place a beat after the shape starts opening,
     /// each trailing the one before it. Folded shut they are not just hidden but

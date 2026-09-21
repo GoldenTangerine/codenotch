@@ -803,6 +803,20 @@ struct SettingsView: View {
 
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
+                        Text(L10n.t("Notch side width"))
+                        Spacer()
+                        Text(String(format: "%.0f pt", preferences.collapsedSideWidth)).monospacedDigit()
+                        Button(L10n.t("Reset")) {
+                            preferences.collapsedSideWidth = Preferences.defaultCollapsedSideWidth
+                        }
+                        .accessibilityLabel(Text(L10n.t("Reset notch side width")))
+                    }
+                    Slider(value: $preferences.collapsedSideWidth, in: Preferences.collapsedSideWidthRange, step: 1)
+                        .accessibilityLabel(Text(L10n.t("Notch side width")))
+                        .accessibilityValue(Text(String(format: "%.0f pt", preferences.collapsedSideWidth)))
+                    Text(L10n.t("Space on each side of the hardware notch for active providers when collapsed."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    HStack {
                         Text(L10n.t("Top avoidance height"))
                         Spacer()
                         Text(String(format: "%+.0f pt", preferences.topAvoidanceAdjustment)).monospacedDigit()

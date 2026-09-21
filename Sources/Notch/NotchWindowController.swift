@@ -99,6 +99,13 @@ final class NotchWindowController {
     private var clearHoverWork: DispatchWorkItem?
     private var clockTimer: Timer?
     private var cursorTimer: Timer?
+    private var collapsedActivitySleeping = false
+
+    private func updateCollapsedActivity() {
+        let visible = !collapsedActivitySleeping && panel?.isVisible == true
+            && panel?.occlusionState.contains(.visible) == true
+        model.updateCollapsedRotation(at: Date(), visible: visible)
+    }
     private var hoverDelay: TimeInterval = 0
     private var unfoldWork: DispatchWorkItem?
     private var hoverDelayElapsed = false
@@ -297,6 +304,43 @@ final class NotchWindowController {
             }
             .store(in: &cancellables)
 
+        // 活动来源不止会话；在 willSet 之后统一读取本地模型、联动请求和供应商列表。
+        Publishers.MergeMany([
+            model.$snapshots.map { _ in () }.eraseToAnyPublisher(),
+            model.$sessions.map { _ in () }.eraseToAnyPublisher(),
+            model.$thinkingModels.map { _ in () }.eraseToAnyPublisher(),
+            model.$localActivities.map { _ in () }.eraseToAnyPublisher(),
+            model.$activitySourceIDs.map { _ in () }.eraseToAnyPublisher(),
+            model.$isExpanded.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            model.$hardwareNotch.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            model.$collapsedSideWidth.removeDuplicates().map { _ in () }.eraseToAnyPublisher()
+        ])
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateCollapsedActivity()
+                self?.updateInteractiveRects()
+            }
+            .store(in: &cancellables)
+
+        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification,
+                     NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+            NSWorkspace.shared.notificationCenter.publisher(for: name)
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    self?.collapsedActivitySleeping = name == NSWorkspace.willSleepNotification
+                        || name == NSWorkspace.screensDidSleepNotification
+                    self?.updateCollapsedActivity()
+                }
+                .store(in: &cancellables)
+        }
+        NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] notification in
+                guard let self, notification.object as? NSWindow === self.panel else { return }
+                self.updateCollapsedActivity()
+            }
+            .store(in: &cancellables)
+
         model.$activeResetAlert
             .sink { [weak self] _ in
                 MainActor.assumeIsolated { self?.updateInteractiveRects() }
@@ -352,6 +396,8 @@ final class NotchWindowController {
     }
 
     func stop() {
+        model.updateCollapsedRotation(at: Date(), visible: false)
+        model.collapsedPlayback.retainProviders([])
         cancelPendingUnfold()
         isEditingGeometry = false
         pendingRelocate?.cancel()
@@ -589,6 +635,15 @@ final class NotchWindowController {
         )
     }
 
+    private var collapsedSideRects: [CGRect] {
+        guard model.hasCollapsedActivity, let hardware = model.hardwareNotch else { return [] }
+        let width = model.resolvedCollapsedSideWidth
+        let center = model.slack + model.shapeLength * model.sizeScale / 2
+        return [center - hardware.width / 2 - width, center + hardware.width / 2].map {
+            placement.rect(along: $0, across: 0, length: width, depth: hardware.height)
+        }
+    }
+
     func apply(notchTriggerHeight: Int) {
         cancelPendingUnfold()
         model.notchTriggerHeight = NotchTriggerHeight.clamp(notchTriggerHeight)
@@ -635,10 +690,11 @@ final class NotchWindowController {
     /// hole — which matters far more folded than open, since the point of
     /// folding away is to stop being in the way.
     private var liveRects: [CGRect] {
-        guard model.isExpanded else { return [pillRect] }
+        guard model.isExpanded else { return [pillRect] + collapsedSideRects }
         // The orb hangs below the shape, so the live region is both together.
         // Keep separated targets separate: their enclosing rectangle includes empty desktop.
-        return [notchRect] + handleRects
+        // 活动提示可能宽于展开面板；保留唤醒区域，防止静止指针反复开合。
+        return [notchRect] + collapsedSideRects + handleRects
     }
 
     private func isInLiveRegion(_ point: CGPoint) -> Bool {
@@ -763,7 +819,10 @@ final class NotchWindowController {
             return nil
         }) { mouseMonitors.append(monitor) }
         let poll = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.cursorMoved() }
+            MainActor.assumeIsolated {
+                self?.updateCollapsedActivity()
+                self?.cursorMoved()
+            }
         }
         RunLoop.main.add(poll, forMode: .common)
         cursorTimer = poll
@@ -1077,6 +1136,12 @@ final class NotchWindowController {
             || model.ringEdgeAdjustment != ringEdgeAdjustment else { return }
         model.topAvoidanceAdjustment = topAvoidanceAdjustment
         model.ringEdgeAdjustment = ringEdgeAdjustment
+        coalesceRelocate()
+    }
+
+    func apply(collapsedSideWidth: CGFloat) {
+        guard model.collapsedSideWidth != collapsedSideWidth else { return }
+        model.collapsedSideWidth = collapsedSideWidth
         coalesceRelocate()
     }
 

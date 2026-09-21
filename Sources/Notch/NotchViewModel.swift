@@ -12,7 +12,9 @@ import Combine
 
 @MainActor
 final class NotchViewModel: ObservableObject {
-    @Published var botAppearances: [String: BotAppearance] = [:]
+    @Published var botAppearances: [String: BotAppearance] = [:] {
+        didSet { collapsedPlayback.retainProviders(Set(botAppearances.filter { $0.value.enabled }.keys)) }
+    }
     @Published var botEvents: [String: BotAnimationEvent] = [:]
     @Published var botLastActivity: Date?
     @Published var botGloballyBusy = false
@@ -36,10 +38,11 @@ final class NotchViewModel: ObservableObject {
         return path
     }
 
-    func botPresentation(for snapshot: ProviderSnapshot) -> BotPresentation? {
+    func botPresentation(for snapshot: ProviderSnapshot, activityOverride: ActivitySummary? = nil,
+                         active: Bool? = nil) -> BotPresentation? {
         let appearance = botAppearances[snapshot.providerID] ?? BotAppearance()
         guard appearance.enabled, BotMarkLibrary.available != nil else { return nil }
-        let activity = activity(for: snapshot)?.state
+        let activity = (activityOverride ?? activity(for: snapshot))?.state
         let quota = IndependentQuotaRing.originalQuotas(in: snapshot)
         let spent = snapshot.block != nil || (quota.usedFraction ?? 0) >= 1
             || snapshot.linked?.provider.effectiveQuotaState == "exhausted"
@@ -48,7 +51,7 @@ final class NotchViewModel: ObservableObject {
             appearance: appearance,
             mood: BotPresentation.mood(activity: activity, refreshing: isRefreshing(snapshot),
                                       spent: spent, hasReading: snapshot.hasReading),
-            waiting: activity == .waiting, active: isExpanded,
+            waiting: activity == .waiting, active: active ?? isExpanded,
             gazeBias: 7,
             gaze: edge == .left ? .right : edge == .right ? .left : .ahead,
             pointerRegion: botPointerRegion(),
@@ -59,7 +62,7 @@ final class NotchViewModel: ObservableObject {
     // 两端入口统一移入右键菜单，绘制和热区必须同时关闭。
     // 保留默认隐藏，用户可独立恢复设置入口。
     @Published var showsSettingsHandle = false
-    @Published var snapshots: [ProviderSnapshot] = []
+    @Published var snapshots: [ProviderSnapshot] = [] { didSet { invalidateCollapsedProviders() } }
     @Published var tooltipHeightMode: TooltipHeightMode = .standard
     @Published var fullTooltipHeightLimit: CGFloat = NotchLayout.defaultMaxCardHeight
     @Published private(set) var tooltipHeights: [String: CGFloat] = [:]
@@ -155,18 +158,18 @@ final class NotchViewModel: ObservableObject {
         snapshot.providerID == ollamaSource ? OllamaThinkingStream.modelKey(model.name) : snapshot.id
     }
 
-    @Published var thinkingModels: [String: Date] = [:]
+    @Published var thinkingModels: [String: Date] = [:] { didSet { invalidateCollapsedProviders() } }
     /// What each local model instance is doing, keyed by cell id. Ollama's
     /// thinking relay reports through `thinkingModels`; LM Studio's state
     /// poll reports here, phase and queue included.
-    @Published var localActivities: [String: LocalModelActivity] = [:]
+    @Published var localActivities: [String: LocalModelActivity] = [:] { didSet { invalidateCollapsedProviders() } }
 
     /// Live agent sessions, keyed by the provider they belong to. They surface
     /// inside that provider's own ring rather than as a cell of their own — one
     /// ring per provider, so nothing in the notch looks like a ring without
     /// being one.
-    @Published var sessions: [String: [AgentSession]] = [:]
-    @Published var activitySourceIDs: [String: String]?
+    @Published var sessions: [String: [AgentSession]] = [:] { didSet { invalidateCollapsedProviders() } }
+    @Published var activitySourceIDs: [String: String]? { didSet { invalidateCollapsedProviders() } }
     @Published var scrollStart = 0
 
     func visibleCount(_ count: Int) -> Int {
@@ -317,6 +320,81 @@ final class NotchViewModel: ObservableObject {
     var baseBodyDepth: CGFloat { NotchLayout.bodyDepth(for: edge, ringGrowth: ringGrowth) }
     @Published var topAvoidanceAdjustment: CGFloat = 0
     @Published var ringEdgeAdjustment: CGFloat = 0
+    @Published var collapsedSideWidth: CGFloat = 64
+    @Published private(set) var collapsedProviderID: String?
+    private var collapsedRotationStarted: Date?
+    let collapsedPlayback = BotPlaybackStore()
+    private var cachedCollapsedProviders: [CollapsedProvider]?
+    private(set) var collapsedAggregationCount = 0
+
+    private func invalidateCollapsedProviders() {
+        cachedCollapsedProviders = nil
+    }
+
+    struct CollapsedProvider {
+        let snapshot: ProviderSnapshot
+        var activity: ActivitySummary
+    }
+
+    var collapsedProviders: [CollapsedProvider] {
+        if let cachedCollapsedProviders { return cachedCollapsedProviders }
+        collapsedAggregationCount += 1
+        var result: [CollapsedProvider] = []
+        var indices: [String: Int] = [:]
+        for snapshot in snapshots {
+            guard let activity = activity(for: snapshot),
+                  activity.state == .working || activity.state == .waiting else { continue }
+            if let index = indices[snapshot.providerID] {
+                if activity.state == .waiting { result[index].activity = activity }
+            } else {
+                indices[snapshot.providerID] = result.count
+                result.append(CollapsedProvider(snapshot: snapshot, activity: activity))
+            }
+        }
+        cachedCollapsedProviders = result
+        collapsedPlayback.retainProviders(Set(indices.keys))
+        return result
+    }
+
+    var hasCollapsedActivity: Bool {
+        edge == .top && hardwareNotch != nil && !collapsedProviders.isEmpty
+    }
+
+    var showsCollapsedActivity: Bool { !isExpanded && hasCollapsedActivity }
+
+    var collapsedProvider: CollapsedProvider? {
+        let providers = collapsedProviders
+        return providers.first { $0.snapshot.providerID == collapsedProviderID } ?? providers.first
+    }
+
+    // 复用窗口的低频轮询；隐藏或展开时清除截止时间，恢复后重新计满三秒。
+    func updateCollapsedRotation(at date: Date, visible: Bool) {
+        let providers = collapsedProviders
+        if !providers.contains(where: { $0.snapshot.providerID == collapsedProviderID }) {
+            let next = providers.first?.snapshot.providerID
+            if collapsedProviderID != next { collapsedProviderID = next }
+            collapsedRotationStarted = nil
+        }
+        guard visible, showsCollapsedActivity, providers.count > 1 else {
+            collapsedRotationStarted = nil
+            return
+        }
+        guard let started = collapsedRotationStarted else {
+            collapsedRotationStarted = date
+            return
+        }
+        guard date.timeIntervalSince(started) >= 3 else { return }
+        let index = providers.firstIndex { $0.snapshot.providerID == collapsedProviderID } ?? 0
+        collapsedProviderID = providers[(index + 1) % providers.count].snapshot.providerID
+        collapsedRotationStarted = date
+    }
+
+    var resolvedCollapsedSideWidth: CGFloat {
+        guard edge == .top, let hardwareNotch else { return 0 }
+        let requested = CGFloat(Preferences.normalizedCollapsedSideWidth(Double(collapsedSideWidth)))
+        guard screenSize.width > 0 else { return requested }
+        return min(requested, max(0, (screenSize.width - hardwareNotch.width) / 2))
+    }
     var ringEdgePadding: CGFloat { max(0, ringEdgeAdjustment) / sizeScale }
     var ringEdgeOffset: CGFloat { min(0, ringEdgeAdjustment) / sizeScale }
     var bodyDepth: CGFloat { baseBodyDepth + ringEdgePadding }
@@ -672,7 +750,7 @@ final class NotchViewModel: ObservableObject {
     func activity(for providerID: String) -> ActivitySummary? {
         if let live = sessions[providerID], !live.isEmpty {
             let summary = ActivitySummary(sessions: live)
-            if summary?.state != .idle { return summary }
+            if summary?.state == .working || summary?.state == .waiting { return summary }
             if let linked = snapshots.first(where: { $0.id == providerID })?.linked,
                linked.provider.activeRequests > 0 { return ActivitySummary(state: .working) }
             return summary
@@ -723,9 +801,12 @@ final class NotchViewModel: ObservableObject {
     }
 
     func slack(cellCount: Int) -> CGFloat {
-        NotchLayout.slack(for: edge,
+        let standard = NotchLayout.slack(for: edge,
                           maxCardHeight: maxCardHeight(cellCount: cellCount),
                           notchScale: sizeScale)
+        guard edge == .top, let hardwareNotch else { return standard }
+        let restingWidth = hardwareNotch.width + 2 * resolvedCollapsedSideWidth
+        return max(standard, (restingWidth - shapeLength(cellCount: cellCount) * sizeScale) / 2 + 8)
     }
 
     /// How many sessions a tooltip may list here before it has to summarise
@@ -818,19 +899,22 @@ final class NotchViewModel: ObservableObject {
     /// for it makes the notch itself grow.
     var notchLength: CGFloat {
         if isExpanded { return shapeLength }
-        return hardwareNotch?.width ?? NotchLayout.pillHeight
+        return restingLength
     }
 
     /// And across it.
     var notchDepth: CGFloat {
         if isExpanded { return contentInset + bodyDepth }
-        return hardwareNotch?.height ?? NotchLayout.pillWidth
+        return restingDepth
     }
 
     /// What the notch folds away to, whether or not it is open right now —
     /// the hit region has to know that while the notch is still open.
-    var restingLength: CGFloat { hardwareNotch?.width ?? NotchLayout.pillHeight }
-    var restingDepth: CGFloat { hardwareNotch?.height ?? NotchLayout.pillWidth }
+    var restingLength: CGFloat {
+        guard let hardwareNotch else { return NotchLayout.pillHeight }
+        return (hardwareNotch.width + (hasCollapsedActivity ? 2 * resolvedCollapsedSideWidth : 0)) / sizeScale
+    }
+    var restingDepth: CGFloat { hardwareNotch.map { $0.height / sizeScale } ?? NotchLayout.pillWidth }
 
     /// What wakes the folded notch, in panel points: the resting shape and a
     /// band around it, or the resting shape alone.
@@ -948,7 +1032,7 @@ final class NotchViewModel: ObservableObject {
         return NotchPlacement.panelSize(
             edge: edge,
             length: shapeLength(cellCount: cellCount) * sizeScale
-                + 2 * NotchLayout.slack(for: edge, maxCardHeight: card, notchScale: sizeScale),
+                + 2 * slack(cellCount: cellCount),
             depth: (contentInset + bodyDepth) * sizeScale
                 + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card)
         )

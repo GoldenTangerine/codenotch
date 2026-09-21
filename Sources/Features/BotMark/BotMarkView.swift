@@ -13,15 +13,37 @@ import SwiftUI
 
 struct BotMarkView: NSViewRepresentable {
     var presentation: BotPresentation
+    var playbackStore: BotPlaybackStore? = nil
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeNSView(context: Context) -> BotDrawingView { BotDrawingView() }
 
     func updateNSView(_ view: BotDrawingView, context: Context) {
-        view.configure(presentation, reduceMotion: reduceMotion)
+        view.configure(presentation, reduceMotion: reduceMotion, playbackStore: playbackStore)
     }
 
     static func dismantleNSView(_ view: BotDrawingView, coordinator: ()) { view.detach() }
+}
+
+// 仅缓存活动供应商的引擎，不保留视图、窗口或计时器；轮播离屏期间不推进动画。
+@MainActor
+final class BotPlaybackStore {
+    private var engines: [String: BotMarkEngine] = [:]
+    var count: Int { engines.count }
+
+    func engine(for providerID: String) -> BotMarkEngine {
+        if let engine = engines[providerID] {
+            engine.resumeClock()
+            return engine
+        }
+        let engine = BotMarkEngine()
+        engines[providerID] = engine
+        return engine
+    }
+
+    func retainProviders(_ ids: Set<String>) {
+        engines = engines.filter { ids.contains($0.key) }
+    }
 }
 
 // 一个窗口只有一个时钟；弱引用机器人，最后一个停止后释放显示链接。
@@ -163,12 +185,13 @@ final class BotDrawingView: NSView {
             && !visibleRect.intersection(bounds).isEmpty && engine != nil
     }
 
-    func configure(_ next: BotPresentation, reduceMotion: Bool, now: Date = Date()) {
+    func configure(_ next: BotPresentation, reduceMotion: Bool, now: Date = Date(),
+                   playbackStore: BotPlaybackStore? = nil) {
         guard BotMarkLibrary.available != nil else { return }
         let quietChanged = presentation?.isQuiet(at: lastProgrammeUpdate) != next.isQuiet(at: now)
         let changed = presentation != next || self.reduceMotion != reduceMotion || quietChanged
         if presentation?.id != next.id {
-            engine = BotMarkEngine()
+            engine = playbackStore?.engine(for: next.id) ?? BotMarkEngine()
             displayFrame = nil
             consumedEvent = next.event?.id
         }

@@ -33,6 +33,13 @@ provider details to their content, including every session and available statist
 The bubble scrolls only when its content exceeds the current screen's usable
 height. **Default** preserves the existing compact layout.
 
+When joined to a MacBook's hardware notch, the collapsed bar shows active
+providers on the left and their count on the right, including providers waiting
+for your input. Multiple providers rotate every three seconds. Each uses its
+configured robot, or its provider icon when robots are disabled. Adjust the
+space on each side in **Settings → Appearance → Notch side width**; when all
+providers finish, the bar returns to the hardware notch's original width.
+
 ## Download
 
 Download this fork from [Releases](https://github.com/GoldenTangerine/codenotch/releases/latest).

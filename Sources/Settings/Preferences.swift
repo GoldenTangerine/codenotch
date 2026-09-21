@@ -221,6 +221,19 @@ final class Preferences: ObservableObject {
     static let topAvoidanceRange: ClosedRange<Double> = -60...120
     @Published var isEditingNotchGeometry = false
     static let ringEdgeRange: ClosedRange<Double> = -40...80
+    static let collapsedSideWidthRange: ClosedRange<Double> = 40...160
+    static let defaultCollapsedSideWidth: Double = 64
+    static func normalizedCollapsedSideWidth(_ value: Double) -> Double {
+        value.isFinite ? min(max(value, collapsedSideWidthRange.lowerBound), collapsedSideWidthRange.upperBound)
+            : defaultCollapsedSideWidth
+    }
+    @Published var collapsedSideWidth: Double {
+        didSet {
+            let clamped = Self.normalizedCollapsedSideWidth(collapsedSideWidth)
+            if collapsedSideWidth != clamped { collapsedSideWidth = clamped }
+            defaults.set(clamped, forKey: "collapsedSideWidth")
+        }
+    }
     static func geometryValue(_ value: Double, in range: ClosedRange<Double>) -> Double {
         value.isFinite ? min(max(value, range.lowerBound), range.upperBound) : 0
     }
@@ -861,6 +874,8 @@ final class Preferences: ObservableObject {
         self.usesCustomNotchScale = defaults.bool(forKey: Keys.usesCustomSize)
         self.topAvoidanceAdjustment = Self.geometryValue(defaults.double(forKey: "topAvoidanceAdjustment"), in: Self.topAvoidanceRange)
         self.ringEdgeAdjustment = Self.geometryValue(defaults.double(forKey: "ringEdgeAdjustment"), in: Self.ringEdgeRange)
+        self.collapsedSideWidth = Self.normalizedCollapsedSideWidth(
+            (defaults.object(forKey: "collapsedSideWidth") as? Double) ?? Self.defaultCollapsedSideWidth)
         let stored = defaults.object(forKey: Keys.customSize) as? Double
         self.customNotchScale = stored.map {
             min(max($0, Self.customScaleRange.lowerBound), Self.customScaleRange.upperBound)

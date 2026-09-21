@@ -1,6 +1,116 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Active providers beside the hardware notch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "硬件刘海两侧显示活动供应商"
+          }
+        }
+      }
+    },
+    "Rotate provider robots or icons and show the active provider count while collapsed": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收起时轮播供应商机器人或图标，并显示活动供应商数量"
+          }
+        }
+      }
+    },
+    "Adjust and save the width on each side of the notch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "支持调节并保存刘海两侧宽度"
+          }
+        }
+      }
+    },
+    "Resume robot animations between rotations and release finished providers from memory": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "轮播时继续机器人动画，任务结束后释放对应缓存"
+          }
+        }
+      }
+    },
+    "Keep active calls counted after a session completes and make both side indicators respond to hover": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "会话完成后仍准确统计进行中的调用，两侧提示均可悬停展开"
+          }
+        }
+      }
+    },
+    "Reuse activity calculations and reduce unnecessary interface updates": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复用活动计算结果，减少不必要的界面更新"
+          }
+        }
+      }
+    },
+    "Notch side width": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刘海两侧宽度"
+          }
+        }
+      }
+    },
+    "Reset notch side width": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置刘海两侧宽度"
+          }
+        }
+      }
+    },
+    "Space on each side of the hardware notch for active providers when collapsed.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收起时，在硬件刘海两侧为活动供应商预留的宽度。"
+          }
+        }
+      }
+    },
+    "%d active providers": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d 个活动供应商"
+          }
+        }
+      }
+    },
     "Complete robot routines and reliable sleep": {
       "extractionState": "manual",
       "localizations": {

@@ -105,6 +105,7 @@ final class NotchFleet {
     private var independentInnerRing = false
     private var topAvoidanceAdjustment: CGFloat = 0
     private var ringEdgeAdjustment: CGFloat = 0
+    private var collapsedSideWidth: CGFloat = 64
     private var isEditingGeometry = false
     private var codeSwitchQuotaRatiosEnabled = false
     private var showsMoveHandle = false
@@ -305,6 +306,13 @@ final class NotchFleet {
         self.ringEdgeAdjustment = CGFloat(Preferences.geometryValue(Double(ringEdgeAdjustment), in: Preferences.ringEdgeRange))
         for controller in controllers.values {
             controller.apply(topAvoidanceAdjustment: self.topAvoidanceAdjustment, ringEdgeAdjustment: self.ringEdgeAdjustment)
+        }
+    }
+
+    func apply(collapsedSideWidth: CGFloat) {
+        self.collapsedSideWidth = CGFloat(Preferences.normalizedCollapsedSideWidth(Double(collapsedSideWidth)))
+        for controller in controllers.values {
+            controller.apply(collapsedSideWidth: self.collapsedSideWidth)
         }
     }
 
@@ -586,6 +594,7 @@ final class NotchFleet {
         controller.model.sizeScale = scale
         controller.model.topAvoidanceAdjustment = topAvoidanceAdjustment
         controller.model.ringEdgeAdjustment = ringEdgeAdjustment
+        controller.model.collapsedSideWidth = collapsedSideWidth
         controller.model.resetTimeFormat = resetTimeFormat
         controller.model.botAppearances = botAppearances
         controller.model.botLastActivity = botLastActivity

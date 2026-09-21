@@ -470,6 +470,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 .store(in: &cancellables)
 
+            preferences.$collapsedSideWidth.removeDuplicates()
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(collapsedSideWidth: CGFloat($0)) }
+                .store(in: &cancellables)
+
             preferences.$isEditingNotchGeometry.removeDuplicates().dropFirst()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak fleet] editing in fleet?.previewGeometry(editing: editing) }
@@ -903,6 +908,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(scale: preferences.notchScale)
         fleet.apply(topAvoidanceAdjustment: CGFloat(preferences.topAvoidanceAdjustment),
                     ringEdgeAdjustment: CGFloat(preferences.ringEdgeAdjustment))
+        fleet.apply(collapsedSideWidth: CGFloat(preferences.collapsedSideWidth))
         fleet.apply(resetTimeFormat: preferences.resetTimeFormat)
         fleet.apply(tooltipHeightMode: preferences.tooltipHeightMode)
         Self.bindNotchAccentColor(preferences, to: fleet)

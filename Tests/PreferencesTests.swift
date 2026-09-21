@@ -14,6 +14,21 @@ import XCTest
 
 @MainActor
 final class AccentColorPreferencesTests: XCTestCase {
+    func testCollapsedSideWidthDefaultsPersistsClampsAndResets() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.collapsedSideWidth, 64)
+        for (input, expected) in [(90.0, 90.0), (0, 40), (300, 160), (.nan, 64), (.infinity, 64)] {
+            preferences.collapsedSideWidth = input
+            XCTAssertEqual(preferences.collapsedSideWidth, expected)
+            XCTAssertEqual(Preferences(defaults: defaults).collapsedSideWidth, expected)
+        }
+        preferences.collapsedSideWidth = Preferences.defaultCollapsedSideWidth
+        XCTAssertEqual(Preferences(defaults: defaults).collapsedSideWidth, 64)
+        defaults.set(-10.0, forKey: "collapsedSideWidth")
+        XCTAssertEqual(Preferences(defaults: defaults).collapsedSideWidth, 40)
+    }
+
     func testHoverDelayDefaultsPersistsAndNormalizes() {
         let defaults = makeDefaults()
         let preferences = Preferences(defaults: defaults)
