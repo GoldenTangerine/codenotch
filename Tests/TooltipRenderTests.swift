@@ -18,6 +18,86 @@ import SwiftUI
 /// `TOOLTIP_RENDER_PATH` and the frame is written there.
 @MainActor
 final class TooltipRenderTests: XCTestCase {
+    func testStandaloneTooltipsResolveTheirOwnSecondaryInk() throws {
+        let provider = CodeSwitchProvider(providerId: "contrast", providerName: "Supplier", icon: "openai",
+            activeRequests: 0, status: "enabled", loading: true, updatedAt: 0, quotas: [], stats: nil)
+        let linked = provider.snapshot(platform: CodeSwitchPlatform(platform: "codex", name: "Codex",
+            icon: "openai", error: false, providers: [provider]))
+        let ordinary = ProviderSnapshot(id: "claude", displayName: "Claude", glyph: .claude,
+            fidelity: .official, status: .error("Secondary status message"), windows: [])
+
+        for snapshot in [ordinary, linked] {
+            func render(_ style: NotchSurfaceStyle, reduced: Bool = false) throws -> NSBitmapImageRep {
+                try contrastBitmap(TooltipCard(snapshot: snapshot, now: Date(timeIntervalSince1970: 1_800_000_000))
+                    .environment(\.notchSurfaceStyle, style)
+                    .environment(\.codenotchReduceTransparency, reduced)
+                    // A stale parent value must not override the card's own surface policy.
+                    .environment(\.tooltipSecondaryInk, Palette.textSecondary))
+            }
+            let solid = try render(.solid)
+            let glass = try render(.glass)
+            XCTAssertEqual(solid.pixelsWide, glass.pixelsWide)
+            XCTAssertEqual(solid.pixelsHigh, glass.pixelsHigh)
+            XCTAssertGreaterThan(try grayPixels(in: glass, level: 194),
+                                 try grayPixels(in: solid, level: 194) + 20,
+                                 "\(snapshot.id): secondary copy did not brighten without NotchRootView")
+            for preserved in [try render(.darkGlass), try render(.glass, reduced: true)] {
+                XCTAssertGreaterThan(try grayPixels(in: glass, level: 194),
+                                     try grayPixels(in: preserved, level: 194) + 20)
+            }
+        }
+    }
+
+    func testDailyBudgetLabelsConsumeTheTooltipInk() throws {
+        let source = CodeSwitchQuota(key: "weekly", label: nil, used: 80, total: 200, unlimited: false,
+            nextReset: nil, active: true, valueMode: "currency", unit: "USD", extra: nil,
+            invalidMessage: nil, displayKind: "progress")
+        let budget = CodeSwitchDailyBudget.Reading(source: source, todayUsed: 10, available: 24,
+            usedFraction: 0.3, sinceObservation: true)
+        func render(_ ink: Color) throws -> NSBitmapImageRep {
+            try contrastBitmap(CodeSwitchDailyBudgetRow(budget: budget)
+                .frame(width: NotchLayout.cardTextWidth)
+                .environment(\.tooltipSecondaryInk, ink))
+        }
+        let original = try render(Palette.textSecondary)
+        let readable = try render(Palette.readableTooltipTextSecondary)
+        XCTAssertGreaterThan(try grayPixels(in: readable, level: 194),
+                             try grayPixels(in: original, level: 194) + 20)
+    }
+
+    private func contrastBitmap<V: View>(_ view: V) throws -> NSBitmapImageRep {
+        try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
+                      "Glass text contrast requires system Reduce Transparency to be off")
+        var bitmap: NSBitmapImageRep?
+        // Pin AppKit too: Palette contains dynamic NSColors, not just SwiftUI colors.
+        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
+            let renderer = ImageRenderer(content: view
+                .environment(\.colorScheme, .dark)
+                .environment(\.codenotchReduceTransparency, false)
+                .environment(\.codenotchHeadlessGlass, true)
+                .padding(20)
+                .background(Color.black))
+            renderer.scale = 3
+            bitmap = renderer.cgImage.map { NSBitmapImageRep(cgImage: $0) }
+        }
+        return try XCTUnwrap(bitmap)
+    }
+
+    private func grayPixels(in bitmap: NSBitmapImageRep, level: Double) throws -> Int {
+        var count = 0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                let color = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB))
+                if abs(color.redComponent * 255 - level) < 2,
+                   abs(color.greenComponent * 255 - level) < 2,
+                   abs(color.blueComponent * 255 - level) < 2 {
+                    count += 1
+                }
+            }
+        }
+        return count
+    }
+
     private func session(_ name: String, _ state: AgentSession.State,
                          minutes: Int) -> AgentSession {
         AgentSession(id: name, name: name, detail: "Terminal · usage-notch",
