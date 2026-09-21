@@ -14,9 +14,10 @@ struct BotAppearanceFields: View {
     let providerID: String
     let icon: ProviderIcon?
     var glyph: ProviderGlyph = .third
+    var showsEnabledToggle = true
 
     var body: some View {
-        Toggle("Show robot", isOn: $appearance.enabled)
+        if showsEnabledToggle { Toggle("Show robot", isOn: $appearance.enabled) }
         if appearance.enabled {
             HStack {
                 Spacer()

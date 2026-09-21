@@ -110,7 +110,7 @@ final class MergedTopNotchTests: XCTestCase {
     /// exists to remove. Matching the notch instead means the app shows nothing
     /// at all at rest, and hovering makes the notch itself grow.
     func testFoldedAwayItIsExactlyTheHardwareNotch() {
-        let m = model(cells: 4)
+        let m = model(cells: 0)
         m.isExpanded = false
         XCTAssertEqual(m.notchLength, realNotch.width, accuracy: 0.001,
                        "the resting shape is not the notch's width")
@@ -152,7 +152,7 @@ final class MergedTopNotchTests: XCTestCase {
     /// centre of the screen. Aiming at that window's close button opened the
     /// notch on top of the button.
     func testWhatWakesItIsExactlyTheHardwareNotch() {
-        let m = model(cells: 4)
+        let m = model(cells: 0)
         m.isExpanded = false
         XCTAssertEqual(m.wakeLength, realNotch.width, accuracy: 0.001,
                        "the wake region is wider than the hardware")

@@ -261,7 +261,7 @@ struct NotchRootView: View {
                 cells.padding(bezelSide, model.contentInset)
             }
             .overlay {
-                if model.showsCollapsedActivity, let provider = model.collapsedProvider,
+                if model.showsCollapsedSummary, let provider = model.collapsedProvider,
                    let hardware = model.hardwareNotch {
                     collapsedActivity(provider, hardware: hardware)
                 }
@@ -338,33 +338,41 @@ struct NotchRootView: View {
                                    hardware: HardwareNotch) -> some View {
         let scale = model.sizeScale
         let side = model.resolvedCollapsedSideWidth / scale
-        let markSize = max(0, min(24, hardware.height - 8, model.resolvedCollapsedSideWidth - 16)) / scale
+        let markSize = model.collapsedMarkSize / scale
+        let inset = model.collapsedMarkInset / scale
+        let height = model.resolvedCollapsedHeight / scale
         return HStack(spacing: 0) {
             Group {
-                if let bot = model.botPresentation(for: provider.snapshot,
-                                                    activityOverride: provider.activity, active: true) {
+                if let bot = model.collapsedBotPresentation(for: provider) {
                     BotMarkView(presentation: bot, playbackStore: model.collapsedPlayback)
                         .frame(width: markSize, height: markSize)
+                        .id(bot.id)
                 } else {
                     QueryIconView(icon: provider.snapshot.icon, fallback: provider.snapshot.glyph,
                                   size: markSize, onDarkBackground: true)
                 }
             }
             .frame(width: side)
-            .id(provider.snapshot.providerID)
+            .offset(x: side / 2 - inset)
+            .id(model.collapsedProviders.isEmpty && model.idleBotAppearance.enabled
+                ? NotchViewModel.idleBotID : provider.snapshot.providerID)
             Color.clear.frame(width: hardware.width / scale)
             Text("\(model.collapsedProviders.count)")
-                .font(.system(size: 14 / scale, weight: .semibold, design: .rounded).monospacedDigit())
+                .font(.system(size: min(14, model.resolvedCollapsedHeight - 6) / scale,
+                              weight: .semibold, design: .rounded).monospacedDigit())
                 .lineLimit(1)
                 .minimumScaleFactor(0.5)
+                .frame(width: max(0, 2 * (inset - 4 / scale)))
                 .frame(width: side)
+                .offset(x: inset - side / 2)
         }
         .foregroundStyle(.white)
-        .frame(height: hardware.height / scale)
+        .frame(height: height)
         .allowsHitTesting(false)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(String(format: L10n.t("%d active providers"), model.collapsedProviders.count)))
-        .accessibilityValue(Text(provider.snapshot.displayName + ", " + provider.activity.label))
+        .accessibilityValue(Text((model.collapsedProviders.isEmpty && model.idleBotAppearance.enabled
+            ? L10n.t("Custom idle robot") : provider.snapshot.displayName) + ", " + provider.activity.label))
     }
 
     /// The cells fade and lift into place a beat after the shape starts opening,

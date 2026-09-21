@@ -102,6 +102,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        preferences.flushIdleBotAppearance()
         NSApp.setActivationPolicy(preferences.appPresence.activationPolicy)
     }
 

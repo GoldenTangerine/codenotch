@@ -15,6 +15,44 @@ import os
 /// What the user has chosen, kept in `UserDefaults`.
 @MainActor
 final class Preferences: ObservableObject {
+    @Published var idleBotAppearance: BotAppearance {
+        didSet {
+            guard oldValue != idleBotAppearance else { return }
+            idleBotSaveTimer?.invalidate()
+            idleBotSaveTimer = nil
+            var previous = oldValue
+            previous.rgb = idleBotAppearance.rgb
+            if previous == idleBotAppearance {
+                // 颜色实时预览，停止拖动后合并保存；闭包不保留偏好对象。
+                let save: @MainActor @Sendable () -> Void = { [defaults, appearance = idleBotAppearance] in
+                    if let data = try? JSONEncoder().encode(appearance) {
+                        defaults.set(data, forKey: "idleBotAppearance")
+                    }
+                }
+                let timer = Timer(timeInterval: 0.25, repeats: false) { _ in
+                    MainActor.assumeIsolated { save() }
+                }
+                idleBotSaveTimer = timer
+                RunLoop.main.add(timer, forMode: .common)
+            } else {
+                persistIdleBotAppearance()
+            }
+        }
+    }
+    private var idleBotSaveTimer: Timer?
+
+    func flushIdleBotAppearance() {
+        let pending = idleBotSaveTimer?.isValid == true
+        idleBotSaveTimer?.invalidate()
+        idleBotSaveTimer = nil
+        if pending { persistIdleBotAppearance() }
+    }
+
+    private func persistIdleBotAppearance() {
+        if let data = try? JSONEncoder().encode(idleBotAppearance) {
+            defaults.set(data, forKey: "idleBotAppearance")
+        }
+    }
     @Published private(set) var botAppearances: [String: BotAppearance] {
         didSet {
             if let data = try? JSONEncoder().encode(botAppearances) {
@@ -223,6 +261,15 @@ final class Preferences: ObservableObject {
     static let ringEdgeRange: ClosedRange<Double> = -40...80
     static let collapsedSideWidthRange: ClosedRange<Double> = 40...160
     static let defaultCollapsedSideWidth: Double = 64
+    static let collapsedHeightRange: ClosedRange<Double> = -20...40
+    @Published var isEditingCollapsedGeometry = false
+    @Published var collapsedHeightAdjustment: Double {
+        didSet {
+            let clamped = Self.geometryValue(collapsedHeightAdjustment, in: Self.collapsedHeightRange)
+            if collapsedHeightAdjustment != clamped { collapsedHeightAdjustment = clamped }
+            defaults.set(clamped, forKey: "collapsedHeightAdjustment")
+        }
+    }
     static func normalizedCollapsedSideWidth(_ value: Double) -> Double {
         value.isFinite ? min(max(value, collapsedSideWidthRange.lowerBound), collapsedSideWidthRange.upperBound)
             : defaultCollapsedSideWidth
@@ -749,6 +796,8 @@ final class Preferences: ObservableObject {
     }
 
     init(defaults: UserDefaults = .standard, domainName: String? = nil) {
+        self.idleBotAppearance = defaults.data(forKey: "idleBotAppearance")
+            .flatMap { try? JSONDecoder().decode(BotAppearance.self, from: $0) } ?? BotAppearance()
         self.botAppearances = defaults.data(forKey: "botAppearances")
             .flatMap { try? JSONDecoder().decode([String: BotAppearance].self, from: $0) } ?? [:]
         self.tooltipHeightMode = defaults.string(forKey: "tooltipHeightMode")
@@ -876,6 +925,8 @@ final class Preferences: ObservableObject {
         self.ringEdgeAdjustment = Self.geometryValue(defaults.double(forKey: "ringEdgeAdjustment"), in: Self.ringEdgeRange)
         self.collapsedSideWidth = Self.normalizedCollapsedSideWidth(
             (defaults.object(forKey: "collapsedSideWidth") as? Double) ?? Self.defaultCollapsedSideWidth)
+        self.collapsedHeightAdjustment = Self.geometryValue(
+            defaults.double(forKey: "collapsedHeightAdjustment"), in: Self.collapsedHeightRange)
         let stored = defaults.object(forKey: Keys.customSize) as? Double
         self.customNotchScale = stored.map {
             min(max($0, Self.customScaleRange.lowerBound), Self.customScaleRange.upperBound)

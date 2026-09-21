@@ -811,10 +811,33 @@ struct SettingsView: View {
                         }
                         .accessibilityLabel(Text(L10n.t("Reset notch side width")))
                     }
-                    Slider(value: $preferences.collapsedSideWidth, in: Preferences.collapsedSideWidthRange, step: 1)
+                    Slider(value: $preferences.collapsedSideWidth, in: Preferences.collapsedSideWidthRange, step: 1,
+                           onEditingChanged: { preferences.isEditingCollapsedGeometry = $0 })
                         .accessibilityLabel(Text(L10n.t("Notch side width")))
                         .accessibilityValue(Text(String(format: "%.0f pt", preferences.collapsedSideWidth)))
-                    Text(L10n.t("Space on each side of the hardware notch for active providers when collapsed."))
+                    Text(L10n.t("Space on each side of the hardware notch when collapsed. Changes preview live."))
+                        .font(.caption).foregroundStyle(.secondary)
+                    Picker(L10n.t("Idle notch display"), selection: $preferences.idleBotAppearance.enabled) {
+                        Text(L10n.t("Follow first provider")).tag(false)
+                        Text(L10n.t("Custom idle robot")).tag(true)
+                    }
+                    if preferences.idleBotAppearance.enabled {
+                        BotAppearanceFields(appearance: $preferences.idleBotAppearance,
+                                            providerID: NotchViewModel.idleBotID, icon: nil,
+                                            showsEnabledToggle: false)
+                    }
+                    HStack {
+                        Text(L10n.t("Notch height offset"))
+                        Spacer()
+                        Text(String(format: "%+.0f pt", preferences.collapsedHeightAdjustment)).monospacedDigit()
+                        Button(L10n.t("Reset")) { preferences.collapsedHeightAdjustment = 0 }
+                            .accessibilityLabel(Text(L10n.t("Reset notch height offset")))
+                    }
+                    Slider(value: $preferences.collapsedHeightAdjustment, in: Preferences.collapsedHeightRange, step: 1,
+                           onEditingChanged: { preferences.isEditingCollapsedGeometry = $0 })
+                        .accessibilityLabel(Text(L10n.t("Notch height offset")))
+                        .accessibilityValue(Text(String(format: "%+.0f pt", preferences.collapsedHeightAdjustment)))
+                    Text(L10n.t("Adjust the collapsed bar height. Negative values shorten the sides; the physical notch stays the same. Changes preview live."))
                         .font(.caption).foregroundStyle(.secondary)
                     HStack {
                         Text(L10n.t("Top avoidance height"))
@@ -843,7 +866,11 @@ struct SettingsView: View {
                     Text(L10n.t("Move rings and percentages away from the docked edge. Negative values move them closer and may clip content."))
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                .onDisappear { preferences.isEditingNotchGeometry = false }
+                .onDisappear {
+                    preferences.flushIdleBotAppearance()
+                    preferences.isEditingNotchGeometry = false
+                    preferences.isEditingCollapsedGeometry = false
+                }
 
                 // The nudge has been draggable since the edge picker existed,
                 // and nothing on screen has ever said so — the only way to

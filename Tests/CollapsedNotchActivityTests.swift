@@ -8,12 +8,66 @@
  @FilePath: Tests/CollapsedNotchActivityTests.swift
  */
 import SwiftUI
+import Combine
 import XCTest
 @testable import Codenotch
 
 @MainActor
 final class CollapsedNotchActivityTests: XCTestCase {
     private let epoch = Date(timeIntervalSince1970: 1_000)
+
+    func testCustomIdleRobotIsIndependentAndYieldsToActiveProviders() throws {
+        let model = model()
+        model.sessions = [:]
+        var providerAppearance = BotAppearance()
+        providerAppearance.enabled = true
+        providerAppearance.rgb = 0x123456
+        model.botAppearances["a"] = providerAppearance
+        let first = try XCTUnwrap(model.collapsedProvider)
+        XCTAssertEqual(model.collapsedBotPresentation(for: first)?.id, "a")
+        model.idleBotAppearance.enabled = true
+        model.idleBotAppearance.rgb = 0xABCDEF
+        model.botLastActivity = Date().addingTimeInterval(-1_300)
+        let idle = try XCTUnwrap(model.collapsedBotPresentation(for: first))
+        XCTAssertEqual(idle.id, NotchViewModel.idleBotID)
+        XCTAssertEqual(idle.appearance.rgb, 0xABCDEF)
+        XCTAssertEqual(idle.mood, .idle)
+        XCTAssertTrue(idle.isQuiet(at: Date()))
+        XCTAssertEqual(model.botAppearances["a"], providerAppearance)
+        XCTAssertEqual(model.collapsedProviders.count, 0)
+        model.snapshots.swapAt(0, 1)
+        XCTAssertEqual(model.collapsedBotPresentation(for: try XCTUnwrap(model.collapsedProvider))?.id, idle.id)
+        model.sessions = ["a": [session("a1", .busy)]]
+        let active = try XCTUnwrap(model.collapsedBotPresentation(for: try XCTUnwrap(model.collapsedProvider)))
+        XCTAssertEqual(active.id, "a")
+        XCTAssertEqual(active.appearance, providerAppearance)
+        XCTAssertEqual(model.collapsedProviders.count, 1)
+        model.sessions = [:]
+        model.idleBotAppearance.enabled = false
+        XCTAssertNil(model.collapsedBotPresentation(for: try XCTUnwrap(model.collapsedProvider)))
+        model.snapshots.swapAt(0, 1)
+        XCTAssertEqual(model.collapsedBotPresentation(for: try XCTUnwrap(model.collapsedProvider))?.id, "a")
+    }
+
+    func testCustomIdlePlaybackSurvivesActivityAndReleasesWhenDisabledOrEmpty() {
+        let model = model()
+        model.idleBotAppearance.enabled = true
+        weak var engine: BotMarkEngine? = model.collapsedPlayback.engine(for: NotchViewModel.idleBotID)
+        model.botAppearances = [:]
+        _ = model.collapsedProviders
+        XCTAssertTrue(engine != nil)
+        model.sessions = [:]
+        _ = model.collapsedProviders
+        XCTAssertTrue(model.collapsedPlayback.engine(for: NotchViewModel.idleBotID) === engine)
+        model.idleBotAppearance.enabled = false
+        XCTAssertNil(engine)
+        model.idleBotAppearance.enabled = true
+        engine = model.collapsedPlayback.engine(for: NotchViewModel.idleBotID)
+        model.snapshots = []
+        _ = model.collapsedProviders
+        XCTAssertNil(engine)
+        XCTAssertFalse(model.hasCollapsedSummary)
+    }
 
     private func session(_ id: String, _ state: AgentSession.State) -> AgentSession {
         AgentSession(id: id, name: id, detail: "", state: state, waitingFor: nil, since: epoch)
@@ -42,8 +96,9 @@ final class CollapsedNotchActivityTests: XCTestCase {
         XCTAssertEqual(model.collapsedProviders.map { $0.snapshot.providerID }, ["a", "b"])
         XCTAssertEqual(model.collapsedProviders.first?.activity.state, .waiting)
         model.sessions = ["a": [session("a1", .idle)]]
-        XCTAssertFalse(model.showsCollapsedActivity)
-        XCTAssertEqual(model.restingLength, 220)
+        XCTAssertTrue(model.showsCollapsedSummary)
+        XCTAssertEqual(model.collapsedProviders.count, 0)
+        XCTAssertEqual(model.restingLength, 348)
     }
 
     func testCompletedSessionDoesNotHideAnActiveLinkedRequest() {
@@ -100,6 +155,9 @@ final class CollapsedNotchActivityTests: XCTestCase {
         XCTAssertEqual(store.count, 1)
         model.sessions = [:]
         _ = model.collapsedProviders
+        XCTAssertEqual(store.count, 1, "The first provider keeps its animation for idle display")
+        model.snapshots.removeFirst()
+        _ = model.collapsedProviders
         XCTAssertEqual(store.count, 0)
         XCTAssertNil(released)
     }
@@ -147,7 +205,7 @@ final class CollapsedNotchActivityTests: XCTestCase {
         model.snapshots = []
         model.updateCollapsedRotation(at: epoch.addingTimeInterval(71), visible: true)
         XCTAssertNil(model.collapsedProviderID)
-        XCTAssertFalse(model.showsCollapsedActivity)
+        XCTAssertFalse(model.showsCollapsedSummary)
     }
 
     func testExpansionAndWindowVisibilityPauseRotationWithoutLosingSelection() {
@@ -156,7 +214,7 @@ final class CollapsedNotchActivityTests: XCTestCase {
         model.updateCollapsedRotation(at: epoch.addingTimeInterval(3), visible: true)
         model.isExpanded = true
         model.updateCollapsedRotation(at: epoch.addingTimeInterval(4), visible: true)
-        XCTAssertFalse(model.showsCollapsedActivity)
+        XCTAssertFalse(model.showsCollapsedSummary)
         model.isExpanded = false
         model.updateCollapsedRotation(at: epoch.addingTimeInterval(40), visible: true)
         XCTAssertEqual(model.collapsedProviderID, "b")
@@ -195,6 +253,7 @@ final class CollapsedNotchActivityTests: XCTestCase {
         model.screenSize.width = 280
         XCTAssertEqual(model.resolvedCollapsedSideWidth, 30)
         model.sessions = [:]
+        model.snapshots = []
         XCTAssertEqual(model.notchLength * model.sizeScale, 220, accuracy: 0.001)
     }
 
@@ -206,11 +265,187 @@ final class CollapsedNotchActivityTests: XCTestCase {
         XCTAssertEqual(model.notchSize, expanded)
         model.isExpanded = false
         model.hardwareNotch = nil
-        XCTAssertFalse(model.showsCollapsedActivity)
+        XCTAssertFalse(model.showsCollapsedSummary)
         XCTAssertEqual(model.notchLength, NotchLayout.pillHeight)
         for edge in [NotchEdge.left, .right, .bottom] {
             model.edge = edge
-            XCTAssertFalse(model.showsCollapsedActivity)
+            XCTAssertFalse(model.showsCollapsedSummary)
+        }
+    }
+
+    func testIdleProviderFollowsOrderAndYieldsToActivity() throws {
+        let model = model()
+        model.sessions = [:]
+        model.updateCollapsedRotation(at: epoch, visible: true)
+        XCTAssertTrue(model.showsCollapsedSummary)
+        XCTAssertEqual(model.collapsedProviderID, "a")
+        XCTAssertEqual(model.collapsedProviders.count, 0)
+        model.updateCollapsedRotation(at: epoch.addingTimeInterval(60), visible: true)
+        XCTAssertEqual(model.collapsedProviderID, "a", "Idle providers do not rotate")
+        model.snapshots.swapAt(0, 2)
+        XCTAssertEqual(model.collapsedProvider?.snapshot.providerID, "c")
+        model.updateCollapsedRotation(at: epoch.addingTimeInterval(61), visible: true)
+        XCTAssertEqual(model.collapsedProviderID, "c")
+        model.sessions["b"] = [session("b1", .busy)]
+        XCTAssertEqual(model.collapsedProvider?.snapshot.providerID, "b")
+        XCTAssertEqual(model.collapsedProviders.count, 1)
+        model.sessions = [:]
+        XCTAssertEqual(model.collapsedProvider?.snapshot.providerID, "c")
+        model.snapshots.removeFirst()
+        XCTAssertEqual(model.collapsedProvider?.snapshot.providerID, "b")
+        model.snapshots = []
+        XCTAssertNil(model.collapsedProvider)
+        XCTAssertFalse(model.showsCollapsedSummary)
+        XCTAssertEqual(model.restingLength, 220)
+    }
+
+    func testIdleRobotUsesTheExistingSleepAndAppearanceRules() throws {
+        let model = model()
+        model.sessions = [:]
+        let provider = try XCTUnwrap(model.collapsedProvider)
+        XCTAssertNil(model.botPresentation(for: provider.snapshot, activityOverride: provider.activity, active: true))
+        var appearance = BotAppearance()
+        appearance.enabled = true
+        appearance.personality = "calm"
+        model.botAppearances[provider.snapshot.providerID] = appearance
+        let sleeping = try XCTUnwrap(model.botPresentation(for: provider.snapshot,
+                                                           activityOverride: provider.activity, active: true))
+        XCTAssertEqual(sleeping.mood, .asleep)
+        XCTAssertTrue(sleeping.active)
+        model.snapshots[0].windows = [LimitWindow(id: "quota", label: "Quota", usedFraction: 0.2)]
+        model.botLastActivity = Date().addingTimeInterval(-1_300)
+        let restingProvider = try XCTUnwrap(model.collapsedProvider)
+        let resting = try XCTUnwrap(model.botPresentation(for: restingProvider.snapshot,
+                                                          activityOverride: restingProvider.activity, active: true))
+        XCTAssertEqual(resting.mood, .idle)
+        XCTAssertTrue(resting.isQuiet(at: Date()))
+        XCTAssertEqual(BotMarkProgramme.forMood(resting.mood, persona: .calm,
+            isQuiet: resting.isQuiet(at: Date())).states, ["sleeping"])
+        model.botAppearances[provider.snapshot.providerID]?.enabled = false
+        XCTAssertNil(model.botPresentation(for: restingProvider.snapshot, active: true))
+    }
+
+    func testHeightAndInwardPositionsStaySafeWithoutResizingThePanel() {
+        let model = model()
+        model.sessions = [:]
+        for scale: CGFloat in [0.75, 1, 1.5] {
+            model.sizeScale = scale
+            let panelSize = model.panelSize
+            let slack = model.slack
+            model.isExpanded = true
+            let expandedSize = model.notchSize
+            for width: CGFloat in [40, 64, 160] {
+                for height: CGFloat in [-20, 0, 40] {
+                    model.collapsedSideWidth = width
+                    model.collapsedHeightAdjustment = height
+                    model.isExpanded = true
+                    XCTAssertEqual(model.notchSize, expandedSize)
+                    model.isExpanded = false
+                    XCTAssertEqual(model.notchDepth * scale, max(16, 38 + height), accuracy: 0.001)
+                    XCTAssertEqual(model.panelSize, panelSize)
+                    XCTAssertEqual(model.slack, slack)
+                    let inset = model.collapsedMarkInset
+                    XCTAssertLessThanOrEqual(inset, width / 2)
+                    XCTAssertGreaterThanOrEqual(inset - model.collapsedMarkSize / 2, 4)
+                    XCTAssertGreaterThanOrEqual(width - inset - model.collapsedMarkSize / 2, 4)
+                    XCTAssertLessThanOrEqual(model.collapsedMarkSize + 8, model.resolvedCollapsedHeight)
+                }
+            }
+        }
+        model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+        model.collapsedHeightAdjustment = -20
+        XCTAssertEqual(model.resolvedCollapsedHeight, 16)
+    }
+
+    func testWidthAndHeightPreviewHoldCollapsedThenRestorePinnedState() {
+        let panel = NotchPanel(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600))
+        let controller = NotchWindowController(panel: panel, mouseLocation: { CGPoint(x: -1000, y: -1000) })
+        defer { controller.stop() }
+        controller.isFullScreenActive = { false }
+        controller.model.edge = .top
+        controller.model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+        controller.model.snapshots = model().snapshots
+        controller.model.isExpanded = true
+        controller.model.isPinned = true
+        var expansionUpdates = 0
+        let observer = controller.model.$isExpanded.sink { _ in expansionUpdates += 1 }
+        defer { observer.cancel() }
+        controller.previewCollapsedGeometry(editing: true)
+        XCTAssertTrue(controller.isPreviewingCollapsedGeometry)
+        XCTAssertFalse(controller.model.isExpanded)
+        let frame = panel.frame
+        for width: CGFloat in [40, 70, 160] {
+            controller.apply(collapsedSideWidth: width)
+            controller.apply(collapsedHeightAdjustment: -20)
+            controller.previewCollapsedGeometry()
+            controller.cursorMoved()
+            XCTAssertEqual(controller.model.notchLength, 220 + width * 2)
+            XCTAssertEqual(controller.model.notchDepth, 16)
+            XCTAssertEqual(panel.frame, frame)
+            XCTAssertFalse(controller.model.isExpanded)
+            XCTAssertTrue(panel.ignoresMouseEvents)
+            XCTAssertFalse(controller.peek(for: 1, focusing: nil))
+        }
+        XCTAssertEqual(expansionUpdates, 2, "Dragging must not republish an unchanged collapsed state")
+        controller.previewCollapsedGeometry(editing: false)
+        XCTAssertFalse(controller.isPreviewingCollapsedGeometry)
+        XCTAssertTrue(controller.model.isExpanded)
+        XCTAssertTrue(controller.model.isPinned)
+    }
+
+    func testPreviewEndsForKeyboardChangesAndDoesNotOverrideHiddenMode() {
+        let panel = NotchPanel(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600))
+        var scheduled: [DispatchWorkItem] = []
+        let controller = NotchWindowController(panel: panel, mouseLocation: { CGPoint(x: -1000, y: -1000) },
+            scheduleInteractionWork: { _, work in scheduled.append(work) })
+        defer { controller.stop() }
+        controller.isFullScreenActive = { false }
+        controller.model.edge = .top
+        controller.model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+        controller.model.snapshots = model().snapshots
+        controller.previewCollapsedGeometry()
+        controller.previewCollapsedGeometry()
+        XCTAssertTrue(scheduled[0].isCancelled)
+        for work in scheduled where !work.isCancelled { work.perform() }
+        XCTAssertFalse(controller.isPreviewingCollapsedGeometry)
+        XCTAssertFalse(controller.model.isExpanded)
+        controller.previewCollapsedGeometry(editing: true)
+        controller.apply(.hidden)
+        XCTAssertFalse(controller.isPreviewingCollapsedGeometry)
+        controller.previewCollapsedGeometry(editing: true)
+        XCTAssertFalse(controller.isPreviewingCollapsedGeometry)
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    func testAdjustedSideHeightChangesHoverBoundsWithoutChangingHardwareTrigger() {
+        for height: CGFloat in [-20, 40] {
+            let panel = NotchPanel(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600))
+            var pointer = CGPoint.zero
+            let controller = NotchWindowController(panel: panel, mouseLocation: { pointer })
+            defer { controller.stop() }
+            controller.isFullScreenActive = { false }
+            controller.model.edge = .top
+            controller.model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+            controller.model.snapshots = model().snapshots
+            controller.model.positionedLeading = 400 - controller.model.shapeLength / 2
+            controller.model.notchTriggerHeight = -20
+            controller.apply(collapsedHeightAdjustment: height)
+            let depth = controller.model.resolvedCollapsedHeight
+            pointer = CGPoint(x: 260, y: 600 - depth - 1)
+            controller.cursorMoved()
+            XCTAssertFalse(controller.model.isExpanded)
+            pointer = CGPoint(x: 400, y: 580)
+            controller.cursorMoved()
+            XCTAssertFalse(controller.model.isExpanded, "Central hardware still uses the negative trigger height")
+            pointer = CGPoint(x: 260, y: 600 - depth + 4)
+            controller.cursorMoved()
+            XCTAssertTrue(controller.model.isExpanded)
+            if height > 0 {
+                controller.model.isExpanded = false
+                pointer = CGPoint(x: 400, y: 600 - depth + 4)
+                controller.cursorMoved()
+                XCTAssertTrue(controller.model.isExpanded, "The visible strip below the camera must also expand")
+            }
         }
     }
 
@@ -289,6 +524,44 @@ final class CollapsedNotchActivityTests: XCTestCase {
             XCTAssertGreaterThan(brightPixels(from: Int(center - 174), to: Int(center - 110)), 10)
             XCTAssertGreaterThan(brightPixels(from: Int(center + 110), to: Int(center + 174)), 10)
             XCTAssertEqual(brightPixels(from: Int(center - 100), to: Int(center + 100)), 0)
+        }
+    }
+
+    func testIdleRenderingMovesBothMarksInwardAtPositiveAndNegativeHeights() throws {
+        let model = model()
+        model.sessions = [:]
+        model.collapsedSideWidth = 160
+        model.hardwareNotch = HardwareNotch(width: 220, height: 32)
+        for height: CGFloat in [-20, 40] {
+            for scale: CGFloat in [0.75, 1.5] {
+                model.sizeScale = scale
+                model.collapsedHeightAdjustment = height
+                let size = model.panelSize
+                let renderer = ImageRenderer(content: NotchRootView(model: model)
+                    .frame(width: size.width, height: size.height)
+                    .environment(\.colorScheme, .dark))
+                renderer.scale = 1
+                let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+                let center = model.slack + model.shapeLength * scale / 2
+                for direction: CGFloat in [-1, 1] {
+                    var positions: [CGFloat] = []
+                    let lower = center + (direction < 0 ? -270 : 110)
+                    let upper = center + (direction < 0 ? -110 : 270)
+                    for x in Int(lower)..<Int(upper) {
+                        for y in 0..<Int(model.resolvedCollapsedHeight) {
+                            if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                               color.alphaComponent > 0.5,
+                               max(color.redComponent, color.greenComponent, color.blueComponent) > 0.5 {
+                                positions.append(CGFloat(x))
+                            }
+                        }
+                    }
+                    XCTAssertGreaterThan(positions.count, 3)
+                    let mean = positions.reduce(0, +) / CGFloat(max(1, positions.count))
+                    XCTAssertEqual(mean, center + direction * (110 + model.collapsedMarkInset), accuracy: 4)
+                    XCTAssertLessThan(abs(mean - center), 190)
+                }
+            }
         }
     }
 }

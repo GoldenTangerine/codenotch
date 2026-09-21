@@ -54,6 +54,12 @@ final class NotchFleet {
     }
     private var refreshing: Set<String> = []
     private var botAppearances: [String: BotAppearance] = [:]
+    private var idleBotAppearance = BotAppearance()
+
+    func apply(idleBotAppearance: BotAppearance) {
+        self.idleBotAppearance = idleBotAppearance
+        for model in models { model.idleBotAppearance = idleBotAppearance }
+    }
     private var botActivity = BotActivityTimeline()
     private var botLastActivity: Date? { botActivity.lastActivity }
     private var botGloballyBusy: Bool { botActivity.isBusy }
@@ -106,6 +112,8 @@ final class NotchFleet {
     private var topAvoidanceAdjustment: CGFloat = 0
     private var ringEdgeAdjustment: CGFloat = 0
     private var collapsedSideWidth: CGFloat = 64
+    private var collapsedHeightAdjustment: CGFloat = 0
+    private var isEditingCollapsedGeometry = false
     private var isEditingGeometry = false
     private var codeSwitchQuotaRatiosEnabled = false
     private var showsMoveHandle = false
@@ -320,6 +328,21 @@ final class NotchFleet {
         if let editing { isEditingGeometry = editing }
         for controller in controllers.values {
             controller.previewGeometry(editing: editing)
+        }
+    }
+
+    func apply(collapsedHeightAdjustment: CGFloat) {
+        self.collapsedHeightAdjustment = CGFloat(Preferences.geometryValue(
+            Double(collapsedHeightAdjustment), in: Preferences.collapsedHeightRange))
+        for controller in controllers.values {
+            controller.apply(collapsedHeightAdjustment: self.collapsedHeightAdjustment)
+        }
+    }
+
+    func previewCollapsedGeometry(editing: Bool? = nil) {
+        if let editing { isEditingCollapsedGeometry = editing }
+        for controller in controllers.values {
+            controller.previewCollapsedGeometry(editing: editing)
         }
     }
 
@@ -595,8 +618,10 @@ final class NotchFleet {
         controller.model.topAvoidanceAdjustment = topAvoidanceAdjustment
         controller.model.ringEdgeAdjustment = ringEdgeAdjustment
         controller.model.collapsedSideWidth = collapsedSideWidth
+        controller.model.collapsedHeightAdjustment = collapsedHeightAdjustment
         controller.model.resetTimeFormat = resetTimeFormat
         controller.model.botAppearances = botAppearances
+        controller.model.idleBotAppearance = idleBotAppearance
         controller.model.botLastActivity = botLastActivity
         controller.model.botGloballyBusy = botGloballyBusy
         controller.model.tooltipHeightMode = tooltipHeightMode
@@ -637,6 +662,7 @@ final class NotchFleet {
         controller.show()
         controller.apply(visibility)
         if isEditingGeometry { controller.previewGeometry(editing: true) }
+        if isEditingCollapsedGeometry { controller.previewCollapsedGeometry(editing: true) }
         return controller
     }
 }

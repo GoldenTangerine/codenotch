@@ -57,6 +57,7 @@ final class BotWindowClock: NSObject {
     private var workspaceObservers: [NSObjectProtocol] = []
     private var sleeping = false
     private(set) var tickCount = 0
+    private(set) var preferredFrameRate: Float = 0
     var isRunning: Bool { link != nil }
 
     static func attach(_ view: BotDrawingView, to window: NSWindow) -> BotWindowClock {
@@ -111,20 +112,28 @@ final class BotWindowClock: NSObject {
 
     func update() {
         let visible = !sleeping && window?.isVisible == true && window?.occlusionState.contains(.visible) == true
-        var running = false
+        var frameRate: Float = 0
         for view in views.allObjects {
             let eligible = visible && view.canAnimate
             view.setClockActive(eligible)
-            running = running || eligible
+            if eligible { frameRate = max(frameRate, view.preferredAnimationFrameRate) }
         }
-        guard running, let window else {
+        guard frameRate > 0, let window else {
             link?.invalidate()
             link = nil
+            preferredFrameRate = 0
             return
         }
-        guard link == nil else { return }
+        if let link {
+            if preferredFrameRate != frameRate {
+                link.preferredFrameRateRange = CAFrameRateRange(minimum: frameRate, maximum: frameRate, preferred: frameRate)
+                preferredFrameRate = frameRate
+            }
+            return
+        }
         let displayLink = window.displayLink(target: self, selector: #selector(tick(_:)))
-        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: 60, maximum: 60, preferred: 60)
+        displayLink.preferredFrameRateRange = CAFrameRateRange(minimum: frameRate, maximum: frameRate, preferred: frameRate)
+        preferredFrameRate = frameRate
         displayLink.add(to: .main, forMode: .common)
         link = displayLink
     }
@@ -183,6 +192,11 @@ final class BotDrawingView: NSView {
     var canAnimate: Bool {
         presentation?.active == true && !reduceMotion && !isHiddenOrHasHiddenAncestor
             && !visibleRect.intersection(bounds).isEmpty && engine != nil
+    }
+
+    // 仅稳定睡眠降帧；唤醒、活动和临时动作仍使用完整帧率。
+    var preferredAnimationFrameRate: Float {
+        programme.mood == .asleep && engine?.state == "sleeping" ? 30 : 60
     }
 
     func configure(_ next: BotPresentation, reduceMotion: Bool, now: Date = Date(),

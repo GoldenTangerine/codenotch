@@ -1,6 +1,83 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Custom idle robot": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义空闲机器人"
+          }
+        }
+      }
+    },
+    "Follow first provider": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟随第一个供应商"
+          }
+        }
+      }
+    },
+    "Idle notch display": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空闲刘海显示"
+          }
+        }
+      }
+    },
+    "Space on each side of the hardware notch when collapsed. Changes preview live.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "收起时硬件刘海两侧的宽度，调节时实时预览。"
+          }
+        }
+      }
+    },
+    "Notch height offset": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刘海高度偏移"
+          }
+        }
+      }
+    },
+    "Reset notch height offset": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置刘海高度偏移"
+          }
+        }
+      }
+    },
+    "Adjust the collapsed bar height. Negative values shorten the sides; the physical notch stays the same. Changes preview live.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "调整收起时的高度，负值缩短两侧，实体刘海不变。调节时实时预览。"
+          }
+        }
+      }
+    },
     "Active providers beside the hardware notch": {
       "extractionState": "manual",
       "localizations": {

@@ -13,7 +13,28 @@ import Combine
 @MainActor
 final class NotchViewModel: ObservableObject {
     @Published var botAppearances: [String: BotAppearance] = [:] {
-        didSet { collapsedPlayback.retainProviders(Set(botAppearances.filter { $0.value.enabled }.keys)) }
+        didSet { pruneCollapsedPlayback() }
+    }
+    static let idleBotID = "codenotch:collapsed-idle-bot"
+    @Published var idleBotAppearance = BotAppearance() {
+        didSet { pruneCollapsedPlayback() }
+    }
+
+    private func pruneCollapsedPlayback() {
+        var retained = Set(botAppearances.filter { $0.value.enabled }.keys)
+        if idleBotAppearance.enabled, !snapshots.isEmpty { retained.insert(Self.idleBotID) }
+        collapsedPlayback.retainProviders(retained)
+    }
+
+    func collapsedBotPresentation(for provider: CollapsedProvider) -> BotPresentation? {
+        if collapsedProviders.isEmpty, idleBotAppearance.enabled {
+            guard BotMarkLibrary.available != nil else { return nil }
+            return BotPresentation(id: Self.idleBotID, brand: ProviderGlyph.third.rawValue,
+                                   appearance: idleBotAppearance, active: true,
+                                   gazeBias: 7, pointerRegion: botPointerRegion(),
+                                   lastActivity: botLastActivity, globallyBusy: botGloballyBusy)
+        }
+        return botPresentation(for: provider.snapshot, activityOverride: provider.activity, active: true)
     }
     @Published var botEvents: [String: BotAnimationEvent] = [:]
     @Published var botLastActivity: Date?
@@ -321,6 +342,7 @@ final class NotchViewModel: ObservableObject {
     @Published var topAvoidanceAdjustment: CGFloat = 0
     @Published var ringEdgeAdjustment: CGFloat = 0
     @Published var collapsedSideWidth: CGFloat = 64
+    @Published var collapsedHeightAdjustment: CGFloat = 0
     @Published private(set) var collapsedProviderID: String?
     private var collapsedRotationStarted: Date?
     let collapsedPlayback = BotPlaybackStore()
@@ -329,6 +351,7 @@ final class NotchViewModel: ObservableObject {
 
     private func invalidateCollapsedProviders() {
         cachedCollapsedProviders = nil
+        if snapshots.isEmpty { collapsedPlayback.retainProviders([]) }
     }
 
     struct CollapsedProvider {
@@ -352,30 +375,35 @@ final class NotchViewModel: ObservableObject {
             }
         }
         cachedCollapsedProviders = result
-        collapsedPlayback.retainProviders(Set(indices.keys))
+        // 首个供应商随时可能回到空闲展示，保留其进度；其余只保留活动供应商。
+        var retained = Set(indices.keys)
+        if let first = snapshots.first { retained.insert(first.providerID) }
+        if idleBotAppearance.enabled, !snapshots.isEmpty { retained.insert(Self.idleBotID) }
+        collapsedPlayback.retainProviders(retained)
         return result
     }
 
-    var hasCollapsedActivity: Bool {
-        edge == .top && hardwareNotch != nil && !collapsedProviders.isEmpty
+    var hasCollapsedSummary: Bool {
+        edge == .top && hardwareNotch != nil && !snapshots.isEmpty
     }
 
-    var showsCollapsedActivity: Bool { !isExpanded && hasCollapsedActivity }
+    var showsCollapsedSummary: Bool { !isExpanded && hasCollapsedSummary }
 
     var collapsedProvider: CollapsedProvider? {
         let providers = collapsedProviders
         return providers.first { $0.snapshot.providerID == collapsedProviderID } ?? providers.first
+            ?? snapshots.first.map { CollapsedProvider(snapshot: $0, activity: ActivitySummary(state: .idle)) }
     }
 
     // 复用窗口的低频轮询；隐藏或展开时清除截止时间，恢复后重新计满三秒。
     func updateCollapsedRotation(at date: Date, visible: Bool) {
         let providers = collapsedProviders
         if !providers.contains(where: { $0.snapshot.providerID == collapsedProviderID }) {
-            let next = providers.first?.snapshot.providerID
+            let next = (providers.first?.snapshot ?? snapshots.first)?.providerID
             if collapsedProviderID != next { collapsedProviderID = next }
             collapsedRotationStarted = nil
         }
-        guard visible, showsCollapsedActivity, providers.count > 1 else {
+        guard visible, showsCollapsedSummary, providers.count > 1 else {
             collapsedRotationStarted = nil
             return
         }
@@ -394,6 +422,23 @@ final class NotchViewModel: ObservableObject {
         let requested = CGFloat(Preferences.normalizedCollapsedSideWidth(Double(collapsedSideWidth)))
         guard screenSize.width > 0 else { return requested }
         return min(requested, max(0, (screenSize.width - hardwareNotch.width) / 2))
+    }
+
+    var resolvedCollapsedHeight: CGFloat {
+        guard let hardwareNotch else { return 0 }
+        let adjustment = CGFloat(Preferences.geometryValue(Double(collapsedHeightAdjustment),
+                                                            in: Preferences.collapsedHeightRange))
+        return max(16, hardwareNotch.height + adjustment)
+    }
+
+    var collapsedMarkSize: CGFloat {
+        max(0, min(24, resolvedCollapsedHeight - 8, resolvedCollapsedSideWidth - 16))
+    }
+
+    // 三分之一处靠近实体刘海；最窄设置仍为图标和摄像头保留四点间隔。
+    var collapsedMarkInset: CGFloat {
+        min(resolvedCollapsedSideWidth / 2,
+            max(resolvedCollapsedSideWidth / 3, collapsedMarkSize / 2 + 4))
     }
     var ringEdgePadding: CGFloat { max(0, ringEdgeAdjustment) / sizeScale }
     var ringEdgeOffset: CGFloat { min(0, ringEdgeAdjustment) / sizeScale }
@@ -805,7 +850,10 @@ final class NotchViewModel: ObservableObject {
                           maxCardHeight: maxCardHeight(cellCount: cellCount),
                           notchScale: sizeScale)
         guard edge == .top, let hardwareNotch else { return standard }
-        let restingWidth = hardwareNotch.width + 2 * resolvedCollapsedSideWidth
+        // 按滑块上限预留透明空间，拖动宽度时无需反复调整窗口尺寸和锚点。
+        let side = min(CGFloat(Preferences.collapsedSideWidthRange.upperBound),
+                       screenSize.width > 0 ? max(0, (screenSize.width - hardwareNotch.width) / 2) : .infinity)
+        let restingWidth = hardwareNotch.width + 2 * side
         return max(standard, (restingWidth - shapeLength(cellCount: cellCount) * sizeScale) / 2 + 8)
     }
 
@@ -912,9 +960,12 @@ final class NotchViewModel: ObservableObject {
     /// the hit region has to know that while the notch is still open.
     var restingLength: CGFloat {
         guard let hardwareNotch else { return NotchLayout.pillHeight }
-        return (hardwareNotch.width + (hasCollapsedActivity ? 2 * resolvedCollapsedSideWidth : 0)) / sizeScale
+        return (hardwareNotch.width + (hasCollapsedSummary ? 2 * resolvedCollapsedSideWidth : 0)) / sizeScale
     }
-    var restingDepth: CGFloat { hardwareNotch.map { $0.height / sizeScale } ?? NotchLayout.pillWidth }
+    var restingDepth: CGFloat {
+        hardwareNotch.map { (hasCollapsedSummary ? resolvedCollapsedHeight : $0.height) / sizeScale }
+            ?? NotchLayout.pillWidth
+    }
 
     /// What wakes the folded notch, in panel points: the resting shape and a
     /// band around it, or the resting shape alone.

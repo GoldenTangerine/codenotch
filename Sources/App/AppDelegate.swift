@@ -470,9 +470,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 .store(in: &cancellables)
 
-            preferences.$collapsedSideWidth.removeDuplicates()
-                .receive(on: RunLoop.main)
-                .sink { [weak fleet] in fleet?.apply(collapsedSideWidth: CGFloat($0)) }
+            preferences.$collapsedSideWidth.combineLatest(preferences.$collapsedHeightAdjustment)
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak fleet] width, height in
+                    fleet?.apply(collapsedSideWidth: CGFloat(width))
+                    fleet?.apply(collapsedHeightAdjustment: CGFloat(height))
+                    fleet?.previewCollapsedGeometry()
+                }
+                .store(in: &cancellables)
+
+            preferences.$isEditingCollapsedGeometry.removeDuplicates().dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak fleet] editing in fleet?.previewCollapsedGeometry(editing: editing) }
                 .store(in: &cancellables)
 
             preferences.$isEditingNotchGeometry.removeDuplicates().dropFirst()
@@ -747,6 +757,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.$botAppearances.receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(botAppearances: $0) }
                 .store(in: &cancellables)
+            preferences.$idleBotAppearance.removeDuplicates().receive(on: DispatchQueue.main)
+                .sink { [weak fleet] in fleet?.apply(idleBotAppearance: $0) }
+                .store(in: &cancellables)
             codeSwitch.$bindings.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
@@ -909,6 +922,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(topAvoidanceAdjustment: CGFloat(preferences.topAvoidanceAdjustment),
                     ringEdgeAdjustment: CGFloat(preferences.ringEdgeAdjustment))
         fleet.apply(collapsedSideWidth: CGFloat(preferences.collapsedSideWidth))
+        fleet.apply(collapsedHeightAdjustment: CGFloat(preferences.collapsedHeightAdjustment))
         fleet.apply(resetTimeFormat: preferences.resetTimeFormat)
         fleet.apply(tooltipHeightMode: preferences.tooltipHeightMode)
         Self.bindNotchAccentColor(preferences, to: fleet)
@@ -1146,6 +1160,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        preferences?.flushIdleBotAppearance()
         announcementWork?.cancel()
         hookMonitor.stop()
         codeSwitch?.stop()

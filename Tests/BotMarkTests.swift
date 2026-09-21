@@ -13,6 +13,56 @@ import XCTest
 
 @MainActor
 final class BotMarkTests: XCTestCase {
+    func testSleepClockUsesThirtyFramesAndActiveViewsRestoreSixty() throws {
+        _ = try XCTUnwrap(BotMarkLibrary.available)
+        let window = VisibleWindow(contentRect: NSRect(x: 0, y: 0, width: 160, height: 160),
+                                   styleMask: .borderless, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 160, height: 160))
+        window.contentView = container
+        let sleeper = BotDrawingView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
+        var sleeping = BotPresentation(id: "sleep", brand: "kimi", appearance: BotAppearance(), mood: .asleep)
+        sleeper.configure(sleeping, reduceMotion: false)
+        container.addSubview(sleeper)
+        let clock = BotWindowClock.attach(sleeper, to: window)
+        XCTAssertEqual(clock.preferredFrameRate, 30)
+        let worker = BotDrawingView(frame: NSRect(x: 60, y: 0, width: 40, height: 40))
+        worker.configure(BotPresentation(id: "work", brand: "kimi", appearance: BotAppearance(), mood: .working),
+                         reduceMotion: false)
+        container.addSubview(worker)
+        clock.update()
+        XCTAssertEqual(clock.preferredFrameRate, 60)
+        worker.isHidden = true
+        clock.update()
+        XCTAssertEqual(clock.preferredFrameRate, 30)
+        sleeping.mood = .working
+        sleeper.configure(sleeping, reduceMotion: false)
+        XCTAssertEqual(clock.preferredFrameRate, 60)
+        sleeper.configure(sleeping, reduceMotion: true)
+        XCTAssertEqual(clock.preferredFrameRate, 0)
+        XCTAssertFalse(clock.isRunning)
+        sleeper.detach()
+        worker.detach()
+        XCTAssertFalse(clock.isRunning)
+    }
+
+    func testQuietSleepAndPointerWakeKeepTheirAnimationRates() {
+        let view = BotDrawingView(frame: NSRect(x: 0, y: 0, width: 40, height: 40))
+        let date = Date()
+        var presentation = BotPresentation(id: "quiet", brand: "kimi", appearance: BotAppearance())
+        presentation.lastActivity = date.addingTimeInterval(-1_300)
+        view.configure(presentation, reduceMotion: false, now: date)
+        XCTAssertEqual(view.preferredAnimationFrameRate, 30)
+        view.setClockActive(true)
+        view.advance(to: 1, date: date, pointerInWindow: CGPoint(x: 20, y: 20))
+        XCTAssertEqual(view.preferredAnimationFrameRate, 60)
+        presentation.waiting = true
+        view.configure(presentation, reduceMotion: false, now: date)
+        XCTAssertEqual(view.preferredAnimationFrameRate, 60)
+        view.detach()
+    }
+
     private func assertEyesSeparated(_ frame: BotMarkFrame, file: StaticString = #filePath, line: UInt = #line) {
         guard frame.eyes.count == 2, frame.eyes.allSatisfy(\.visible) else { return }
         let boxes = frame.eyes.map { eye -> CGRect in

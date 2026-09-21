@@ -37,8 +37,21 @@ When joined to a MacBook's hardware notch, the collapsed bar shows active
 providers on the left and their count on the right, including providers waiting
 for your input. Multiple providers rotate every three seconds. Each uses its
 configured robot, or its provider icon when robots are disabled. Adjust the
-space on each side in **Settings → Appearance → Notch side width**; when all
-providers finish, the bar returns to the hardware notch's original width.
+space on each side in **Settings → Appearance → Notch side width**. When all
+providers finish, the first provider stays visible with its idle or sleep
+animation (or its icon when robots are disabled), and the count becomes zero.
+**Idle notch display** defaults to **Follow first provider**. Choose
+**Custom idle robot** to set its personality, shape and colour independently;
+active calls still show the calling providers' own robots or icons.
+Colour changes preview immediately and are saved after a short pause, or when
+settings close. Windows showing only sleeping robots request 30 FPS; awake
+animations retain 60 FPS, and hidden animations remain paused.
+With no providers, the bar returns to the hardware notch's original size.
+**Notch height offset** adjusts only the collapsed bar, from −20 to +40 pt
+relative to the hardware notch, with a minimum height of 16 pt. Both size
+controls preview live on the collapsed bar; its robot and count sit closer
+to the central notch. Negative height offsets shorten the software sides,
+not the physical camera cutout.
 
 ## Download
 

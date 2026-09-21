@@ -14,6 +14,75 @@ import XCTest
 
 @MainActor
 final class AccentColorPreferencesTests: XCTestCase {
+    func testIdleRobotDefaultsToFirstProviderAndPersistsIndependentAppearance() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertFalse(preferences.idleBotAppearance.enabled)
+        preferences.idleBotAppearance.enabled = true
+        preferences.idleBotAppearance.personality = "calm"
+        preferences.idleBotAppearance.rgb = 0xABCDEF
+        preferences.flushIdleBotAppearance()
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance, preferences.idleBotAppearance)
+        XCTAssertTrue(preferences.botAppearances.isEmpty)
+        preferences.idleBotAppearance.enabled = false
+        let restored = Preferences(defaults: defaults)
+        XCTAssertFalse(restored.idleBotAppearance.enabled)
+        XCTAssertEqual(restored.idleBotAppearance.rgb, 0xABCDEF)
+        defaults.set(Data("invalid".utf8), forKey: "idleBotAppearance")
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance, BotAppearance())
+    }
+    func testIdleRobotColourCoalescesAndFlushPreservesTheLatestValue() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        preferences.idleBotAppearance.enabled = true
+        let initial = defaults.data(forKey: "idleBotAppearance")
+        for colour in 1...100 { preferences.idleBotAppearance.rgb = UInt32(colour) }
+        XCTAssertEqual(preferences.idleBotAppearance.rgb, 100)
+        XCTAssertEqual(defaults.data(forKey: "idleBotAppearance"), initial)
+        let deadline = Date().addingTimeInterval(1)
+        while defaults.data(forKey: "idleBotAppearance") == initial, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance.rgb, 100)
+        preferences.idleBotAppearance.rgb = 200
+        preferences.flushIdleBotAppearance()
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance.rgb, 200)
+        preferences.idleBotAppearance.rgb = 300
+        preferences.idleBotAppearance.enabled = false
+        RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+        let restored = Preferences(defaults: defaults)
+        XCTAssertFalse(restored.idleBotAppearance.enabled)
+        XCTAssertEqual(restored.idleBotAppearance.rgb, 300)
+    }
+
+    func testPendingColourSaveDoesNotRetainPreferencesOrLoseTheLastValue() {
+        let defaults = makeDefaults()
+        var preferences: Preferences? = Preferences(defaults: defaults)
+        weak var released = preferences
+        preferences?.idleBotAppearance.rgb = 0x123456
+        preferences = nil
+        XCTAssertNil(released)
+        let deadline = Date().addingTimeInterval(1)
+        while defaults.data(forKey: "idleBotAppearance") == nil, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance.rgb, 0x123456)
+    }
+    func testCollapsedHeightDefaultsClampsPersistsAndResets() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.collapsedHeightAdjustment, 0)
+        for (input, expected) in [(-12.0, -12.0), (-80, -20), (18, 18), (80, 40), (.nan, 0), (.infinity, 0)] {
+            preferences.collapsedHeightAdjustment = input
+            XCTAssertEqual(preferences.collapsedHeightAdjustment, expected)
+            XCTAssertEqual(Preferences(defaults: defaults).collapsedHeightAdjustment, expected)
+        }
+        preferences.collapsedHeightAdjustment = 0
+        XCTAssertEqual(Preferences(defaults: defaults).collapsedHeightAdjustment, 0)
+        defaults.set(-100.0, forKey: "collapsedHeightAdjustment")
+        XCTAssertEqual(Preferences(defaults: defaults).collapsedHeightAdjustment, -20)
+    }
+
     func testCollapsedSideWidthDefaultsPersistsClampsAndResets() {
         let defaults = makeDefaults()
         let preferences = Preferences(defaults: defaults)

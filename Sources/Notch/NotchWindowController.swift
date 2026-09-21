@@ -100,8 +100,12 @@ final class NotchWindowController {
     private var clockTimer: Timer?
     private var cursorTimer: Timer?
     private var collapsedActivitySleeping = false
+    private(set) var isPreviewingCollapsedGeometry = false
+    private var isEditingCollapsedGeometry = false
+    private var collapsedPreviewWork: DispatchWorkItem?
 
     private func updateCollapsedActivity() {
+        if isPreviewingCollapsedGeometry && !model.hasCollapsedSummary { endCollapsedPreview() }
         let visible = !collapsedActivitySleeping && panel?.isVisible == true
             && panel?.occlusionState.contains(.visible) == true
         model.updateCollapsedRotation(at: Date(), visible: visible)
@@ -203,6 +207,7 @@ final class NotchWindowController {
     /// When a full-screen app is active on the current space, auto-folds the notch.
     /// When returning to a desktop space with `isAlwaysOn`, restores the unfolded state.
     func handleActiveSpaceOrAppChange() {
+        guard !isPreviewingCollapsedGeometry else { return }
         if foldsForFullScreen && isFullScreenActive() {
             if let panel {
                 let local = localCursor(in: panel.frame)
@@ -313,7 +318,8 @@ final class NotchWindowController {
             model.$activitySourceIDs.map { _ in () }.eraseToAnyPublisher(),
             model.$isExpanded.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             model.$hardwareNotch.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
-            model.$collapsedSideWidth.removeDuplicates().map { _ in () }.eraseToAnyPublisher()
+            model.$collapsedSideWidth.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            model.$collapsedHeightAdjustment.removeDuplicates().map { _ in () }.eraseToAnyPublisher()
         ])
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -396,6 +402,7 @@ final class NotchWindowController {
     }
 
     func stop() {
+        endCollapsedPreview(restore: false)
         model.updateCollapsedRotation(at: Date(), visible: false)
         model.collapsedPlayback.retainProviders([])
         cancelPendingUnfold()
@@ -635,13 +642,19 @@ final class NotchWindowController {
         )
     }
 
-    private var collapsedSideRects: [CGRect] {
-        guard model.hasCollapsedActivity, let hardware = model.hardwareNotch else { return [] }
+    private var collapsedSummaryRects: [CGRect] {
+        guard model.hasCollapsedSummary, let hardware = model.hardwareNotch else { return [] }
         let width = model.resolvedCollapsedSideWidth
         let center = model.slack + model.shapeLength * model.sizeScale / 2
-        return [center - hardware.width / 2 - width, center + hardware.width / 2].map {
-            placement.rect(along: $0, across: 0, length: width, depth: hardware.height)
+        var rects = [center - hardware.width / 2 - width, center + hardware.width / 2].map {
+            placement.rect(along: $0, across: 0, length: width, depth: model.resolvedCollapsedHeight)
         }
+        // 正高度在摄像头下方增加了可见黑色区域，这部分也必须能唤醒显示栏。
+        if model.resolvedCollapsedHeight > hardware.height {
+            rects.append(placement.rect(along: center - hardware.width / 2, across: hardware.height,
+                length: hardware.width, depth: model.resolvedCollapsedHeight - hardware.height))
+        }
+        return rects
     }
 
     func apply(notchTriggerHeight: Int) {
@@ -690,11 +703,12 @@ final class NotchWindowController {
     /// hole — which matters far more folded than open, since the point of
     /// folding away is to stop being in the way.
     private var liveRects: [CGRect] {
-        guard model.isExpanded else { return [pillRect] + collapsedSideRects }
+        guard !isPreviewingCollapsedGeometry else { return [] }
+        guard model.isExpanded else { return [pillRect] + collapsedSummaryRects }
         // The orb hangs below the shape, so the live region is both together.
         // Keep separated targets separate: their enclosing rectangle includes empty desktop.
         // 活动提示可能宽于展开面板；保留唤醒区域，防止静止指针反复开合。
-        return [notchRect] + collapsedSideRects + handleRects
+        return [notchRect] + collapsedSummaryRects + handleRects
     }
 
     private func isInLiveRegion(_ point: CGPoint) -> Bool {
@@ -850,6 +864,7 @@ final class NotchWindowController {
     // Not private: tests drive the hover fold through it, the same way they
     // drive the event fold through handleActiveSpaceOrAppChange.
     func cursorMoved() {
+        guard !isPreviewingCollapsedGeometry else { cancelPendingUnfold(); updateInteractiveRects(); return }
         guard !model.isEditingPosition else { cancelPendingUnfold(); updateInteractiveRects(); return }
         guard let panel, !isOptionDragging, visibility != .hidden else { cancelPendingUnfold(); return }
         let local = localCursor(in: panel.frame)
@@ -934,6 +949,7 @@ final class NotchWindowController {
     /// about to be scheduled on a notch that "Always show" would otherwise
     /// hold open — because answering it asks WindowServer.
     private func setExpanded(_ wanted: Bool, ignoreAlwaysOn: @autoclosure () -> Bool = false) {
+        guard !isPreviewingCollapsedGeometry else { return }
         if wanted {
             foldWork?.cancel()
             foldWork = nil
@@ -1142,10 +1158,57 @@ final class NotchWindowController {
     func apply(collapsedSideWidth: CGFloat) {
         guard model.collapsedSideWidth != collapsedSideWidth else { return }
         model.collapsedSideWidth = collapsedSideWidth
-        coalesceRelocate()
+        updateInteractiveRects()
+    }
+
+    func apply(collapsedHeightAdjustment: CGFloat) {
+        guard model.collapsedHeightAdjustment != collapsedHeightAdjustment else { return }
+        model.collapsedHeightAdjustment = collapsedHeightAdjustment
+        updateInteractiveRects()
+    }
+
+    func previewCollapsedGeometry(editing: Bool? = nil) {
+        if editing == false { endCollapsedPreview(); return }
+        guard model.hasCollapsedSummary, !model.isEditingPosition, visibility != .hidden else { return }
+        if let editing { isEditingCollapsedGeometry = editing }
+        collapsedPreviewWork?.cancel()
+        collapsedPreviewWork = nil
+        if !isPreviewingCollapsedGeometry {
+            isPreviewingCollapsedGeometry = true
+            cancelPendingUnfold()
+            foldWork?.cancel()
+            foldWork = nil
+            clearHoverWork?.cancel()
+            clearHoverWork = nil
+            peekWork?.cancel()
+            peekWork = nil
+            peekUntil = nil
+            if model.hoveredIndex != nil { model.hoveredIndex = nil }
+            if model.isExpanded { model.isExpanded = false }
+            setPointing(false)
+            updateInteractiveRects()
+        }
+        guard !isEditingCollapsedGeometry else { return }
+        // 键盘调节和重置也提供短暂预览；拖动期间则一直保持收起。
+        let work = DispatchWorkItem { [weak self] in self?.endCollapsedPreview() }
+        collapsedPreviewWork = work
+        scheduleInteractionWork(1.2, work)
+    }
+
+    private func endCollapsedPreview(restore: Bool = true) {
+        collapsedPreviewWork?.cancel()
+        collapsedPreviewWork = nil
+        isEditingCollapsedGeometry = false
+        guard isPreviewingCollapsedGeometry else { return }
+        isPreviewingCollapsedGeometry = false
+        guard restore, visibility != .hidden else { return }
+        model.isExpanded = model.isPinned || (model.isAlwaysOn && !(foldsForFullScreen && isFullScreenActive()))
+        cursorMoved()
+        updateInteractiveRects()
     }
 
     func previewGeometry(editing: Bool? = nil) {
+        endCollapsedPreview(restore: false)
         if let editing { isEditingGeometry = editing }
         guard peek(for: 1.2, focusing: nil) else { return }
         if isEditingGeometry {
@@ -1253,6 +1316,7 @@ final class NotchWindowController {
     private var lastRelocate = Date.distantPast
     private var pendingRelocate: DispatchWorkItem?
     func apply(edge: NotchEdge) {
+        endCollapsedPreview(restore: false)
         finishPositionEditing(commit: false)
         guard model.edge != edge else { return }
         guard let panel else {   // before there is anything on screen to fade
@@ -1324,6 +1388,7 @@ final class NotchWindowController {
     }
 
     func apply(_ visibility: NotchVisibility) {
+        endCollapsedPreview(restore: false)
         cancelPendingUnfold()
         finishPositionEditing(commit: false)
         self.visibility = visibility
@@ -1379,6 +1444,7 @@ final class NotchWindowController {
     /// leaves the click doing what it ordinarily does.
     @discardableResult
     func peek(for duration: TimeInterval, focusing pid: pid_t?, providerID: String? = nil, startedAt: Date? = nil) -> Bool {
+        guard !isPreviewingCollapsedGeometry else { return false }
         guard !model.isEditingPosition else { return false }
         // Hidden is a standing choice that the notch is not to be on screen.
         // Something finishing is not grounds to overrule it — the chime still
@@ -1530,6 +1596,7 @@ final class NotchWindowController {
     // MARK: - Position editing
 
     func beginPositionEditing() {
+        endCollapsedPreview(restore: false)
         cancelPendingUnfold()
         guard !model.isEditingPosition, let panel, let screen = selectedScreen else { return }
         edgeChange += 1
