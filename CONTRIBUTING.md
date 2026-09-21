@@ -143,6 +143,26 @@ updates. Sparkle still verifies downloaded updates using EdDSA. See the official
   against `docs/design/frame-124-hover-tooltip.png` — every constant there is
   quoted from that frame in design-frame pixels via `Design.px(_:)`.
 
+## Background cursor checks
+
+Cursor changes in the non-activating notch need a desktop-session check:
+`NSCursor.current` reports this process's cursor, not necessarily the visible
+system cursor. Run the focused check without activating Codenotch:
+
+```sh
+swiftc Sources/Notch/BackgroundCursorAccess.swift Sources/Notch/NotchPanel.swift \
+  Scripts/test-background-cursor.swift -o /tmp/codenotch-background-cursor-test
+/tmp/codenotch-background-cursor-test
+```
+
+The check briefly shows a panel at the pointer, compares actual system cursor
+images, verifies restoration and unchanged foreground focus, then closes it.
+It needs a logged-in desktop session and does not capture desktop content.
+`BackgroundCursorAccess` dynamically enables the undocumented WindowServer
+`SetsCursorInBackground` connection property before the first cursor change;
+missing symbols or a rejected request leave normal AppKit behavior available
+without activating the app or crashing. Recheck this path after macOS updates.
+
 ## Code style
 
 - Comments explain **why**, not what — a hidden constraint, a bug a piece of

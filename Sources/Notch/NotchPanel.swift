@@ -95,6 +95,8 @@ final class NotchPanel: NSPanel {
             backing: .buffered,
             defer: false
         )
+        // 必须在首次 push/set 前启用；AppKit 可能跳过重复设置同一个光标。
+        _ = BackgroundCursorAccess.isEnabled
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         isOpaque = false
