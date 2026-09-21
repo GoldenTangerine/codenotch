@@ -24,6 +24,7 @@ final class NotchPanel: NSPanel {
     /// Handle controls before SwiftUI gesture routing; other content keeps its own events.
     var onControlMouseDown: ((CGPoint) -> Bool)?
     var positionEventHandler: ((NSEvent) -> Bool)?
+    var onPointerEvent: (() -> Void)?
     var isEditingPosition = false
     /// ⌥-drag on the chrome, reported as the raw pointer delta since the last
     /// event — not a cumulative offset, so the caller decides what "along the
@@ -35,6 +36,13 @@ final class NotchPanel: NSPanel {
     var onDragEnd: (() -> Void)?
 
     override func sendEvent(_ event: NSEvent) {
+        // 系统和 SwiftUI 先处理光标事件，再恢复当前交互区域要求的光标。
+        defer {
+            if [.mouseMoved, .mouseEntered, .mouseExited, .cursorUpdate,
+                .leftMouseUp].contains(event.type) {
+                onPointerEvent?()
+            }
+        }
         if positionEventHandler?(event) == true { return }
         if event.type == .leftMouseDown, !event.modifierFlags.contains(.option),
            contentView?.hitTest(event.locationInWindow) != nil,
@@ -94,6 +102,7 @@ final class NotchPanel: NSPanel {
         hasShadow = false
         isMovable = false
         isMovableByWindowBackground = false
+        acceptsMouseMovedEvents = true
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
         isReleasedWhenClosed = false

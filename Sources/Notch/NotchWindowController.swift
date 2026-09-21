@@ -87,6 +87,7 @@ final class NotchWindowController {
         self.panel = panel
         self.mouseLocation = mouseLocation
         self.scheduleInteractionWork = scheduleInteractionWork
+        panel?.onPointerEvent = { [weak self] in self?.cursorMoved() }
     }
 
     /// The display this notch belongs to. Nil follows the menu-bar screen,
@@ -248,6 +249,7 @@ final class NotchWindowController {
     func show() {
         model.onTooltipHeightChange = { [weak self] in self?.updateInteractiveRects() }
         relocate()
+        panel?.onPointerEvent = { [weak self] in self?.cursorMoved() }
         startWatchingCursor()
         startWatchingFullScreen()
         startClock()
@@ -356,6 +358,8 @@ final class NotchWindowController {
         pendingRelocate = nil
         finishPositionEditing(commit: false)
         setPointing(false)
+        panel?.onPointerEvent = nil
+        hostingView?.pointingRects = []
         peekUntil = nil
         peekWork?.cancel()
         foldWork?.cancel()
@@ -444,6 +448,7 @@ final class NotchWindowController {
             let hosting = NotchHostingView(rootView: NotchRootView(model: model))
             panel.contextMenuProvider = { [weak self] in self?.contextMenu() }
             panel.onClick = { [weak self] point in self?.handleClick(at: point) }
+            panel.onPointerEvent = { [weak self] in self?.cursorMoved() }
             panel.onDragStart = { [weak self] in self?.beginOptionDrag() }
             panel.onControlMouseDown = { [weak self] in self?.handleControlClick(at: $0) ?? false }
             panel.positionEventHandler = { [weak self] in self?.handlePositionEvent($0) ?? false }
@@ -683,6 +688,8 @@ final class NotchWindowController {
             rects.append(card)
         }
         hostingView?.interactiveRects = rects
+        hostingView?.pointingRects = model.isExpanded && !model.isEditingPosition && !isOptionDragging
+            && visibility != .hidden ? model.visibleIndices.map { cellRect(index: $0) } : []
         if let panel {
             // Runs for every mouse event on the screen. AppKit does not skip an
             // unchanged value: each assignment re-sends the window's event mask
@@ -912,7 +919,13 @@ final class NotchWindowController {
     /// the app underneath had chosen. Setting `.arrow` on the way out would
     /// stamp an arrow over someone else's text caret.
     private func setPointing(_ wanted: Bool) {
-        guard wanted != isPointing else { return }
+        guard wanted != isPointing else {
+            // 状态没有变化也可能被原生 cursorUpdate 或 SwiftUI 重建覆盖。
+            if wanted, NSCursor.current != NSCursor.pointingHand {
+                NSCursor.pointingHand.set()
+            }
+            return
+        }
         isPointing = wanted
         if wanted {
             NSCursor.pointingHand.push()

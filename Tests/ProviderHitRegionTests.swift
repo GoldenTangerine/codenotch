@@ -165,6 +165,22 @@ final class ProviderHitRegionTests: XCTestCase {
         XCTAssertTrue(controller.isPointing)
         XCTAssertEqual(NSCursor.current, NSCursor.pointingHand)
 
+        // 模拟系统在悬停状态不变时覆盖光标，必须在同一次窗口事件后恢复。
+        NSCursor.arrow.set()
+        XCTAssertEqual(NSCursor.current, NSCursor.arrow)
+        let event = try XCTUnwrap(NSEvent.mouseEvent(with: .mouseMoved,
+            location: CGPoint(x: local.x, y: panel.frame.height - local.y),
+            modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
+            context: nil, eventNumber: 0, clickCount: 0, pressure: 0))
+        XCTAssertTrue(panel.acceptsMouseMovedEvents)
+        panel.sendEvent(event)
+        XCTAssertEqual(model.hoveredIndex, 0)
+        XCTAssertEqual(NSCursor.current, NSCursor.pointingHand)
+
+        NSCursor.arrow.set()
+        controller.cursorMoved()
+        XCTAssertEqual(NSCursor.current, NSCursor.pointingHand)
+
         for index in [1, 2, 0] {
             local = CGPoint(x: model.slack + model.ringCenter(index: index) * model.sizeScale,
                             y: rect.midY)
