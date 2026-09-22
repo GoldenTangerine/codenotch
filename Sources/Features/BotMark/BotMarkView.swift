@@ -49,21 +49,22 @@ final class BotPlaybackStore {
 // 一个窗口只有一个时钟；弱引用机器人，最后一个停止后释放显示链接。
 @MainActor
 final class BotWindowClock: NSObject {
-    private static var clocks: [ObjectIdentifier: BotWindowClock] = [:]
+    // 视图持有时钟；注册表不延长已关闭窗口或时钟的生命周期。
+    private static let clocks = NSMapTable<NSWindow, BotWindowClock>.weakToWeakObjects()
     private weak var window: NSWindow?
     private let views = NSHashTable<BotDrawingView>.weakObjects()
     private var link: CADisplayLink?
     private var observers: [NSObjectProtocol] = []
     private var workspaceObservers: [NSObjectProtocol] = []
     private var sleeping = false
+    private var closed = false
     private(set) var tickCount = 0
     private(set) var preferredFrameRate: Float = 0
     var isRunning: Bool { link != nil }
 
     static func attach(_ view: BotDrawingView, to window: NSWindow) -> BotWindowClock {
-        let key = ObjectIdentifier(window)
-        let clock = clocks[key] ?? BotWindowClock(window: window)
-        clocks[key] = clock
+        let clock = clocks.object(forKey: window) ?? BotWindowClock(window: window)
+        clocks.setObject(clock, forKey: window)
         clock.views.add(view)
         clock.update()
         return clock
@@ -74,15 +75,19 @@ final class BotWindowClock: NSObject {
         super.init()
         let center = NotificationCenter.default
         for name in [NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
-                     NSWindow.didDeminiaturizeNotification, NSWindow.didChangeScreenNotification] {
+                     NSWindow.didDeminiaturizeNotification, NSWindow.didChangeScreenNotification,
+                     NSWindow.didBecomeKeyNotification] {
             observers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.update() }
+                MainActor.assumeIsolated { self?.windowVisibilityChanged() }
             })
         }
         observers.append(center.addObserver(forName: NSWindow.willCloseNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                for view in self.views.allObjects { view.detach() }
+                // 设置窗口会复用原视图，关闭时暂停而不是解除绑定。
+                self.closed = true
+                for view in self.views.allObjects { view.windowVisibilityChanged(false) }
+                self.update()
             }
         })
         let workspace = NSWorkspace.shared.notificationCenter
@@ -91,13 +96,14 @@ final class BotWindowClock: NSObject {
             workspaceObservers.append(workspace.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.sleeping = name == NSWorkspace.screensDidSleepNotification || name == NSWorkspace.willSleepNotification
-                    self?.update()
+                    self?.windowVisibilityChanged()
                 }
             })
         }
     }
 
     deinit {
+        link?.invalidate()
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
         for observer in workspaceObservers { NSWorkspace.shared.notificationCenter.removeObserver(observer) }
     }
@@ -106,14 +112,28 @@ final class BotWindowClock: NSObject {
         views.remove(view)
         update()
         if views.allObjects.isEmpty, let window {
-            Self.clocks.removeValue(forKey: ObjectIdentifier(window))
+            Self.clocks.removeObject(forKey: window)
         }
     }
 
+    private var windowIsVisible: Bool {
+        !closed && !sleeping && window?.isVisible == true && window?.occlusionState.contains(.visible) == true
+    }
+
+    private func windowVisibilityChanged() {
+        if window?.isVisible == true { closed = false }
+        for view in views.allObjects { view.windowVisibilityChanged(windowIsVisible) }
+        update()
+    }
+
     func update() {
-        let visible = !sleeping && window?.isVisible == true && window?.occlusionState.contains(.visible) == true
+        update(views.allObjects)
+    }
+
+    private func update(_ registeredViews: [BotDrawingView]) {
+        let visible = windowIsVisible
         var frameRate: Float = 0
-        for view in views.allObjects {
+        for view in registeredViews {
             let eligible = visible && view.canAnimate
             view.setClockActive(eligible)
             if eligible { frameRate = max(frameRate, view.preferredAnimationFrameRate) }
@@ -139,13 +159,14 @@ final class BotWindowClock: NSObject {
     }
 
     @objc private func tick(_ link: CADisplayLink) {
-        update()
+        let registeredViews = views.allObjects
+        update(registeredViews)
         guard self.link != nil else { return }
         tickCount += 1
         guard let window else { link.invalidate(); self.link = nil; return }
         let pointer = window.mouseLocationOutsideOfEventStream
         let date = Date()
-        for view in views.allObjects where view.clockActive {
+        for view in registeredViews where view.clockActive {
             view.advance(to: link.timestamp, date: date, pointerInWindow: pointer)
         }
     }
@@ -160,7 +181,7 @@ final class BotDrawingView: NSView {
     private var config = BotMarkConfig()
     private var reduceMotion = false
     private(set) var clockActive = false
-    private weak var clock: BotWindowClock?
+    private var clock: BotWindowClock?
     private var consumedEvent: UUID?
     private var visibilityObservers: [NSObjectProtocol] = []
     private var lastProgrammeUpdate = Date.distantPast
@@ -258,6 +279,8 @@ final class BotDrawingView: NSView {
         guard reduceMotion, let presentation, presentation.active, !presentation.waiting,
               presentation.mood == .idle || presentation.mood == .spent,
               !isHiddenOrHasHiddenAncestor,
+              window?.isVisible == true, window?.occlusionState.contains(.visible) == true,
+              !visibleRect.intersection(bounds).isEmpty,
               let deadline = presentation.quietDeadline, deadline >= now else {
             quietTimer?.invalidate()
             quietTimer = nil
@@ -280,6 +303,16 @@ final class BotDrawingView: NSView {
 
     private func refreshStaticPresentation() {
         if reduceMotion, let presentation { configure(presentation, reduceMotion: true) }
+    }
+
+    func windowVisibilityChanged(_ visible: Bool) {
+        if visible {
+            refreshStaticPresentation()
+        } else {
+            quietTimer?.invalidate()
+            quietTimer = nil
+            setClockActive(false)
+        }
     }
 
     override func viewDidMoveToWindow() {

@@ -261,13 +261,16 @@ struct CodeSwitchSettingsProviderRow: View {
     @ObservedObject var drag: CodeSwitchProviderDrag
     let acceptDrop: ([String], CodeSwitchProviderOrder.Placement) -> Bool
     @State var expanded = false
-    @State private var editingAppearance = false
     @State private var insertion: CodeSwitchProviderOrder.Placement?
     @State private var rowHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             summary
+            SettingsBotRow(preferences: preferences, providerID: row.id, name: row.name,
+                           icon: row.snapshot?.icon, glyph: row.snapshot?.glyph ?? .third,
+                           source: .linked(row.currentSnapshot))
+                .padding(.leading, 58)
             if expanded { detail }
         }
         .font(.caption).monospacedDigit()
@@ -301,10 +304,6 @@ struct CodeSwitchSettingsProviderRow: View {
         }
         .onChange(of: drag.isActive) { _, active in if !active { insertion = nil } }
         .accessibilityElement(children: .contain)
-        .sheet(isPresented: $editingAppearance) {
-            BotAppearanceEditor(preferences: preferences, providerID: row.id, name: row.name,
-                                icon: row.snapshot?.icon, glyph: row.snapshot?.glyph ?? .third)
-        }
     }
 
     private var summary: some View {
@@ -363,9 +362,6 @@ struct CodeSwitchSettingsProviderRow: View {
                                      resetTimeFormat: preferences.resetTimeFormat, showsReset: false)
         } details: {
             HStack(spacing: 4) {
-                Button { editingAppearance = true } label: {
-                    Image(systemName: "paintpalette").frame(width: 20, height: 32)
-                }.buttonStyle(.plain).help("Appearance").accessibilityLabel(Text("Appearance"))
                 Button { expanded.toggle() } label: {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
                         .frame(width: 20, height: 32).contentShape(Rectangle())

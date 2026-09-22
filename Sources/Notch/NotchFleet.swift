@@ -419,7 +419,7 @@ final class NotchFleet {
 
     func setActivitySourceIDs(_ ids: [String: String]) {
         activitySourceIDs = ids
-        for controller in controllers.values { controller.model.activitySourceIDs = ids }
+        for model in models { model.activitySourceIDs = ids }
     }
 
     // MARK: - Readings
@@ -495,8 +495,8 @@ final class NotchFleet {
 
     func setRefreshing(_ ids: Set<String>) {
         self.refreshing = ids
-        for controller in controllers.values {
-            controller.model.refreshing = ids
+        for model in models {
+            model.refreshing = ids
         }
     }
 
@@ -515,9 +515,9 @@ final class NotchFleet {
 
     func setSessions(_ sessions: [String: [AgentSession]]) {
         self.sessions = sessions
-        for controller in controllers.values {
-            controller.model.sessions = sessions
-            controller.model.now = Date()
+        for model in models {
+            model.sessions = sessions
+            model.now = Date()
         }
     }
 

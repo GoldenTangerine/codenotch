@@ -26,45 +26,50 @@ struct QueryManagementView: View {
                 Text(problem).foregroundStyle(.red).textSelection(.enabled)
             }
             ForEach(catalog.entries) { entry in
-                HStack(spacing: 10) {
-                    Image(systemName: "line.3.horizontal")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 16, height: 28)
-                        .contentShape(Rectangle())
-                        .onDrag {
-                            drag.id = entry.id
-                            return NSItemProvider(object: entry.id as NSString)
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "line.3.horizontal")
+                            .foregroundStyle(.secondary)
+                            .frame(width: 16, height: 28)
+                            .contentShape(Rectangle())
+                            .onDrag {
+                                drag.id = entry.id
+                                return NSItemProvider(object: entry.id as NSString)
+                            }
+                            .help("Drag to reorder")
+                        QueryIconView(icon: entry.icon, fallback: .third, size: 24)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(entry.name).lineLimit(1).help(entry.name)
+                            Text(detail(entry)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
                         }
-                        .help("Drag to reorder")
-                    QueryIconView(icon: entry.icon, fallback: .third, size: 24)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(entry.name).lineLimit(1).help(entry.name)
-                        Text(detail(entry)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                    }
-                    Spacer(minLength: 0)
-                    Button {
-                        preferences.setAlertsMuted(!preferences.isMutedAlerts(for: entry.id), for: entry.id)
-                    } label: {
-                        Image(systemName: preferences.isMutedAlerts(for: entry.id) ? "bell.slash" : "bell")
-                    }
-                    .help(preferences.isMutedAlerts(for: entry.id) ? L10n.t("Unmute alerts") : L10n.t("Mute alerts"))
-                    Toggle("Enabled", isOn: Binding(get: { entry.enabled }, set: { catalog.setEnabled($0, id: entry.id) }))
-                        .labelsHidden().toggleStyle(.switch).controlSize(.mini)
-                    Button { store.refresh(providerID: entry.id) } label: {
-                        Image(systemName: "arrow.clockwise")
-                    }
-                    .help("Refresh").disabled(!entry.enabled || store.refreshing.contains(entry.id))
-                    Button { editing = entry } label: { Image(systemName: "pencil") }.help("Edit provider")
-                    Menu {
-                        if entry.usesLocalAccount {
-                            Button("Allow access…", systemImage: "key") { store.reauthorize(providerID: entry.id) }
-                            Button("Open account source", systemImage: "arrow.up.forward.app") { _ = store.openAccountSource(providerID: entry.id, switching: true) }
-                            Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") { store.signOut(providerID: entry.id) }
-                            Divider()
+                        Spacer(minLength: 0)
+                        Button {
+                            preferences.setAlertsMuted(!preferences.isMutedAlerts(for: entry.id), for: entry.id)
+                        } label: {
+                            Image(systemName: preferences.isMutedAlerts(for: entry.id) ? "bell.slash" : "bell")
                         }
-                        Button("Delete provider", systemImage: "trash", role: .destructive) { deleting = entry }
-                    } label: { Image(systemName: "ellipsis") }
-                    .menuStyle(.borderlessButton).fixedSize().help("Provider actions")
+                        .help(preferences.isMutedAlerts(for: entry.id) ? L10n.t("Unmute alerts") : L10n.t("Mute alerts"))
+                        Toggle("Enabled", isOn: Binding(get: { entry.enabled }, set: { catalog.setEnabled($0, id: entry.id) }))
+                            .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                        Button { store.refresh(providerID: entry.id) } label: {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        .help("Refresh").disabled(!entry.enabled || store.refreshing.contains(entry.id))
+                        Button { editing = entry } label: { Image(systemName: "pencil") }.help("Edit provider")
+                        Menu {
+                            if entry.usesLocalAccount {
+                                Button("Allow access…", systemImage: "key") { store.reauthorize(providerID: entry.id) }
+                                Button("Open account source", systemImage: "arrow.up.forward.app") { _ = store.openAccountSource(providerID: entry.id, switching: true) }
+                                Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") { store.signOut(providerID: entry.id) }
+                                Divider()
+                            }
+                            Button("Delete provider", systemImage: "trash", role: .destructive) { deleting = entry }
+                        } label: { Image(systemName: "ellipsis") }
+                        .menuStyle(.borderlessButton).fixedSize().help("Provider actions")
+                    }
+                    SettingsBotRow(preferences: preferences, providerID: entry.id,
+                                   name: entry.name, icon: entry.icon)
+                        .padding(.leading, 26)
                 }
                 .buttonStyle(.borderless)
                 .padding(.vertical, 3)

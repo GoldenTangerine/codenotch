@@ -342,6 +342,80 @@ import Testing
             > NotchLayout.glyphSize / 2)
     }
 
+    @Test func visibleQuotaRingsEmphasizeTheInnermostAndKeepClearance() {
+        for expanded in [false, true] {
+            for placement in WeeklyRing.allCases {
+                for secondary: Double? in [nil, 0, 0.32, 1] {
+                    for inner: Double? in [nil, 0, 1] {
+                        for working in [false, true] {
+                            let ring = ProviderRing(usedFraction: 0.32, glyph: .claude,
+                                activity: working ? ActivitySummary(state: .working) : nil,
+                                weeklyFraction: secondary, weeklyRing: placement,
+                                innerFraction: inner, expanded: expanded)
+                            let enlarged = expanded || inner != nil
+                            let center = (NotchLayout.ringDiameter
+                                + (enlarged ? NotchLayout.independentRingGrowth : 0)) / 2
+                            var layers: [(radius: CGFloat, stroke: CGFloat)] = [
+                                (center - ring.mainInset - ring.mainTrackStroke / 2, ring.mainTrackStroke)
+                            ]
+                            if placement != .off && secondary != nil
+                                && !(working && !enlarged && placement == .inside) {
+                                layers.append((center - ring.secondaryInset, ring.secondaryStroke))
+                            }
+                            if inner != nil {
+                                layers.append((center - NotchLayout.independentRingInset,
+                                    NotchLayout.independentRingStroke))
+                            }
+                            layers.sort { $0.radius < $1.radius }
+                            if layers.count == 1 {
+                                #expect(ring.mainTrackStroke == (expanded
+                                    ? NotchLayout.weeklyRingStroke : NotchLayout.trackStroke))
+                                #expect(ring.mainProgressStroke == (expanded
+                                    ? NotchLayout.weeklyRingStroke : NotchLayout.progressStroke))
+                            } else {
+                                #expect(layers[0].stroke == 4)
+                                #expect(ring.mainProgressStroke == ring.mainTrackStroke)
+                                for index in 1..<layers.count {
+                                    #expect(layers[index].stroke < layers[0].stroke)
+                                    let gap = layers[index].radius - layers[index].stroke / 2
+                                        - layers[index - 1].radius - layers[index - 1].stroke / 2
+                                    #expect(gap >= 1 - 0.000001)
+                                }
+                            }
+                            #expect(layers[0].radius - layers[0].stroke / 2
+                                - NotchLayout.glyphSize / 2 >= 1 - 0.000001)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test func twoRingsPaintThickInnerTrackAndProgressWithEitherOuterStyle() throws {
+        for expanded in [false, true] {
+            for dashed in [false, true] {
+                for fraction in [0.0, 0.32, 1.0] {
+                    let ring = ProviderRing(usedFraction: fraction, glyph: .claude,
+                        weeklyFraction: 0.77, weeklyRing: .outside, expanded: expanded)
+                    let renderer = ImageRenderer(content: ring
+                        .environment(\.weeklyRingDashed, dashed)
+                        .environment(\.colorScheme, .dark)
+                        .background(Color.black))
+                    renderer.scale = 4
+                    let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+                    let center = CGFloat(bitmap.pixelsWide) / 8
+                    let radius = center - ring.mainInset - ring.mainTrackStroke / 2
+                    for offset: CGFloat in [-1.25, 0, 1.25] {
+                        let color = try #require(bitmap.colorAt(
+                            x: Int((center + radius + offset) * 4),
+                            y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+                        #expect(max(color.redComponent, color.greenComponent, color.blueComponent) > 0.05)
+                    }
+                }
+            }
+        }
+    }
+
     @Test func independentRingsHaveEqualEdgeClearance() {
         let outerInnerEdge = NotchLayout.expandedSecondaryOutsideInset + NotchLayout.weeklyRingStroke / 2
         let middleOuterEdge = NotchLayout.expandedSecondaryInsideInset - NotchLayout.weeklyRingStroke / 2

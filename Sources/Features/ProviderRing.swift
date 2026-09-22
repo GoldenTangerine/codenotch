@@ -45,13 +45,45 @@ struct ProviderRing: View {
     var expanded = false
 
     private var isExpanded: Bool { expanded || innerFraction != nil }
-    private var mainTrackStroke: CGFloat { isExpanded ? NotchLayout.weeklyRingStroke : NotchLayout.trackStroke }
-    private var mainProgressStroke: CGFloat { isExpanded ? NotchLayout.weeklyRingStroke : NotchLayout.progressStroke }
-    private var mainInset: CGFloat {
-        let hasSecondary = weeklyRing != .off && weeklyFraction != nil
-        return isExpanded && ((weeklyRing == .outside && hasSecondary)
-            || (innerFraction != nil && !hasSecondary))
-            ? NotchLayout.expandedSecondaryInsideInset - mainTrackStroke / 2 : 0
+    private var hasSecondary: Bool {
+        weeklyRing != .off && weeklyFraction != nil && !isWorking
+    }
+    private var hasMultipleRings: Bool { hasSecondary || innerFraction != nil }
+    private var mainIsInnermost: Bool {
+        innerFraction == nil && !(hasSecondary && weeklyRing == .inside)
+    }
+    var mainTrackStroke: CGFloat {
+        guard hasMultipleRings else {
+            return isExpanded ? NotchLayout.weeklyRingStroke : NotchLayout.trackStroke
+        }
+        return mainIsInnermost ? NotchLayout.independentRingStroke : NotchLayout.weeklyRingStroke
+    }
+    var mainProgressStroke: CGFloat {
+        hasMultipleRings || isExpanded ? mainTrackStroke : NotchLayout.progressStroke
+    }
+    var secondaryStroke: CGFloat {
+        weeklyRing == .inside && innerFraction == nil
+            ? NotchLayout.independentRingStroke : NotchLayout.weeklyRingStroke
+    }
+    var mainInset: CGFloat {
+        guard isExpanded && ((weeklyRing == .outside && hasSecondary)
+            || (innerFraction != nil && !hasSecondary)) else { return 0 }
+        // 加粗中间层时向内让位，保证与外圈的线条边缘至少相隔 1pt。
+        let centerInset = max(NotchLayout.expandedSecondaryInsideInset,
+            hasSecondary ? NotchLayout.expandedSecondaryOutsideInset
+                + (secondaryStroke + mainTrackStroke) / 2 + 1 : 0)
+        return centerInset - mainTrackStroke / 2
+    }
+    var secondaryInset: CGFloat {
+        let original = isExpanded
+            ? (weeklyRing == .inside ? NotchLayout.expandedSecondaryInsideInset
+                : NotchLayout.expandedSecondaryOutsideInset)
+            : diameter / 2 - (weeklyRing.radius ?? 0)
+        guard weeklyRing == .inside else { return original }
+        // 内置次级圈加粗后同时避开图标和主圈，尺寸仍由原有布局决定。
+        let glyphClearance = diameter / 2 - NotchLayout.glyphSize / 2 - 1 - secondaryStroke / 2
+        let mainClearance = mainInset + mainTrackStroke + 1 + secondaryStroke / 2
+        return min(max(original, mainClearance), glyphClearance)
     }
 
     private var diameter: CGFloat {
@@ -162,11 +194,8 @@ struct ProviderRing: View {
                 // the case this exists for, and painting them the same colour
                 // would hide it. Held slightly back in opacity so the headline
                 // stays the one the eye lands on first.
-                if let radius = weeklyRing.radius, weeklyFraction != nil, !isWorking {
-                    let inset = !isExpanded
-                        ? NotchLayout.ringDiameter / 2 - radius
-                        : (weeklyRing == .inside ? NotchLayout.expandedSecondaryInsideInset
-                            : NotchLayout.expandedSecondaryOutsideInset)
+                if hasSecondary {
+                    let inset = secondaryInset
 
                     // A track of its own, for the same reason the headline has
                     // one: a week nobody has spent yet draws an arc of zero
@@ -176,7 +205,7 @@ struct ProviderRing: View {
                     Circle()
                         .inset(by: inset)
                         .stroke(Palette.ringTrack,
-                                style: StrokeStyle(lineWidth: NotchLayout.weeklyRingStroke,
+                                style: StrokeStyle(lineWidth: secondaryStroke,
                                                    dash: weeklyRingDashed ? [4, 2] : []))
                         .opacity(reduceTransparency ? 1 : 0.7)
 
@@ -185,7 +214,7 @@ struct ProviderRing: View {
                         .trim(from: 0, to: weeklySweep)
                         .stroke(
                             weeklyBand.color(accent: accentColor),
-                            style: StrokeStyle(lineWidth: NotchLayout.weeklyRingStroke,
+                            style: StrokeStyle(lineWidth: secondaryStroke,
                                                lineCap: weeklyRingDashed ? .butt : .round,
                                                dash: weeklyRingDashed ? [4, 2] : [])
                         )

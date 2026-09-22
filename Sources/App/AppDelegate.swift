@@ -396,7 +396,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 previewWeeklyLimitAlert: { [weak self] in
                     self?.previewWeeklyLimitAlert()
                 },
-                usageStore: store, ollamaRelay: relay, lmstudioMetrics: lmstudio,
+                usageStore: store, botModel: fleet.menuModel, ollamaRelay: relay, lmstudioMetrics: lmstudio,
                 phoneLinkPairing: phonePairing, phoneLinkRegistry: phoneRegistry, phoneLinkServerStatus: serverStatus
             )
             // The gear toggles; everything else that opens settings opens it.
@@ -1010,6 +1010,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if activityRouting?.snapshots != routing.snapshots {
             notchFleet?.setSnapshots(routing.snapshots)
+        }
+        // 设置列表保留全部供应商，机器人状态不受悬浮窗显示范围或隐藏设置过滤。
+        let settingsRouting = ActivityRouting(local: localSnapshots, linked: codeSwitch?.snapshots ?? [],
+            sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:])
+        if let model = notchFleet?.menuModel, model.sessions != settingsRouting.sessions {
+            model.sessions = settingsRouting.sessions
         }
         statusItem?.snapshots = routing.snapshots.filter { $0.localModel == nil }
             + (store?.snapshots.filter { $0.kind == .localRuntime } ?? [])

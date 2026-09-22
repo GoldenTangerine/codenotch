@@ -60,8 +60,8 @@ final class NotchViewModel: ObservableObject {
     }
 
     func botPresentation(for snapshot: ProviderSnapshot, activityOverride: ActivitySummary? = nil,
-                         active: Bool? = nil) -> BotPresentation? {
-        let appearance = botAppearances[snapshot.providerID] ?? BotAppearance()
+                         active: Bool? = nil, appearanceOverride: BotAppearance? = nil) -> BotPresentation? {
+        let appearance = appearanceOverride ?? botAppearances[snapshot.providerID] ?? BotAppearance()
         guard appearance.enabled, BotMarkLibrary.available != nil else { return nil }
         let activity = (activityOverride ?? activity(for: snapshot))?.state
         let quota = IndependentQuotaRing.originalQuotas(in: snapshot)
@@ -788,6 +788,16 @@ final class NotchViewModel: ObservableObject {
     /// A provider with no activity source gets none, rather than borrowing
     /// somebody else's.
     func activity(for snapshot: ProviderSnapshot) -> ActivitySummary? {
+        // 设置列表也会显示未进入悬浮窗的联动供应商，直接使用该行的最新活动数据。
+        if let linked = snapshot.linked {
+            let live = sessions[snapshot.providerID] ?? []
+            let summary = ActivitySummary(sessions: live)
+            if summary?.state == .working || summary?.state == .waiting { return summary }
+            if linked.provider.activeRequests > 0 && (!live.isEmpty || linked.provider.status == "active") {
+                return ActivitySummary(state: .working)
+            }
+            return summary
+        }
         guard let model = snapshot.localModel else { return activity(for: snapshot.providerID) }
         if let local = localActivities[snapshot.id] {
             return ActivitySummary(sessions: [AgentSession(id: snapshot.id, name: local.label,
@@ -800,16 +810,11 @@ final class NotchViewModel: ObservableObject {
     }
 
     func activity(for providerID: String) -> ActivitySummary? {
-        if let live = sessions[providerID], !live.isEmpty {
-            let summary = ActivitySummary(sessions: live)
-            if summary?.state == .working || summary?.state == .waiting { return summary }
-            if let linked = snapshots.first(where: { $0.id == providerID })?.linked,
-               linked.provider.activeRequests > 0 { return ActivitySummary(state: .working) }
-            return summary
+        if let snapshot = snapshots.first(where: { $0.id == providerID }), snapshot.linked != nil {
+            return activity(for: snapshot)
         }
-        if let linked = snapshots.first(where: { $0.id == providerID })?.linked {
-            return linked.provider.status == "active" && linked.provider.activeRequests > 0
-                ? ActivitySummary(state: .working) : nil
+        if let live = sessions[providerID], !live.isEmpty {
+            return ActivitySummary(sessions: live)
         }
         if let activitySourceIDs {
             guard let source = activitySourceIDs[providerID] else { return nil }

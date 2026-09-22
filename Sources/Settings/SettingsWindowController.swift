@@ -30,6 +30,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let updater: Updater
     private let catalog: QueryCatalog?
     private let usageStore: UsageStore?
+    private let botModel: NotchViewModel?
     private let hooks: HookSettings?
     private let codeSwitch: CodeSwitchBridge?
     private let ollamaRelay: OllamaActivityRelay?
@@ -57,11 +58,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
          previewSessionLimitAlert: (() -> Void)? = nil,
          previewWeeklyLimitAlert: (() -> Void)? = nil,
          usageStore: UsageStore? = nil,
+         botModel: NotchViewModel? = nil,
          ollamaRelay: OllamaActivityRelay? = nil,
          lmstudioMetrics: LMStudioMetrics? = nil, phoneLinkPairing: PhoneLinkPairing? = nil, phoneLinkRegistry: PhoneLinkRegistry? = nil, phoneLinkServerStatus: PhoneLinkServerStatus? = nil) {
         self.ollamaRelay = ollamaRelay
         self.lmstudioMetrics = lmstudioMetrics
         self.usageStore = usageStore
+        self.botModel = botModel
         self.phoneLinkPairing = phoneLinkPairing
         self.phoneLinkRegistry = phoneLinkRegistry
         self.phoneLinkServerStatus = phoneLinkServerStatus
@@ -230,6 +233,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                                    previewResetAlert: previewResetAlert,
                                    previewSessionLimitAlert: previewSessionLimitAlert,
                                    previewWeeklyLimitAlert: previewWeeklyLimitAlert)
+                .environment(\.settingsBotContext, botModel.flatMap { model in
+                    usageStore.map { SettingsBotContext(model: model, store: $0) }
+                })
         )
         Self.configureResizing(window)
         window.isReleasedWhenClosed = false

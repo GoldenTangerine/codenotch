@@ -63,6 +63,54 @@ final class BotMarkTests: XCTestCase {
         view.detach()
     }
 
+    func testRetainedWindowReopensWithTheSameAnimationClock() throws {
+        _ = try XCTUnwrap(BotMarkLibrary.available)
+        let window = VisibleWindow(contentRect: NSRect(x: -10000, y: -10000, width: 80, height: 80),
+                                   styleMask: .borderless, backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let view = BotDrawingView(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+        view.configure(BotPresentation(id: "settings", brand: "claude", appearance: BotAppearance()), reduceMotion: false)
+        window.contentView?.addSubview(view)
+        let clock = BotWindowClock.attach(view, to: window)
+        for cycle in 0..<5 {
+            XCTAssertTrue(clock.isRunning)
+            window.close()
+            XCTAssertFalse(clock.isRunning)
+            XCTAssertFalse(view.clockActive)
+            let frames = view.renderedFrames
+            view.advance(to: Double(cycle), date: Date(), pointerInWindow: .zero)
+            XCTAssertEqual(view.renderedFrames, frames)
+            window.orderFront(nil)
+            NotificationCenter.default.post(name: NSWindow.didBecomeKeyNotification, object: window)
+            XCTAssertTrue(clock.isRunning)
+            XCTAssertEqual(clock.preferredFrameRate, 60)
+            XCTAssertTrue(BotWindowClock.attach(view, to: window) === clock)
+            view.advance(to: Double(cycle) + 0.1, date: Date(), pointerInWindow: .zero)
+            XCTAssertGreaterThan(view.renderedFrames, frames)
+        }
+        view.detach()
+        XCTAssertFalse(clock.isRunning)
+    }
+
+    func testClosedWindowDoesNotKeepDiscardedRobotClockAlive() throws {
+        _ = try XCTUnwrap(BotMarkLibrary.available)
+        weak var releasedClock: BotWindowClock?
+        autoreleasepool {
+            let window = VisibleWindow(contentRect: NSRect(x: 0, y: 0, width: 80, height: 80),
+                                       styleMask: .borderless, backing: .buffered, defer: true)
+            window.isReleasedWhenClosed = false
+            let view = BotDrawingView(frame: NSRect(x: 0, y: 0, width: 24, height: 24))
+            view.configure(BotPresentation(id: "settings", brand: "claude", appearance: BotAppearance()), reduceMotion: false)
+            window.contentView?.addSubview(view)
+            releasedClock = BotWindowClock.attach(view, to: window)
+            window.close()
+            XCTAssertFalse(releasedClock?.isRunning ?? true)
+            view.removeFromSuperview()
+        }
+        XCTAssertNil(releasedClock)
+    }
+
     private func assertEyesSeparated(_ frame: BotMarkFrame, file: StaticString = #filePath, line: UInt = #line) {
         guard frame.eyes.count == 2, frame.eyes.allSatisfy(\.visible) else { return }
         let boxes = frame.eyes.map { eye -> CGRect in
@@ -429,6 +477,140 @@ final class BotMarkTests: XCTestCase {
         fleet.show()
         XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.botAppearances["provider"] == appearance })
         XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.botLastActivity == activityAt })
+    }
+
+    func testSettingsRobotUsesSavedAppearanceWithoutDependingOnNotchExpansion() throws {
+        _ = try XCTUnwrap(BotMarkLibrary.available)
+        let model = NotchViewModel()
+        let snapshot = try XCTUnwrap(Fixtures.snapshots().first)
+        model.isExpanded = false
+        model.refreshing = [snapshot.providerID]
+        var appearance = BotAppearance()
+        appearance.enabled = true
+        appearance.shape = "cloud"
+        appearance.rgb = 0x123456
+        let presentation = try XCTUnwrap(SettingsBotRow.presentation(model: model, snapshot: snapshot,
+            configurationID: snapshot.providerID, brand: snapshot.glyph.rawValue, appearance: appearance))
+        XCTAssertTrue(presentation.active)
+        XCTAssertEqual(presentation.mood, .fetching)
+        XCTAssertEqual(presentation.appearance, appearance)
+        XCTAssertEqual(presentation.gaze, .ahead)
+        XCTAssertEqual(presentation.gazeBias, 0)
+        XCTAssertNil(presentation.pointerRegion)
+        XCTAssertTrue(model.botAppearances.isEmpty)
+        appearance.enabled = false
+        XCTAssertNil(SettingsBotRow.presentation(model: model, snapshot: snapshot,
+            configurationID: snapshot.providerID, brand: snapshot.glyph.rawValue, appearance: appearance))
+    }
+
+    func testSettingsRobotWithoutCurrentDataUsesIdleRatherThanCachedState() throws {
+        let model = NotchViewModel()
+        let snapshot = try XCTUnwrap(Fixtures.snapshots().first)
+        var appearance = BotAppearance()
+        appearance.enabled = true
+        XCTAssertEqual(SettingsBotSource.account.snapshot(for: snapshot.id, in: [snapshot])?.id, snapshot.id)
+        XCTAssertNil(SettingsBotSource.linked(nil).snapshot(for: snapshot.id, in: [snapshot]))
+        XCTAssertNil(SettingsBotSource.account.snapshot(for: "missing", in: [snapshot]))
+        let presentation = try XCTUnwrap(SettingsBotRow.presentation(model: model, snapshot: nil,
+            configurationID: snapshot.providerID, brand: snapshot.glyph.rawValue, appearance: appearance))
+        XCTAssertEqual(presentation.mood, .idle)
+        XCTAssertTrue(presentation.active)
+        XCTAssertFalse(presentation.waiting)
+    }
+
+    func testSettingsRobotWithoutQuotaStillUsesLiveSessionsAndRefresh() throws {
+        let model = NotchViewModel()
+        var appearance = BotAppearance()
+        appearance.enabled = true
+        model.activitySourceIDs = ["row": "source"]
+        @MainActor func presentation() throws -> BotPresentation {
+            try XCTUnwrap(SettingsBotRow.presentation(model: model, snapshot: nil,
+                configurationID: "appearance", brand: "claude", appearance: appearance, providerID: "row"))
+        }
+        model.refreshing = ["row"]
+        XCTAssertEqual(try presentation().mood, .fetching)
+        model.sessions["source"] = [AgentSession(id: "busy", name: "Busy", detail: "", state: .busy,
+                                                waitingFor: nil, since: Date())]
+        XCTAssertEqual(try presentation().mood, .working)
+        model.sessions["row"] = [AgentSession(id: "waiting", name: "Waiting", detail: "", state: .waiting,
+                                             waitingFor: nil, since: Date())]
+        XCTAssertEqual(try presentation().mood, .idle)
+        XCTAssertTrue(try presentation().waiting)
+        XCTAssertEqual(try presentation().id, "appearance")
+        model.sessions = [:]
+        model.refreshing = []
+        XCTAssertEqual(try presentation().mood, .idle)
+        XCTAssertFalse(try presentation().waiting)
+    }
+
+    func testSettingsSnapshotLookupDoesNotReadUnneededCollections() throws {
+        let snapshot = try XCTUnwrap(Fixtures.snapshots().first)
+        var reads = 0
+        func snapshots() -> [ProviderSnapshot] { reads += 1; return [snapshot] }
+        XCTAssertNil(SettingsBotSource.linked(nil).snapshot(for: snapshot.id, in: snapshots(), fallback: snapshots()))
+        XCTAssertEqual(reads, 0)
+        XCTAssertEqual(SettingsBotSource.account.snapshot(for: snapshot.id, in: snapshots(), fallback: snapshots())?.id, snapshot.id)
+        XCTAssertEqual(reads, 1)
+        XCTAssertEqual(SettingsBotSource.account.snapshot(for: snapshot.id, in: [], fallback: snapshots())?.id, snapshot.id)
+        XCTAssertEqual(reads, 2)
+    }
+
+    func testSettingsRobotMatchesNotchQuotaAndRefreshMoods() throws {
+        _ = try XCTUnwrap(BotMarkLibrary.available)
+        let model = NotchViewModel()
+        var appearance = BotAppearance()
+        appearance.enabled = true
+        model.botAppearances["provider"] = appearance
+        for spent in [false, true] {
+            let snapshot = ProviderSnapshot(id: "provider", displayName: "Provider", glyph: .claude,
+                fidelity: .official, status: .ok,
+                windows: [LimitWindow(id: "session", label: "Session", usedFraction: spent ? 1 : 0.25)],
+                headlineID: "session")
+            for refreshing in [false, true] {
+                model.refreshing = refreshing ? ["provider"] : []
+                let settings = try XCTUnwrap(SettingsBotRow.presentation(model: model, snapshot: snapshot,
+                    configurationID: snapshot.id, brand: snapshot.glyph.rawValue, appearance: appearance))
+                XCTAssertEqual(settings.mood, model.botPresentation(for: snapshot)?.mood)
+                XCTAssertEqual(settings.mood, refreshing ? .fetching : spent ? .spent : .idle)
+            }
+        }
+    }
+
+    func testSettingsRobotReadsLinkedRequestsOutsideTheNotchAndRespectsWaiting() throws {
+        _ = try XCTUnwrap(BotMarkLibrary.available)
+        let platform = CodeSwitchPlatform(platform: "claude", name: "Claude", icon: "claude",
+                                          error: false, providers: [])
+        let provider = CodeSwitchProvider(providerId: "hidden", providerName: "Hidden", icon: "openai",
+            activeRequests: 1, status: "active", loading: false, updatedAt: 0, quotas: [], stats: nil)
+        let snapshot = provider.snapshot(platform: platform)
+        let model = NotchViewModel()
+        var appearance = BotAppearance()
+        appearance.enabled = true
+        @MainActor func presentation() throws -> BotPresentation {
+            try XCTUnwrap(SettingsBotRow.presentation(model: model, snapshot: snapshot,
+                configurationID: snapshot.id, brand: "openai", appearance: appearance))
+        }
+        XCTAssertTrue(model.snapshots.isEmpty)
+        XCTAssertEqual(try presentation().mood, .working)
+        model.sessions[snapshot.providerID] = [AgentSession(id: "waiting", name: "Waiting", detail: "",
+            state: .waiting, waitingFor: nil, since: Date())]
+        XCTAssertTrue(try presentation().waiting)
+        XCTAssertEqual(try presentation().mood, .idle)
+    }
+
+    func testSettingsRuntimeReceivesRefreshSessionsAndActivityAliases() {
+        let fleet = NotchFleet(scope: .allDisplays, edge: .top)
+        let session = AgentSession(id: "working", name: "Working", detail: "", state: .busy,
+                                   waitingFor: nil, since: Date())
+        fleet.setRefreshing(["provider"])
+        fleet.setSessions(["source": [session]])
+        fleet.setActivitySourceIDs(["provider": "source"])
+        XCTAssertEqual(fleet.menuModel.refreshing, ["provider"])
+        XCTAssertEqual(fleet.menuModel.activity(for: "provider")?.state, .working)
+        fleet.setRefreshing([])
+        fleet.setSessions([:])
+        XCTAssertTrue(fleet.menuModel.refreshing.isEmpty)
+        XCTAssertNil(fleet.menuModel.activity(for: "provider"))
     }
 
     func testActivityAndRefreshOverrideQuotaMood() {
