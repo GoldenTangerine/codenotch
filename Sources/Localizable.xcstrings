@@ -1,6 +1,39 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Quota bars in expanded details": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "展开详情中的额度进度条"
+          }
+        }
+      }
+    },
+    "Restore quota progress bars in Code Switch R details while keeping list summaries text-only": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复 Code Switch R 展开详情的额度进度条，列表摘要仍仅显示文字"
+          }
+        }
+      }
+    },
+    "Keep actual percentages, status colors and reset times in expanded quotas": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "展开额度保留实际百分比、状态颜色与重置时间"
+          }
+        }
+      }
+    },
     "Compact account and provider lists": {
       "extractionState": "manual",
       "localizations": {

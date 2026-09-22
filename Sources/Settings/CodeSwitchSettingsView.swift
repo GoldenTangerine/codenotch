@@ -481,6 +481,12 @@ struct CodeSwitchTableQuotaCell: View {
                     let band = UsageBand.band(for: fraction, watchLimit: watchLimit, criticalLimit: criticalLimit)
                     SettingsQuotaPercentage(title: item.quota.title, fraction: fraction,
                                             color: CodeSwitchTableText.quotaColor(band))
+                    if expanded {
+                        ProgressView(value: min(1, max(0, fraction)))
+                            .progressViewStyle(.linear)
+                            .tint(band.color(accent: accent))
+                            .accessibilityLabel(item.quota.title)
+                    }
                 } else {
                     Text(CodeSwitchTableText.attributed(item.quota.title + ": "
                         + (window.quantity?.summary ?? L10n.t("No reading"))))

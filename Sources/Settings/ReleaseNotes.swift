@@ -40,6 +40,14 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.62",
+            headline: L10n.t("Quota bars in expanded details"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Restore quota progress bars in Code Switch R details while keeping list summaries text-only")),
+                ReleaseNote.Change(title: L10n.t("Keep actual percentages, status colors and reset times in expanded quotas"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.61",
             headline: L10n.t("Compact account and provider lists"),
             changes: [
