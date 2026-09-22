@@ -40,6 +40,16 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.6.61",
+            headline: L10n.t("Compact account and provider lists"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Keep quota values, robots and appearance controls together, with details last")),
+                ReleaseNote.Change(title: L10n.t("Replace quota bars with text and keep percentages readable")),
+                ReleaseNote.Change(title: L10n.t("Keep refresh and access warnings visible beside saved readings")),
+                ReleaseNote.Change(title: L10n.t("Reduce repeated snapshot lookups and formatting while preserving shared animation clocks"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.57",
             headline: L10n.t("Active providers beside the hardware notch"),
             changes: [

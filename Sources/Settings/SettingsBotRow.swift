@@ -47,6 +47,7 @@ struct SettingsBotRow: View {
     var icon: ProviderIcon? = nil
     var glyph: ProviderGlyph = .third
     var source: SettingsBotSource = .account
+    var compact = false
     @Environment(\.settingsBotContext) private var context
     @State private var editingAppearance = false
 
@@ -71,12 +72,20 @@ struct SettingsBotRow: View {
                 .frame(width: 24, height: 24)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
+            } else if compact {
+                Color.clear.frame(width: 24, height: 24).accessibilityHidden(true)
             }
             Button { editingAppearance = true } label: {
-                Label("Appearance", systemImage: "paintpalette")
+                if compact {
+                    Image(systemName: "paintpalette").frame(width: 24, height: 28)
+                } else {
+                    Label("Appearance", systemImage: "paintpalette")
+                }
             }
             .buttonStyle(.borderless)
             .font(.caption)
+            .help("Appearance")
+            .accessibilityLabel(Text("Appearance"))
         }
         .sheet(isPresented: $editingAppearance) {
             BotAppearanceEditor(preferences: preferences, providerID: configurationID,

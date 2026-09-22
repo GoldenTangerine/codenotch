@@ -16,6 +16,29 @@ import Testing
 @Suite struct CodeSwitchIntegrationTests {
     private let now = Date(timeIntervalSince1970: 1_800_000_000)
 
+    @Test @MainActor func compactAccountSummaryPreservesFailuresAndMissingReadings() throws {
+        var snapshot = try #require(Fixtures.snapshots().first)
+        snapshot.windows = [LimitWindow(id: "weekly", label: "Weekly", usedFraction: 0.1726)]
+        snapshot.headlineID = "weekly"
+        snapshot.queryFailure = nil
+        #expect(SettingsQuotaSummary.summary(snapshot: snapshot)
+            == "Weekly: " + QuotaQuantity.format(17.26) + "%")
+
+        snapshot.queryFailure = "Request failed (503)"
+        #expect(SettingsQuotaSummary.summary(snapshot: snapshot) == "Request failed (503)")
+
+        snapshot.queryFailure = nil
+        snapshot.windows = []
+        snapshot.status = .error("Connection unavailable")
+        #expect(SettingsQuotaSummary.summary(snapshot: snapshot) == snapshot.statusMessage)
+        #expect(SettingsQuotaSummary.summary(snapshot: snapshot).contains("Connection unavailable"))
+        #expect(SettingsQuotaSummary.summary(snapshot: nil, fallback: "Disabled") == "Disabled")
+
+        snapshot.windows = [LimitWindow(id: "weekly", label: "Weekly", usedFraction: 0.5)]
+        snapshot.headlineID = "missing"
+        #expect(SettingsQuotaSummary.summary(snapshot: snapshot) == "—")
+    }
+
     private func fixture() throws -> CodeSwitchSnapshot {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("Fixtures/code-switch-session-routing.json")

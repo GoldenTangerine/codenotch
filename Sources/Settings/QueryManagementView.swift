@@ -19,6 +19,7 @@ struct QueryManagementView: View {
     @State private var deleting: QueryEntry?
     @State private var problem: String?
     @State private var drag = DragState()
+    @State private var expandedEntries: Set<String> = []
 
     var body: some View {
         Section {
@@ -26,6 +27,8 @@ struct QueryManagementView: View {
                 Text(problem).foregroundStyle(.red).textSelection(.enabled)
             }
             ForEach(catalog.entries) { entry in
+                let snapshot = entry.enabled ? store.snapshots.first { $0.id == entry.id } : nil
+                let detailText = detail(entry, snapshot: snapshot)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 10) {
                         Image(systemName: "line.3.horizontal")
@@ -37,39 +40,57 @@ struct QueryManagementView: View {
                                 return NSItemProvider(object: entry.id as NSString)
                             }
                             .help("Drag to reorder")
-                        QueryIconView(icon: entry.icon, fallback: .third, size: 24)
-                        VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            QueryIconView(icon: entry.icon, fallback: .third, size: 20)
                             Text(entry.name).lineLimit(1).help(entry.name)
-                            Text(detail(entry)).font(.caption).foregroundStyle(.secondary).lineLimit(2)
-                        }
-                        Spacer(minLength: 0)
+                                .foregroundStyle(entry.enabled ? .primary : .secondary)
+                        }.frame(minWidth: 80, maxWidth: 150, alignment: .leading)
+                        SettingsAccountTodaySummary()
+                        SettingsQuotaSummary(snapshot: snapshot, fallback: detailText,
+                                             refreshing: entry.enabled && store.refreshing.contains(entry.id))
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        SettingsBotRow(preferences: preferences, providerID: entry.id,
+                                       name: entry.name, icon: entry.icon, compact: true)
+                            .fixedSize()
                         Button {
-                            preferences.setAlertsMuted(!preferences.isMutedAlerts(for: entry.id), for: entry.id)
+                            if !expandedEntries.insert(entry.id).inserted { expandedEntries.remove(entry.id) }
                         } label: {
-                            Image(systemName: preferences.isMutedAlerts(for: entry.id) ? "bell.slash" : "bell")
+                            Image(systemName: expandedEntries.contains(entry.id) ? "chevron.down" : "chevron.right")
+                                .frame(width: 20, height: 28).contentShape(Rectangle())
                         }
-                        .help(preferences.isMutedAlerts(for: entry.id) ? L10n.t("Unmute alerts") : L10n.t("Mute alerts"))
-                        Toggle("Enabled", isOn: Binding(get: { entry.enabled }, set: { catalog.setEnabled($0, id: entry.id) }))
-                            .labelsHidden().toggleStyle(.switch).controlSize(.mini)
-                        Button { store.refresh(providerID: entry.id) } label: {
-                            Image(systemName: "arrow.clockwise")
-                        }
-                        .help("Refresh").disabled(!entry.enabled || store.refreshing.contains(entry.id))
-                        Button { editing = entry } label: { Image(systemName: "pencil") }.help("Edit provider")
-                        Menu {
-                            if entry.usesLocalAccount {
-                                Button("Allow access…", systemImage: "key") { store.reauthorize(providerID: entry.id) }
-                                Button("Open account source", systemImage: "arrow.up.forward.app") { _ = store.openAccountSource(providerID: entry.id, switching: true) }
-                                Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") { store.signOut(providerID: entry.id) }
-                                Divider()
-                            }
-                            Button("Delete provider", systemImage: "trash", role: .destructive) { deleting = entry }
-                        } label: { Image(systemName: "ellipsis") }
-                        .menuStyle(.borderlessButton).fixedSize().help("Provider actions")
+                        .accessibilityLabel(expandedEntries.contains(entry.id) ? L10n.t("Hide details") : L10n.t("Show details"))
+                        .help(expandedEntries.contains(entry.id) ? L10n.t("Hide details") : L10n.t("Show details"))
                     }
-                    SettingsBotRow(preferences: preferences, providerID: entry.id,
-                                   name: entry.name, icon: entry.icon)
-                        .padding(.leading, 26)
+                    if expandedEntries.contains(entry.id) {
+                        Text(detailText).font(.caption).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.leading, 26)
+                        HStack(spacing: 10) {
+                            Button {
+                                preferences.setAlertsMuted(!preferences.isMutedAlerts(for: entry.id), for: entry.id)
+                            } label: {
+                                Image(systemName: preferences.isMutedAlerts(for: entry.id) ? "bell.slash" : "bell")
+                            }
+                            .help(preferences.isMutedAlerts(for: entry.id) ? L10n.t("Unmute alerts") : L10n.t("Mute alerts"))
+                            Toggle("Enabled", isOn: Binding(get: { entry.enabled }, set: { catalog.setEnabled($0, id: entry.id) }))
+                                .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                            Button { store.refresh(providerID: entry.id) } label: {
+                                Image(systemName: "arrow.clockwise")
+                            }
+                            .help("Refresh").disabled(!entry.enabled || store.refreshing.contains(entry.id))
+                            Button { editing = entry } label: { Image(systemName: "pencil") }.help("Edit provider")
+                            Menu {
+                                if entry.usesLocalAccount {
+                                    Button("Allow access…", systemImage: "key") { store.reauthorize(providerID: entry.id) }
+                                    Button("Open account source", systemImage: "arrow.up.forward.app") { _ = store.openAccountSource(providerID: entry.id, switching: true) }
+                                    Button("Sign out", systemImage: "rectangle.portrait.and.arrow.right") { store.signOut(providerID: entry.id) }
+                                    Divider()
+                                }
+                                Button("Delete provider", systemImage: "trash", role: .destructive) { deleting = entry }
+                            } label: { Image(systemName: "ellipsis") }
+                            .menuStyle(.borderlessButton).fixedSize().help("Provider actions")
+                        }.padding(.leading, 26)
+                    }
                 }
                 .buttonStyle(.borderless)
                 .padding(.vertical, 3)
@@ -96,7 +117,10 @@ struct QueryManagementView: View {
             Button("Cancel", role: .cancel) { deleting = nil }
             Button("Delete", role: .destructive) {
                 if let deleting {
-                    do { try catalog.delete(deleting.id) } catch { problem = error.localizedDescription }
+                    do {
+                        try catalog.delete(deleting.id)
+                        expandedEntries.remove(deleting.id)
+                    } catch { problem = error.localizedDescription }
                 }
                 deleting = nil
             }
@@ -105,15 +129,87 @@ struct QueryManagementView: View {
         }
     }
 
-    private func detail(_ entry: QueryEntry) -> String {
+    private func detail(_ entry: QueryEntry, snapshot: ProviderSnapshot?) -> String {
         if !entry.enabled { return L10n.t("Disabled") }
-        if store.refreshing.contains(entry.id) { return L10n.t("Refreshing…") }
-        if let snapshot = store.snapshots.first(where: { $0.id == entry.id }) {
+        if let snapshot {
             if let failure = snapshot.queryFailure { return failure }
             if snapshot.hasReading { return snapshot.headline?.summary ?? L10n.t("No reading") }
             if let status = snapshot.statusMessage { return status }
         }
         return entry.usesLocalAccount ? L10n.t("Automatic credentials") : L10n.t("Manual credentials")
+    }
+}
+
+struct SettingsQuotaSummary: View {
+    let snapshot: ProviderSnapshot?
+    var fallback = "—"
+    var refreshing = false
+    @Environment(\.usageWatchLimit) private var watchLimit
+    @Environment(\.usageCriticalLimit) private var criticalLimit
+
+    static func summary(snapshot: ProviderSnapshot?, fallback: String = "—") -> String {
+        guard let snapshot else { return fallback }
+        if let failure = snapshot.queryFailure { return failure }
+        guard let window = snapshot.headline else { return snapshot.statusMessage ?? fallback }
+        let value = window.usedFraction.map { QuotaQuantity.format($0 * 100) + "%" }
+            ?? window.quantity?.summary ?? window.summary
+        return window.label + ": " + value
+    }
+
+    var body: some View {
+        let fraction = snapshot?.queryFailure == nil ? snapshot?.headline?.usedFraction : nil
+        let band = fraction.map {
+            UsageBand.band(for: $0, watchLimit: watchLimit, criticalLimit: criticalLimit)
+        }
+        VStack(alignment: .leading, spacing: 3) {
+            if let fraction, let window = snapshot?.headline, let band {
+                SettingsQuotaPercentage(title: window.label, fraction: fraction,
+                                        color: CodeSwitchTableText.quotaColor(band))
+            } else {
+                let text = Self.summary(snapshot: snapshot, fallback: fallback)
+                Text(CodeSwitchTableText.attributed(text))
+                    .lineLimit(1).truncationMode(.middle).help(text)
+            }
+            if refreshing {
+                Text("Refreshing…").foregroundStyle(.secondary).lineLimit(1)
+            }
+        }.font(.caption).monospacedDigit()
+    }
+}
+
+struct SettingsQuotaPercentage: View {
+    let title: String
+    let fraction: Double
+    let color: Color
+
+    var body: some View {
+        let value = QuotaQuantity.format(fraction * 100) + "%"
+        HStack(spacing: 2) {
+            Text(title + ":").foregroundStyle(.secondary).lineLimit(1)
+            Text(CodeSwitchTableText.attributed(value, color: color)).fixedSize()
+        }.help(title + ": " + value)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title + ": " + value)
+    }
+}
+
+struct SettingsAccountTodaySummary: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Today")
+            Text("—").help("No reading")
+        }.font(.caption).foregroundStyle(.secondary).fixedSize()
+    }
+}
+
+struct SettingsAccountQuotaSummary: View {
+    @ObservedObject var store: UsageStore
+    let providerID: String
+
+    var body: some View {
+        SettingsQuotaSummary(snapshot: store.snapshots.first { $0.id == providerID }
+            ?? store.notchSnapshots.first { $0.id == providerID },
+            refreshing: store.refreshing.contains(providerID))
     }
 }
 

@@ -164,6 +164,8 @@ struct CodeSwitchSettingsView: View {
                             Text("Today")
                         } quota: {
                             Text("Quota")
+                        } appearance: {
+                            Text("Appearance")
                         } details: {
                             Color.clear.frame(height: 1).accessibilityHidden(true)
                         }
@@ -238,17 +240,22 @@ final class CodeSwitchProviderDrag: ObservableObject {
     func reset() { source = nil; payload = nil; isActive = false }
 }
 
-private func codeSwitchSummaryColumns<Controls: View, Identity: View, Today: View, Quota: View, Details: View>(
+private func codeSwitchSummaryColumns<Controls: View, Identity: View, Today: View, Quota: View, Appearance: View, Details: View>(
     width: CGFloat, @ViewBuilder controls: () -> Controls, @ViewBuilder identity: () -> Identity,
-    @ViewBuilder today: () -> Today, @ViewBuilder quota: () -> Quota, @ViewBuilder details: () -> Details
+    @ViewBuilder today: () -> Today, @ViewBuilder quota: () -> Quota,
+    @ViewBuilder appearance: () -> Appearance, @ViewBuilder details: () -> Details
 ) -> some View {
-    let available = max(0, width - 132)
+    let available = max(0, width - 178)
+    let identityWidth = min(150, available * 0.40)
+    let todayWidth = min(120, available * 0.28)
+    let quotaWidth = min(150, available - identityWidth - todayWidth)
     return HStack(alignment: .center, spacing: 10) {
         controls().frame(width: 48, alignment: .leading)
-        identity().frame(width: available * 0.40, alignment: .leading)
-        today().frame(width: available * 0.24, alignment: .leading)
-        VStack(alignment: .leading) { quota() }.frame(width: available * 0.36, alignment: .leading)
-        details().frame(width: 44)
+        identity().frame(width: identityWidth, alignment: .leading)
+        today().frame(width: todayWidth, alignment: .leading)
+        VStack(alignment: .leading) { quota() }.frame(width: quotaWidth, alignment: .leading)
+        appearance().frame(width: 60, alignment: .leading)
+        details().frame(minWidth: 20, maxWidth: .infinity, alignment: .trailing)
     }
 }
 
@@ -267,14 +274,10 @@ struct CodeSwitchSettingsProviderRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             summary
-            SettingsBotRow(preferences: preferences, providerID: row.id, name: row.name,
-                           icon: row.snapshot?.icon, glyph: row.snapshot?.glyph ?? .third,
-                           source: .linked(row.currentSnapshot))
-                .padding(.leading, 58)
             if expanded { detail }
         }
         .font(.caption).monospacedDigit()
-        .padding(.vertical, 12)
+        .padding(.vertical, 9)
         .frame(width: width, alignment: .leading)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowHeight = $0 }
         .overlay(alignment: insertion == .before ? .top : .bottom) {
@@ -338,7 +341,7 @@ struct CodeSwitchSettingsProviderRow: View {
                               isStale: row.snapshot.map { $0.status.isStale || !$0.hasReading } ?? true)
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(row.name).font(.callout.weight(.medium)).lineLimit(2).help(row.name)
+                    Text(row.name).font(.callout.weight(.medium)).lineLimit(1).help(row.name)
                     Text(row.platform).foregroundStyle(.secondary).lineLimit(1).help(row.platform)
                     if let provider = row.currentSnapshot?.linked?.provider {
                         if provider.quotaAutoDisabled == true {
@@ -360,6 +363,10 @@ struct CodeSwitchSettingsProviderRow: View {
         } quota: {
             CodeSwitchTableQuotaCell(snapshot: row.currentSnapshot, accent: preferences.accentColor.color,
                                      resetTimeFormat: preferences.resetTimeFormat, showsReset: false)
+        } appearance: {
+            SettingsBotRow(preferences: preferences, providerID: row.id, name: row.name,
+                           icon: row.snapshot?.icon, glyph: row.snapshot?.glyph ?? .third,
+                           source: .linked(row.currentSnapshot), compact: true)
         } details: {
             HStack(spacing: 4) {
                 Button { expanded.toggle() } label: {
@@ -472,26 +479,14 @@ struct CodeSwitchTableQuotaCell: View {
             if let window = item.window {
                 if let fraction = window.usedFraction {
                     let band = UsageBand.band(for: fraction, watchLimit: watchLimit, criticalLimit: criticalLimit)
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(item.quota.title).foregroundStyle(.secondary).fixedSize()
-                            Spacer(minLength: 0)
-                            quotaPercentage(fraction, band: band).fixedSize()
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(item.quota.title).foregroundStyle(.secondary)
-                                .fixedSize(horizontal: false, vertical: true)
-                            quotaPercentage(fraction, band: band)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                        }
-                    }
-                    ProgressView(value: min(1, max(0, fraction))).progressViewStyle(.linear)
-                        .tint(band.color(accent: accent))
-                        .accessibilityLabel(item.quota.title)
+                    SettingsQuotaPercentage(title: item.quota.title, fraction: fraction,
+                                            color: CodeSwitchTableText.quotaColor(band))
                 } else {
-                    Text(item.quota.title).foregroundStyle(.secondary)
-                    Text(CodeSwitchTableText.attributed(window.quantity?.summary ?? L10n.t("No reading")))
-                        .fixedSize(horizontal: false, vertical: true)
+                    Text(CodeSwitchTableText.attributed(item.quota.title + ": "
+                        + (window.quantity?.summary ?? L10n.t("No reading"))))
+                        .lineLimit(expanded ? nil : 1)
+                        .truncationMode(.middle)
+                        .help(item.quota.title + ": " + (window.quantity?.summary ?? L10n.t("No reading")))
                 }
                 if showsReset, let reset = window.resetsAt {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -510,8 +505,4 @@ struct CodeSwitchTableQuotaCell: View {
         }
     }
 
-    private func quotaPercentage(_ fraction: Double, band: UsageBand) -> Text {
-        Text(CodeSwitchTableText.attributed(QuotaQuantity.format(fraction * 100) + "%",
-                                           color: CodeSwitchTableText.quotaColor(band)))
-    }
 }

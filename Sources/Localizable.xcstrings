@@ -1,6 +1,61 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Compact account and provider lists": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更紧凑的账号与供应商列表"
+          }
+        }
+      }
+    },
+    "Keep quota values, robots and appearance controls together, with details last": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度、机器人与外观设置同排显示，展开按钮置于最后"
+          }
+        }
+      }
+    },
+    "Replace quota bars with text and keep percentages readable": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度以文字代替进度条，优先完整显示百分比"
+          }
+        }
+      }
+    },
+    "Keep refresh and access warnings visible beside saved readings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示已有额度时仍保留刷新与授权异常提示"
+          }
+        }
+      }
+    },
+    "Reduce repeated snapshot lookups and formatting while preserving shared animation clocks": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "减少快照查找与格式化，保留共享动画时钟"
+          }
+        }
+      }
+    },
     "When off, idle sides retract. Hover still opens the notch; active calls restore the sides.": {
       "extractionState": "manual",
       "localizations": {

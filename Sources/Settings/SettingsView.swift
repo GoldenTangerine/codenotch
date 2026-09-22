@@ -1712,6 +1712,8 @@ private struct AccountRow: View {
     /// The handle only appears under the pointer, so a row at rest stays as
     /// quiet as it was before there was anything to drag.
     @State private var isHovering = false
+    @State private var expanded = false
+    @Environment(\.settingsBotContext) private var settingsBotContext
 
     private var isConnected: Bool { preferences.isConnected(provider.id) }
     private var isMuted: Bool { preferences.isMutedAlerts(for: provider.id) }
@@ -1735,7 +1737,9 @@ private struct AccountRow: View {
 
                     Text(provider.name)
                         .foregroundStyle(isConnected ? .primary : .secondary)
+                        .lineLimit(1).help(provider.name)
                 }
+                .frame(minWidth: 80, maxWidth: 150, alignment: .leading)
                 // Without this only the drawn pixels are grabbable, and the
                 // gaps between the three of them are not.
                 .contentShape(Rectangle())
@@ -1782,77 +1786,101 @@ private struct AccountRow: View {
                     }
                 }
 
-                Spacer(minLength: 8)
-
-                // Per-provider threshold alerts, muted here rather than in a
-                // separate notifications pane — the thing being muted is this
-                // row's reading, so the control belongs on the row.
-                if isConnected, provider.kind == .usage {
-                    Button {
-                        preferences.setAlertsMuted(!isMuted, for: provider.id)
-                    } label: {
-                        Image(systemName: isMuted ? "bell.slash" : "bell")
-                            .font(.system(size: 11))
-                            .foregroundStyle(isMuted ? .tertiary : .secondary)
+                SettingsAccountTodaySummary()
+                Group {
+                    if let context = settingsBotContext {
+                        SettingsAccountQuotaSummary(store: context.store, providerID: provider.id)
+                    } else {
+                        Text("—").font(.caption).foregroundStyle(.secondary)
                     }
-                    .buttonStyle(.borderless)
-                    .help(isMuted
-                          ? L10n.t("Alerts for \(provider.name) are muted. Click to unmute.")
-                          : L10n.t("Alert when \(provider.name) crosses 80% and 100% of a limit."))
-                }
-
-                // Prefers the app that owns the account, and falls back to the
-                // web page only when there is no app to open.
-                //
-                // The reading is borrowed from an app on this Mac, so that app
-                // is where the account actually lives — and the website is a
-                // different session entirely, which will bounce you to a login
-                // if the browser is not signed in. Sending someone to a login
-                // screen from a row that says "connected" is the wrong answer
-                // whenever the real thing is one launch away.
-                // The way back from a declined keychain prompt, and the only
-                // one: declining is easy to do by reflex, and nothing else on
-                // screen will ask macOS again.
-                //
-                // Shown only while macOS is actually refusing. It used to be
-                // permanent for any keychain-backed provider, which meant it sat
-                // there next to a working account offering to fix nothing — and
-                // when it *was* needed there was no way to tell the two apart.
-                if isConnected, provider.wasRefusedAccess {
-                    Button(L10n.t("Allow access…")) { retry(provider.id) }
-                        .controlSize(.small)
-                        // Not "it will stop asking": for Claude it will not.
-                        // Claude Code recreates its login when the token
-                        // rotates, and a recreated item forgets the grant.
-                        .help(L10n.t("Asks macOS for \(provider.name)'s saved login again."))
-                }
-
-                if isConnected, let destination {
-                    Button(destination.title) { open(destination) }
-                        .controlSize(.small)
-                        .help(destination.help)
-                }
-
-                Toggle(provider.name, isOn: binding)
-                    .toggleStyle(.switch)
-                    .controlSize(.small)
-                    .labelsHidden()
-                    .help(provider.localModel != nil
-                          ? L10n.t("Show or hide this model in the notch. It stays loaded in \(provider.runtimeName ?? "Ollama").")
-                          : isConnected
-                          ? L10n.t("Switch off to stop reading \(provider.name) and forget its readings. \(provider.signIn.signOutCaveat)")
-                          : L10n.t("Switch on to sign in and read \(provider.name) again."))
+                }.frame(maxWidth: .infinity, alignment: .leading)
+                SettingsBotRow(preferences: preferences, providerID: provider.id,
+                               appearanceID: provider.sourceProviderID, name: provider.name,
+                               glyph: provider.glyph, compact: true)
+                    .fixedSize()
+                Button { expanded.toggle() } label: {
+                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                        .frame(width: 20, height: 28).contentShape(Rectangle())
+                }.buttonStyle(.borderless)
+                    .accessibilityLabel(expanded ? L10n.t("Hide details") : L10n.t("Show details"))
+                    .help(expanded ? L10n.t("Hide details") : L10n.t("Show details"))
             }
+            if isConnected, provider.wasRefusedAccess {
+                Button { expanded = true } label: {
+                    Label("Allow access…", systemImage: "exclamationmark.triangle")
+                }.buttonStyle(.borderless).font(.caption).foregroundStyle(.orange)
+                    .padding(.leading, isOrderable ? 48 : 26)
+            }
+            if expanded {
+                HStack(spacing: 10) {
+                    // Per-provider threshold alerts, muted here rather than in a
+                    // separate notifications pane — the thing being muted is this
+                    // row's reading, so the control belongs on the row.
+                    if isConnected, provider.kind == .usage {
+                        Button {
+                            preferences.setAlertsMuted(!isMuted, for: provider.id)
+                        } label: {
+                            Image(systemName: isMuted ? "bell.slash" : "bell")
+                                .font(.system(size: 11))
+                                .foregroundStyle(isMuted ? .tertiary : .secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .help(isMuted
+                              ? L10n.t("Alerts for \(provider.name) are muted. Click to unmute.")
+                              : L10n.t("Alert when \(provider.name) crosses 80% and 100% of a limit."))
+                    }
 
-            SettingsBotRow(preferences: preferences, providerID: provider.id,
-                           appearanceID: provider.sourceProviderID, name: provider.name, glyph: provider.glyph)
-                .padding(.leading, 48)
+                    // Prefers the app that owns the account, and falls back to the
+                    // web page only when there is no app to open.
+                    //
+                    // The reading is borrowed from an app on this Mac, so that app
+                    // is where the account actually lives — and the website is a
+                    // different session entirely, which will bounce you to a login
+                    // if the browser is not signed in. Sending someone to a login
+                    // screen from a row that says "connected" is the wrong answer
+                    // whenever the real thing is one launch away.
+                    // The way back from a declined keychain prompt, and the only
+                    // one: declining is easy to do by reflex, and nothing else on
+                    // screen will ask macOS again.
+                    //
+                    // Shown only while macOS is actually refusing. It used to be
+                    // permanent for any keychain-backed provider, which meant it sat
+                    // there next to a working account offering to fix nothing — and
+                    // when it *was* needed there was no way to tell the two apart.
+                    if isConnected, provider.wasRefusedAccess {
+                        Button(L10n.t("Allow access…")) { retry(provider.id) }
+                            .controlSize(.small)
+                            // Not "it will stop asking": for Claude it will not.
+                            // Claude Code recreates its login when the token
+                            // rotates, and a recreated item forgets the grant.
+                            .help(L10n.t("Asks macOS for \(provider.name)'s saved login again."))
+                    }
+
+                    if isConnected, let destination {
+                        Button(destination.title) { open(destination) }
+                            .controlSize(.small)
+                            .help(destination.help)
+                    }
+
+                    Toggle(provider.name, isOn: binding)
+                        .toggleStyle(.switch)
+                        .controlSize(.small)
+                        .labelsHidden()
+                        .help(provider.localModel != nil
+                              ? L10n.t("Show or hide this model in the notch. It stays loaded in \(provider.runtimeName ?? "Ollama").")
+                              : isConnected
+                              ? L10n.t("Switch off to stop reading \(provider.name) and forget its readings. \(provider.signIn.signOutCaveat)")
+                              : L10n.t("Switch on to sign in and read \(provider.name) again."))
+                }.padding(.leading, isOrderable ? 48 : 26)
+            }
 
             // 48 = the handle, the glyph and the two gaps before the name, so
             // the detail still starts under the first letter of the name.
-            detail
-                .font(.caption)
-                .padding(.leading, 48)
+            if expanded {
+                detail
+                    .font(.caption)
+                    .padding(.leading, isOrderable ? 48 : 26)
+            }
 
             // Outside `detail` on purpose. That chain shows the account summary
             // whenever there is an account, and an aged-out token still has
