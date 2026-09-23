@@ -103,6 +103,10 @@ final class WebSessionProvider: NSObject, UsageProvider {
         /// `origin.host`. MiniMax's session is created on the platform origin
         /// and used on www, so both have to go; DeepSeek has none.
         let associatedHosts: [String]
+        let pollsDuringSignIn: Bool
+        let managePath: String
+        let headlineID: String?
+        let weeklyID: String?
         /// Runs in the page as an async function body. Must return a JSON string
         /// `{ "status": Int, "body": String }`.
         let script: String
@@ -115,6 +119,8 @@ final class WebSessionProvider: NSObject, UsageProvider {
              authProbeScript: String? = nil,
              requestOrigin: URL? = nil, authFingerprintScript: String? = nil,
              associatedHosts: [String] = [],
+             pollsDuringSignIn: Bool = false, managePath: String = "usage",
+             headlineID: String? = nil, weeklyID: String? = nil,
              detailParse: ((String) throws -> ProviderUsageDetail?)? = nil,
              parse: @escaping (String) throws -> [LimitWindow]) {
             self.id = id
@@ -127,6 +133,10 @@ final class WebSessionProvider: NSObject, UsageProvider {
             self.authProbeScript = authProbeScript
             self.authFingerprintScript = authFingerprintScript
             self.associatedHosts = associatedHosts
+            self.pollsDuringSignIn = pollsDuringSignIn
+            self.managePath = managePath
+            self.headlineID = headlineID
+            self.weeklyID = weeklyID
             self.detailParse = detailParse
             self.parse = parse
         }
@@ -149,7 +159,7 @@ final class WebSessionProvider: NSObject, UsageProvider {
             label: nil,
             plan: nil,
             source: displayName,
-            manageURL: site.origin.appendingPathComponent("usage")
+            manageURL: site.origin.appendingPathComponent(site.managePath)
         )
     }
 
@@ -381,6 +391,8 @@ final class WebSessionProvider: NSObject, UsageProvider {
             fidelity: site.fidelity,
             status: .ok,
             windows: windows,
+            headlineID: site.headlineID,
+            weeklyID: site.weeklyID,
             usageDetail: usageDetail
         )
     }

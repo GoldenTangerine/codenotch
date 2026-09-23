@@ -908,6 +908,16 @@ enum ReleaseNotes {
     private static var upstream: [ReleaseNote] {
         [
             ReleaseNote(
+                version: "1.17.1",
+                headline: L10n.t("Your own endpoints, 한국어 and Oʻzbekcha, and a notch that knows whose account it is."),
+                changes: [
+                    ReleaseNote.Change(
+                        title: L10n.t("Your own endpoints"),
+                        detail: L10n.t("Add any OpenAI-compatible endpoint and give it a ring: a name, an icon, a colour, a monthly budget in dollars or tokens, and a live check that says whether it is actually answering. The key goes to the keychain. A scan finds the usual local ports, so a model running on this Mac does not have to be typed in.")
+                    )
+                ]
+            ),
+            ReleaseNote(
                 version: "1.17.0",
                 headline: L10n.t("Your own endpoints, 한국어 and Oʻzbekcha, and a notch that knows whose account it is."),
                 changes: [

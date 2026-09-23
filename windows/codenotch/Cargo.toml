@@ -7,7 +7,7 @@
 # @FilePath: windows/codenotch/Cargo.toml
 [package]
 name = "codenotch"
-version = "1.17.0"
+version = "1.17.1"
 edition = "2021"
 description = "Codenotch for Windows — usage notch for Claude, Codex, Cursor and Antigravity"
 license = "MIT"

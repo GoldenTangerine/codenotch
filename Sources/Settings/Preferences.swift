@@ -156,6 +156,14 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(lmstudioEndpoint, forKey: Keys.lmstudioEndpoint) }
     }
 
+    @Published var customEndpoints: [CustomEndpoint] {
+        didSet {
+            if let data = try? JSONEncoder().encode(customEndpoints) {
+                defaults.set(data, forKey: Keys.customEndpoints)
+            }
+        }
+    }
+
     /// Providers whose threshold alerts are muted. Stored as the muted set so
     /// a provider added later alerts by default. Connection is stored the
     /// other way: the ones that are on.
@@ -648,6 +656,7 @@ final class Preferences: ObservableObject {
         static let phoneLinkPort = "phoneLinkPort"
 
         static let lmstudioEndpoint = "lmstudioEndpoint"
+        static let customEndpoints = "customEndpoints"
         static let introducedOllama = "introducedOllama"
         static let migratedOllamaID = "migratedOllamaLocalID"
         static let ollamaMetricsEnabled = "ollamaMetricsEnabled"
@@ -764,6 +773,15 @@ final class Preferences: ObservableObject {
               let region = MiniMaxRegion(rawValue: value)
         else { return .international }
         return region
+    }
+
+    nonisolated static func storedCustomEndpoints(
+        defaults: UserDefaults = .standard
+    ) -> [CustomEndpoint] {
+        guard let data = defaults.data(forKey: Keys.customEndpoints),
+              let endpoints = try? JSONDecoder().decode([CustomEndpoint].self, from: data)
+        else { return [] }
+        return endpoints
     }
 
     /// True the very first time this copy runs, and never again.
@@ -897,6 +915,7 @@ final class Preferences: ObservableObject {
             defaults.string(forKey: Keys.lmstudioEndpoint)
                 ?? LMStudioEndpoint.configuredAddress() ?? LMStudioEndpoint.defaultAddress
         ).absoluteString) ?? LMStudioEndpoint.defaultAddress
+        self.customEndpoints = Self.storedCustomEndpoints(defaults: defaults)
         self.mutedAlertProviders = Set(defaults.stringArray(forKey: Keys.mutedAlerts) ?? [])
         // Absent means never chosen, which is the hover behaviour the app was
         // designed around — not hidden, which would make a fresh install look
@@ -1045,6 +1064,28 @@ final class Preferences: ObservableObject {
         // Read from the system rather than from our own store: the user can turn
         // this off in System Settings, and a remembered `true` would then be a lie.
         self.launchAtLogin = Self.isRegisteredForLogin
+    }
+
+    func addCustomEndpoint(_ endpoint: CustomEndpoint) {
+        customEndpoints.append(endpoint)
+        if endpoint.isEnabled { setConnected(true, for: endpoint.providerID) }
+    }
+
+    func updateCustomEndpoint(_ endpoint: CustomEndpoint) {
+        if let index = customEndpoints.firstIndex(where: { $0.id == endpoint.id }) {
+            customEndpoints[index] = endpoint
+            setConnected(endpoint.isEnabled, for: endpoint.providerID)
+        }
+    }
+
+    func removeCustomEndpoint(id: String) {
+        if let endpoint = customEndpoints.first(where: { $0.id == id }) {
+            setConnected(false, for: endpoint.providerID)
+            if let filename = endpoint.customIconFilename {
+                CustomIconStore.deleteIcon(filename: filename)
+            }
+        }
+        customEndpoints.removeAll { $0.id == id }
     }
 
     func announcementSettings(for reason: SessionCompletionWatcher.Reason)

@@ -128,6 +128,13 @@ enum Percent {
         return small(value)
     }
 
+    static func whole(for fraction: Double) -> String {
+        let value = max(0, fraction * 100)
+        if value > 0, value < 1 { return "<1" }
+        if value > 99, value < 100 { return "99" }
+        return "\(Int(value.rounded()))"
+    }
+
     private static func small(_ value: Double) -> String {
         if value <= 0 { return "0" }
         let tenths = (value * 10).rounded() / 10
@@ -167,11 +174,14 @@ struct LimitWindow: Identifiable, Codable, Equatable {
 
     /// Exact cycle length when known; optional to keep older archives readable.
     let duration: TimeInterval?
+    var bandOverride: UsageBand? = nil
+    var prefersUsedText: Bool = false
 
     init(id: String, group: String? = nil, label: String, usedFraction: Double? = nil,
          remaining: Int? = nil, used: Int? = nil, usedText: String? = nil, detail: String? = nil,
          money: UsageMoneyBreakdown? = nil, resetsAt: Date? = nil,
-         quantity: QuotaQuantity? = nil, duration: TimeInterval? = nil) {
+         quantity: QuotaQuantity? = nil, duration: TimeInterval? = nil,
+         bandOverride: UsageBand? = nil, prefersUsedText: Bool = false) {
         self.id = id
         self.group = group
         self.label = label
@@ -184,6 +194,13 @@ struct LimitWindow: Identifiable, Codable, Equatable {
         self.resetsAt = resetsAt
         self.quantity = quantity
         self.duration = duration
+        self.bandOverride = bandOverride
+        self.prefersUsedText = prefersUsedText
+    }
+
+    var isFiveHour: Bool {
+        guard let duration else { return false }
+        return abs(duration - 5 * 3600) < 60
     }
 
     /// A count short enough to sit inside a 44 pt ring.
@@ -309,6 +326,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
     // 合成节奏窗口不应丢失供应商声明，包括缺失窗口的标识和显式的 nil。
     var dailyPaceOriginalQuotaIDs: DailyPace.OriginalQuotaIDs? = nil
     var codeSwitchDailyUsage: CodeSwitchDailyUsage.Sample? = nil
+    var customIconFilename: String? = nil
 
     var providerID: String { sourceProviderID ?? id }
 
@@ -364,6 +382,16 @@ struct ProviderSnapshot: Identifiable, Equatable {
     }
 
     var usedFraction: Double? { headline?.usedFraction }
+
+    var fiveHourWindow: LimitWindow? {
+        if let headline, headline.isFiveHour { return headline }
+        return windows.first { $0.isFiveHour && $0.group == nil }
+    }
+
+    var weeklyLimitWindow: LimitWindow? {
+        guard let weeklyID, weeklyID != headlineID else { return nil }
+        return windows.first { $0.id == weeklyID }
+    }
 
     // 联动提醒按真实窗口独立监测，不受主环、细环或来源顺序影响。
     var linkedAlertWindows: [LimitWindow] {
