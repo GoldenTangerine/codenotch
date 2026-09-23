@@ -9,7 +9,7 @@
 -->
 # Codenotch for Windows
 
-A Windows port of [Codenotch](https://github.com/vinzdg/codenotch) — the usage notch that
+A Windows port of [Codenotch](https://github.com/GoldenTangerine/codenotch) — the usage notch that
 sits on the edge of your screen and answers two questions at a glance:
 **how much of my AI allowance is left**, and **is Claude still working**.
 
