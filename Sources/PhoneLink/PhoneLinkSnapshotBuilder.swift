@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · PhoneLinkSnapshotBuilder
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/PhoneLink/PhoneLinkSnapshotBuilder.swift
+ */
 import Foundation
 
 struct PhoneLinkSnapshotBuilder {
@@ -24,10 +33,10 @@ struct PhoneLinkSnapshotBuilder {
             generatedAt: formatISO(now),
             demo: false
         )
-        
+
         var providers: [PhoneLinkSnapshot.Provider] = []
         var orderedSnaps = snapshots
-        
+
         if !order.isEmpty {
             orderedSnaps.sort { a, b in
                 let aIndex = order.firstIndex(of: a.providerID) ?? Int.max
@@ -35,18 +44,18 @@ struct PhoneLinkSnapshotBuilder {
                 return aIndex < bIndex
             }
         }
-        
+
         for snap in orderedSnaps {
             if disconnected.contains(snap.providerID) { continue }
             if snap.kind == .localRuntime { continue }
-            
+
             var kindStr = "ok"
             var sinceStr: String? = nil
             var whyStr: String? = nil
-            
+
             switch snap.status {
             case .ok: kindStr = "ok"
-            case .stale(let since): 
+            case .stale(let since):
                 kindStr = "stale"
                 sinceStr = formatISO(since)
             case .needsAuth, .signedOutByOwner: kindStr = "needsAuth"
@@ -58,9 +67,9 @@ struct PhoneLinkSnapshotBuilder {
                 kindStr = "error"
                 whyStr = why
             }
-            
+
             let status = PhoneLinkSnapshot.Status(kind: kindStr, since: sinceStr, why: whyStr)
-            
+
             let windows = snap.windows.map { w in
                 PhoneLinkSnapshot.Window(
                     id: w.id,
@@ -71,13 +80,13 @@ struct PhoneLinkSnapshotBuilder {
                     resetsAt: w.resetsAt.map { formatISO($0) }
                 )
             }
-            
+
             let block = snap.block.map { b in
                 PhoneLinkSnapshot.Block(reason: b.reason, resetsAt: b.resetsAt.map { formatISO($0) })
             }
-            
+
             let account = snap.plan.map { PhoneLinkSnapshot.Account(plan: $0, source: "Codenotch") }
-            
+
             let p = PhoneLinkSnapshot.Provider(
                 id: snap.id,
                 displayName: snap.displayName,
@@ -90,7 +99,7 @@ struct PhoneLinkSnapshotBuilder {
             )
             providers.append(p)
         }
-        
+
         var sessionsOut: [PhoneLinkSnapshot.Session] = []
         for s in sessions {
             var stateStr = "idle"
@@ -99,7 +108,7 @@ struct PhoneLinkSnapshotBuilder {
             case .waiting: stateStr = "waiting"
             case .success, .idle: stateStr = "idle"
             }
-            
+
             sessionsOut.append(PhoneLinkSnapshot.Session(
                 id: s.id,
                 name: s.name,
@@ -109,7 +118,7 @@ struct PhoneLinkSnapshotBuilder {
                 since: formatISO(s.since)
             ))
         }
-        
+
         return PhoneLinkSnapshot(server: server, providers: providers, sessions: sessionsOut)
     }
 }

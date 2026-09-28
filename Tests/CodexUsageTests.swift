@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 CodexUsageTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/CodexUsageTests.swift
+ */
 import SQLite3
 import XCTest
 @testable import Codenotch
@@ -508,6 +517,15 @@ final class CodexActivityTests: XCTestCase {
         XCTAssertEqual(CodexRolloutActivity.state(from: url), .busy)
     }
 
+    func testLargeRolloutUsesCompleteRecordsFromItsTail() throws {
+        let url = try rollout([
+            #"{"type":"event_msg","payload":{"type":"task_started"}}"#,
+            String(repeating: "x", count: 300_000),
+            #"{"type":"event_msg","payload":{"type":"task_complete"}}"#
+        ])
+        XCTAssertEqual(CodexRolloutActivity.state(from: url), .success)
+    }
+
     func testAbortedTurnIsNotSuccessful() throws {
         let url = try rollout([
             #"{"type":"event_msg","payload":{"type":"task_started"}}"#,
@@ -770,10 +788,10 @@ final class CodexStoreCacheTests: XCTestCase {
         sqlite3_exec(db, "PRAGMA page_size=512", nil, nil, nil)
         sqlite3_exec(db, """
             CREATE TABLE threads (rollout_path TEXT, archived INTEGER,
-                                  updated_at_ms INTEGER, pad TEXT)
+                                  updated_at_ms INTEGER, pad TEXT, id TEXT DEFAULT 'thread-test')
             """, nil, nil, nil)
         for (path, ms) in rollouts {
-            sqlite3_exec(db, "INSERT INTO threads VALUES ('\(path)', 0, \(ms), '')",
+            sqlite3_exec(db, "INSERT INTO threads (rollout_path, archived, updated_at_ms, pad) VALUES ('\(path)', 0, \(ms), '')",
                          nil, nil, nil)
         }
         return url
@@ -817,7 +835,7 @@ final class CodexStoreCacheTests: XCTestCase {
         try setMtime(epoch, of: store)
 
         let cache = CodexStoreCache()
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathA)
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathA)
 
         let sizeBefore = try size(of: store)
         updateStore(store, sql: "UPDATE threads SET rollout_path='\(pathB)' WHERE updated_at_ms=2")
@@ -825,7 +843,7 @@ final class CodexStoreCacheTests: XCTestCase {
         XCTAssertEqual(try size(of: store), sizeBefore,
                        "the fixture must keep the size identical for the stamp to hold")
 
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathA,
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathA,
                        "same (mtime, size) — the cached answer must stand")
     }
 
@@ -837,12 +855,12 @@ final class CodexStoreCacheTests: XCTestCase {
         try setMtime(epoch, of: store)
 
         let cache = CodexStoreCache()
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathA)
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathA)
 
         updateStore(store, sql: "UPDATE threads SET rollout_path='\(pathB)' WHERE updated_at_ms=2")
         try setMtime(epoch.addingTimeInterval(60), of: store)
 
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathB,
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathB,
                        "a moved mtime is a changed store")
     }
 
@@ -854,14 +872,14 @@ final class CodexStoreCacheTests: XCTestCase {
         try setMtime(epoch, of: store)
 
         let cache = CodexStoreCache()
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathA)
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathA)
 
         // Mtime pinned back to what the stamp recorded; only the size moved.
         let pad = String(repeating: "x", count: 4096)
-        updateStore(store, sql: "INSERT INTO threads VALUES ('\(pathC)', 0, 3, '\(pad)')")
+        updateStore(store, sql: "INSERT INTO threads (rollout_path, archived, updated_at_ms, pad) VALUES ('\(pathC)', 0, 3, '\(pad)')")
         try setMtime(epoch, of: store)
 
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathC,
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathC,
                        "a grown file is a changed store even at the same mtime")
     }
 
@@ -876,18 +894,18 @@ final class CodexStoreCacheTests: XCTestCase {
         try setMtime(epoch, of: store)
 
         let cache = CodexStoreCache()
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathA)
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathA)
 
         updateStore(store, sql: "UPDATE threads SET rollout_path='\(pathB)' WHERE updated_at_ms=2")
         try setMtime(epoch, of: store)
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathA,
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathA,
                        "database stamp unchanged — still cached")
 
         // The store was built in the default rollback journal mode, so this
         // stray file is never opened by SQLite — only its stat matters.
         try Data("wal".utf8).write(to: URL(fileURLWithPath: store.path + "-wal"))
         addTeardownBlock { try? FileManager.default.removeItem(atPath: store.path + "-wal") }
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathB)
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathB)
     }
 
     /// A cached rollout path whose file has gone away is asked for again —
@@ -899,10 +917,10 @@ final class CodexStoreCacheTests: XCTestCase {
         try setMtime(epoch, of: store)
 
         let cache = CodexStoreCache()
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathA)
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathA)
 
         try FileManager.default.removeItem(atPath: pathA)
-        XCTAssertEqual(cache.newestRollout(in: store)?.path, pathB)
+        XCTAssertEqual(cache.newestRollout(in: store)?.url.path, pathB)
     }
 
     /// The desktop catalogue has no file to re-check — the stamp is the

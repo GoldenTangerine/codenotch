@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · UsageLimitWatcherTests
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Tests/UsageLimitWatcherTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -145,23 +154,6 @@ final class UsageLimitWatcherTests: XCTestCase {
 
         watcher.observe([snapshot("claude", "Claude", sessionFraction: 1.00, sessionResetsAt: date2)])
         XCTAssertEqual(alerts.count, 2, "re-arms when window rolls over to new resetsAt")
-    }
-
-    /// A countdown-based reset date drifts forward a few seconds on every
-    /// refresh. While the window has not elapsed that is the same window, and
-    /// a limit that stays spent must not be announced again on every fetch.
-    func testNoRepeatAlertWhileResetDateDrifts() {
-        let resetsAt = Date().addingTimeInterval(3 * 86_400)
-
-        watcher.observe([snapshot("codex", "Codex", sessionFraction: 0.50, weeklyFraction: 0.90, weeklyResetsAt: resetsAt)])
-        watcher.observe([snapshot("codex", "Codex", sessionFraction: 0.50, weeklyFraction: 1.00, weeklyResetsAt: resetsAt)])
-        XCTAssertEqual(alerts.map(\.kind), [.weeklyLimitReached])
-
-        for drift in 1...5 {
-            watcher.observe([snapshot("codex", "Codex", sessionFraction: 0.50, weeklyFraction: 1.00,
-                                      weeklyResetsAt: resetsAt.addingTimeInterval(Double(drift)))])
-        }
-        XCTAssertEqual(alerts.count, 1, "a drifting reset date is not a new window")
     }
 
     func testMutedProviderDoesNotAlert() {

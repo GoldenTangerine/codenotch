@@ -1,8 +1,15 @@
+# @name: 应用构建配置
+# @Descripttion: 定义应用版本、构建目标和依赖。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-08 14:34:20
+# @LastEditTime: 2026-09-08 14:34:20
+# @FilePath: project.yml
 name: Codenotch
 options:
   bundleIdPrefix: com.vinz
   deploymentTarget:
-    macOS: "15.0"
+    macOS: "26.0"
   createIntermediateGroups: true
   defaultLocalization: en
 
@@ -10,12 +17,15 @@ settings:
   base:
     SWIFT_VERSION: "5.0"
     SWIFT_STRICT_CONCURRENCY: minimal
+    # Source language of Localizable.xcstrings. Pinned so the catalog's keys
+    # stay the English literals in the source regardless of the build machine.
+    DEVELOPMENT_LANGUAGE: en
     # Sparkle compares CFBundleVersion to decide what is newer, and
     # Sources/Info.plist reads both from here — hardcoding them there instead
     # silently pins every build to one version, so no customer ever sees an
     # update. Bump CURRENT_PROJECT_VERSION on every release.
-    MARKETING_VERSION: "1.18.0"
-    CURRENT_PROJECT_VERSION: "20"
+    MARKETING_VERSION: "1.17.1"
+    CURRENT_PROJECT_VERSION: "332"
     # Signed with a stable identity on purpose. The app reads Claude Code's
     # OAuth token out of the login keychain, and the keychain's ACL remembers
     # *which signed binary* was allowed. Ad-hoc or unsigned builds get a new
@@ -55,8 +65,22 @@ targets:
           # copy any unrecognised file into the app bundle's Resources, and a
           # developer README has no business shipping to users.
           - "Vendor/**/README.md"
+          - Resources/Sounds
+      - path: Sources/Resources/Sounds
+        type: folder
+        buildPhase: resources
     dependencies:
       - package: Sparkle
+      - target: HookHelper
+        embed: true
+        codeSign: true
+        copy:
+          destination: executables
+      - target: QueryScriptHelper
+        embed: true
+        codeSign: true
+        copy:
+          destination: executables
       - package: SwiftNIO
         product: NIOHTTP1
       - package: SwiftNIO
@@ -75,17 +99,13 @@ targets:
           - en
           - fr
           - de
-          - id
           - ja
           - ko
           - pt-BR
           - ru
           - zh-Hans
-          - zh-Hant
           - uk
-          - uz
-          - tr
-        LSMinimumSystemVersion: "15.0"
+        LSMinimumSystemVersion: "26.0"
         # Sources/Info.plist is *generated* from this block, so editing that
         # file directly is undone by the next `make gen`. Pointing both at the
         # build settings keeps one place to bump.
@@ -93,19 +113,17 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         NSLocalNetworkUsageDescription: "Codenotch answers your phone on this network so it can show your usage."
         # --- Sparkle -------------------------------------------------------
-        # Beside the download itself, on hivinz.com. It used to point at a
-        # GitHub Pages URL for a repo that was never created, so every check
-        # got a 404 and Sparkle reported "an error occurred in retrieving
-        # update information" — correctly, since there was nothing there.
+        # Beside the download itself, on this repo's GitHub Pages site.
         #
         # Must stay reachable for as long as any copy is installed: the feed is
         # the only route by which a shipped build can ever be replaced.
-        SUFeedURL: https://hivinz.com/appcast.xml
+        # New builds use Releases; Pages remains a mirror for older installs.
+        SUFeedURL: https://github.com/GoldenTangerine/codenotch/releases/latest/download/appcast.xml
         # The public half of the EdDSA key in the login keychain. Sparkle
         # refuses any update not signed by its private half, so a hijacked feed
         # or a swapped download cannot install code. Losing the private key
         # means no existing install can ever be updated again — back it up.
-        SUPublicEDKey: rmUfT5r49nR+3HdkbR5/YYLghfnAi6L49eOk3sIegSk=
+        SUPublicEDKey: LnqbzvVoWRmOd+dGneAJ5zbo24+T935Q/JWo0WeIlJM=
         # Set explicitly so Sparkle never asks on first launch. Left unset, it
         # shows a "check for updates automatically?" prompt, which is exactly
         # the permission this is meant to avoid.
@@ -126,6 +144,28 @@ targets:
         # Sources/Vendor/zstd/README.md. Delete this line and that directory
         # together if the Desktop source is ever dropped.
         SWIFT_OBJC_BRIDGING_HEADER: Sources/Codenotch-Bridging-Header.h
+
+  HookHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: HookHelper
+      - path: Sources/Sessions/HookWire.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vinz.codenotch.hook-helper
+        SKIP_INSTALL: "YES"
+
+  QueryScriptHelper:
+    type: tool
+    platform: macOS
+    sources:
+      - path: QueryScriptHelper
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.vinz.codenotch.query-helper
+        CODE_SIGN_ENTITLEMENTS: QueryScriptHelper/QueryScriptHelper.entitlements
+        SKIP_INSTALL: "YES"
 
   CodenotchTests:
     type: bundle.unit-test
@@ -151,3 +191,7 @@ schemes:
       config: Debug
       targets:
         - CodenotchTests
+      # The suite asserts English copy (ElapsedCopy, ResetCopy, ...). Pin the
+      # language so the host app's AppleLanguages — say a Chinese-locale dev
+      # machine — cannot flip the strings under the assertions.
+      language: en

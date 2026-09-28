@@ -1,3 +1,12 @@
+/**
+ @name: 额度读数缓存
+ @Descripttion: 保存供应商读数和限流退避并兼容旧版本缓存。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Model/UsageArchive.swift
+ */
 import Foundation
 
 /// The last good reading for each provider, remembered across launches.
@@ -16,6 +25,8 @@ struct UsageArchive {
         let fetchedAt: Date
         /// Optional so archives written before this field still decode.
         let headlineID: String?
+        var icon: ProviderIcon?
+        var manualQuery: Bool?
         /// Optional for the same reason: an archive written before the weekly
         /// ring existed has no second window to name, and must still open.
         let weeklyID: String?
@@ -98,6 +109,7 @@ struct UsageArchive {
                 windows: windows,
                 headlineID: entry.headlineID,
                 weeklyID: entry.weeklyID,
+                icon: entry.icon, manualQuery: entry.manualQuery ?? false,
                 tokenUsage: entry.tokenUsage,
                 usageDetail: entry.usageDetail
             )
@@ -124,6 +136,7 @@ struct UsageArchive {
                 windows: $0.snapshot.windows,
                 fetchedAt: $0.fetchedAt,
                 headlineID: $0.snapshot.headlineID,
+                icon: $0.snapshot.icon, manualQuery: $0.snapshot.manualQuery,
                 weeklyID: $0.snapshot.weeklyID,
                 tokenUsage: $0.snapshot.tokenUsage,
                 usageDetail: $0.snapshot.usageDetail,

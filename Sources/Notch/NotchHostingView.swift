@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏内容承载视图
+ @Descripttion: 管理显示栏鼠标穿透、原生光标区域与菜单路由。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-21 11:08:14
+ @LastEditTime: 2026-09-21 11:08:14
+ @FilePath: Sources/Notch/NotchHostingView.swift
+ */
 import AppKit
 import SwiftUI
 
@@ -34,6 +43,23 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
     /// Regions that should receive events, in view coordinates. NSHostingView
     /// is flipped, so these use a top-left origin.
     var interactiveRects: [CGRect] = []
+
+    var pointingRects: [CGRect] = [] {
+        didSet {
+            guard pointingRects != oldValue else { return }
+            window?.invalidateCursorRects(for: self)
+        }
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+        for rect in pointingRects {
+            let visible = rect.intersection(bounds)
+            if !visible.isNull, !visible.isEmpty {
+                addCursorRect(visible, cursor: .pointingHand)
+            }
+        }
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)

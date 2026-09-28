@@ -1,3 +1,13 @@
+/**
+ @name: 会话与用量展示
+ @Descripttion: 读取本地活动并提供本地化展示文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 23:00:00
+ @LastEditTime: 2026-09-08 23:00:00
+ @FilePath: Sources/Sessions/GeminiCLIActivity.swift
+ */
+import Combine
 import Foundation
 
 /// Notices when Gemini CLI is working.

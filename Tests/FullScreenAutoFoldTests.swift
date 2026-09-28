@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 FullScreenAutoFoldTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/FullScreenAutoFoldTests.swift
+ */
 import AppKit
 import Combine
 import SwiftUI
@@ -142,6 +151,143 @@ final class FullScreenAutoFoldTests: XCTestCase {
     }
 
     func testControllerDoesNotFoldWhenAutoFoldIsOff() {
+        let controller = NotchWindowController()
+        controller.show()
+        defer { controller.stop() }
+
+        controller.model.isAlwaysOn = true
+        controller.model.isExpanded = true
+        controller.foldsForFullScreen = false
+        controller.isFullScreenActive = { true }
+        controller.handleActiveSpaceOrAppChange()
+
+        XCTAssertTrue(controller.model.isExpanded, "With the fold off, a full-screen app must leave the notch alone")
+    }
+
+    func testApplyAutoFoldReEvaluatesImmediately() {
+        let controller = NotchWindowController()
+        controller.show()
+        defer { controller.stop() }
+
+        controller.model.isAlwaysOn = true
+        controller.model.isExpanded = true
+        controller.foldsForFullScreen = false
+        controller.isFullScreenActive = { true }
+        controller.handleActiveSpaceOrAppChange()
+        XCTAssertTrue(controller.model.isExpanded)
+
+        controller.apply(foldsForFullScreen: true)
+        XCTAssertFalse(controller.model.isExpanded, "Re-enabling the fold under a frontmost full-screen app must fold now, not on the next cursor poll")
+    }
+
+    /// The pointer has to be off the notch for the hover fold to run; on a
+    /// machine where it happens to be parked inside, skip rather than guess.
+    private func skipIfPointerOnNotch(_ controller: NotchWindowController) throws {
+        if let frame = controller.panelFrameForTesting,
+           frame.contains(NSEvent.mouseLocation) {
+            throw XCTSkip("Pointer is parked on the notch")
+        }
+    }
+
+    func testHoverFoldDoesNotOutVoteAlwaysShowWhenAutoFoldIsOff() throws {
+        let controller = NotchWindowController()
+        controller.show()
+        defer { controller.stop() }
+
+        controller.model.isAlwaysOn = true
+        controller.model.isExpanded = true
+        controller.foldsForFullScreen = false
+        controller.isFullScreenActive = { true }
+        try skipIfPointerOnNotch(controller)
+
+        // The hover fold is the second place full-screen is consulted, and it
+        // must not out-vote Always show once the fold is switched off —
+        // ungated, it folds every cursor poll while the other path restores.
+        controller.cursorMoved()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+
+        XCTAssertTrue(controller.model.isExpanded, "The hover fold must not fire once the full-screen fold is off")
+    }
+
+    func testHoverFoldStillFoldsOnHoverNotchWhenAutoFoldIsOff() throws {
+        let controller = NotchWindowController()
+        controller.show()
+        defer { controller.stop() }
+
+        // onHover and unpinned: staysOpen is false, so the pointer leaving
+        // still folds — the setting governs full-screen, not hover behaviour.
+        controller.model.isExpanded = true
+        controller.foldsForFullScreen = false
+        controller.isFullScreenActive = { true }
+        try skipIfPointerOnNotch(controller)
+
+        controller.cursorMoved()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+
+        XCTAssertFalse(controller.model.isExpanded, "An on-hover notch must still fold when the pointer leaves")
+    }
+
+    /// Answering "is a full-screen app in front" copies every window's
+    /// description out of WindowServer, and `cursorMoved` runs for every mouse
+    /// event on the screen. Asked on each one, it was nearly all of the app's
+    /// CPU while the pointer moved, so it is only asked when "Always show"
+    /// is what stands between the notch and a fold.
+    func testPointerMovementOnlyAsksAboutFullScreenWhenAlwaysShowIsAtStake() throws {
+        let controller = NotchWindowController()
+        controller.show()
+        defer { controller.stop() }
+
+        var asked = 0
+        controller.isFullScreenActive = { asked += 1; return false }
+        try skipIfPointerOnNotch(controller)
+
+        // Folded: nothing to fold, nothing to ask.
+        controller.model.isExpanded = false
+        for _ in 0..<50 { controller.cursorMoved() }
+        XCTAssertEqual(asked, 0, "A folded notch must not ask WindowServer on pointer movement")
+
+        // Open on hover: it folds whatever the answer, so there is no question.
+        controller.model.isExpanded = true
+        for _ in 0..<50 { controller.cursorMoved() }
+        XCTAssertEqual(asked, 0, "An on-hover notch must not ask WindowServer on pointer movement")
+
+        // Always show: the answer decides whether it folds, so it is asked.
+        // A fresh controller, because the on-hover pass above left its fold
+        // scheduled, and a scheduled fold is not asked about twice.
+        let alwaysOn = NotchWindowController()
+        alwaysOn.show()
+        defer { alwaysOn.stop() }
+        var alwaysOnAsked = 0
+        alwaysOn.isFullScreenActive = { alwaysOnAsked += 1; return false }
+        alwaysOn.model.isAlwaysOn = true
+        alwaysOn.model.isExpanded = true
+        try skipIfPointerOnNotch(alwaysOn)
+        alwaysOn.cursorMoved()
+        XCTAssertEqual(alwaysOnAsked, 1, "Always show must still consult full-screen state")
+        XCTAssertTrue(alwaysOn.model.isExpanded)
+    }
+
+    func testSwitchingAutoFoldOffCancelsAPendingFold() throws {
+        let controller = NotchWindowController()
+        controller.show()
+        defer { controller.stop() }
+
+        controller.model.isAlwaysOn = true
+        controller.model.isExpanded = true
+        controller.isFullScreenActive = { true }
+        try skipIfPointerOnNotch(controller)
+
+        // Scheduled while the fold was still on, so the work item already
+        // holds ignoreAlwaysOn — without a cancel it lands once against the
+        // always-on notch even though the setting is now off.
+        controller.cursorMoved()
+        controller.apply(foldsForFullScreen: false)
+        RunLoop.current.run(until: Date().addingTimeInterval(0.6))
+
+        XCTAssertTrue(controller.model.isExpanded, "A fold in flight must not land after the setting is switched off")
+    }
+
+    func testAlwaysOnRestoresExpandedWhenLeavingFullScreen() {
         let controller = NotchWindowController()
         controller.show()
         defer { controller.stop() }

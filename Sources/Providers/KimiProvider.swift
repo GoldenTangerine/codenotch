@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · KimiProvider
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/Providers/KimiProvider.swift
+ */
 import Foundation
 import os
 
@@ -24,7 +33,7 @@ actor KimiProvider: UsageProvider {
     }
 
     nonisolated var signInRoute: SignInRoute {
-        .command("kimi", name: "Kimi", install: URL(string: "https://moonshotai.github.io/kimi-cli/en/guides/getting-started.html"))
+        .guidance(L10n.t("Run kimi and sign in with /login — it writes and refreshes the token this reads."))
     }
 
     nonisolated func account() -> ProviderAccount? { KimiCredentials.account() }

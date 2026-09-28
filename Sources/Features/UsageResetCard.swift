@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · UsageResetCard
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/Features/UsageResetCard.swift
+ */
 import SwiftUI
 
 /// The notification modal card displayed beside the notch when a provider's limit resets.
@@ -24,18 +33,6 @@ struct UsageResetCard: View {
     /// exception, and its dim is drawn behind the glass itself, not here.
     private var surfaceFill: Color { glassy ? .clear : Palette.card }
 
-    private var clampedTailOffset: CGFloat {
-        let size = TooltipTail.size(for: direction)
-        switch direction {
-        case .leading, .trailing:
-            let maxOffset = max(0, (Self.cardHeight / 2) - NotchLayout.cardCorner - (size.height / 2))
-            return min(max(tailOffset, -maxOffset), maxOffset)
-        case .up, .down:
-            let maxOffset = max(0, (NotchLayout.cardWidth / 2) - NotchLayout.cardCorner - (size.width / 2))
-            return min(max(tailOffset, -maxOffset), maxOffset)
-        }
-    }
-
     var body: some View {
         stack
             .background {
@@ -44,12 +41,12 @@ struct UsageResetCard: View {
                 if glassy {
                     if #available(macOS 26.0, *) {
                         Color.clear
-                            .glassEffect(surfaceStyle.glass, in: TooltipSilhouette(direction: direction, tailOffset: clampedTailOffset))
+                            .glassEffect(surfaceStyle.glass, in: TooltipSilhouette(direction: direction, tailOffset: tailOffset))
                             .background {
                                 if let dim = TooltipGlassContrast.dim(surfaceStyle: surfaceStyle,
-                                                                      colorScheme: colorScheme,
-                                                                      reduceTransparency: reduceTransparency) {
-                                    TooltipSilhouette(direction: direction, tailOffset: clampedTailOffset).fill(dim)
+                                                                       colorScheme: colorScheme,
+                                                                       reduceTransparency: reduceTransparency) {
+                                    TooltipSilhouette(direction: direction, tailOffset: tailOffset).fill(dim)
                                 }
                             }
                     }
@@ -58,7 +55,6 @@ struct UsageResetCard: View {
     }
 
     private var titleText: String {
-        if let notice = event.noticeTitle { return notice }
         switch event.kind {
         case .reset:
             return L10n.t("\(event.providerName) Reset")
@@ -70,7 +66,6 @@ struct UsageResetCard: View {
     }
 
     private var subtitleText: String {
-        if let notice = event.noticeSubtitle { return notice }
         switch event.kind {
         case .reset:
             return L10n.t("\(event.windowLabel) limit refreshed")
@@ -89,11 +84,11 @@ struct UsageResetCard: View {
     }
 
     private var statusText: String {
-        if let notice = event.noticeStatus { return notice }
         switch event.kind {
         case .reset:
             return L10n.t("Quota is available (0% used)")
         case .sessionLimitReached:
+            if event.windowID != nil { return L10n.t("\(event.windowLabel) limit is spent") }
             return L10n.t("Session limit reached (100% used)")
         case .weeklyLimitReached:
             return L10n.t("Weekly limit reached (100% used)")
@@ -187,8 +182,8 @@ struct UsageResetCard: View {
         return TooltipTail(direction: direction)
             .fill(surfaceFill)
             .frame(width: size.width, height: size.height)
-            .offset(x: direction == .up || direction == .down ? clampedTailOffset : 0,
-                    y: direction == .leading || direction == .trailing ? clampedTailOffset : 0)
+            .offset(x: direction == .up || direction == .down ? tailOffset : 0,
+                    y: direction == .leading || direction == .trailing ? tailOffset : 0)
     }
 
     @ViewBuilder private var stack: some View {

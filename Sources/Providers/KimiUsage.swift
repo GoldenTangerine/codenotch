@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · KimiUsage
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/Providers/KimiUsage.swift
+ */
 import Foundation
 
 /// Parses `GET https://api.kimi.com/coding/v1/usages`.

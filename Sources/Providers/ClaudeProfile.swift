@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 ClaudeProfile.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/ClaudeProfile.swift
+ */
 import CryptoKit
 import Foundation
 
@@ -251,9 +260,6 @@ struct ClaudeProfile: Equatable, Hashable {
             /// to. This is the uuid the Claude desktop app files its own
             /// sessions under — see `ClaudeDesktopSessionIndex`.
             let accountUuid: String?
-            /// `claude_enterprise`, `claude_team` and so on: the kind of
-            /// organization the account belongs to.
-            let organizationType: String?
         }
         let oauthAccount: Account?
     }
@@ -290,18 +296,6 @@ struct ClaudeProfile: Equatable, Hashable {
     func organizationID() -> String? {
         guard let uuid = account()?.organizationUuid, !uuid.isEmpty else { return nil }
         return uuid
-    }
-
-    /// The kind of organization this profile's account belongs to, as Claude
-    /// Code recorded it — `claude_enterprise` comes back as `enterprise`.
-    ///
-    /// For a reading taken from Claude Desktop's cache, which carries no plan
-    /// of its own. That reading is matched to this profile by `organizationID`
-    /// from the same record, so the two cannot describe different accounts.
-    func organizationPlan() -> String? {
-        guard let type = account()?.organizationType?.nonEmptyPlan else { return nil }
-        let prefix = "claude_"
-        return type.hasPrefix(prefix) ? String(type.dropFirst(prefix.count)).nonEmptyPlan : type
     }
 
     /// Which Anthropic *account* this profile is signed in to.
@@ -386,6 +380,90 @@ struct ClaudeProfile: Equatable, Hashable {
 /// keeps per-project prompt history in it, so on a machine with a long history
 /// it runs to tens or hundreds of megabytes — and `ClaudeProfile.account()` is
 /// on the polling path: `ClaudeOAuthProvider.desktopReading()` asks for the
+/// organization on every refresh, which is every sixty seconds for as long as
+/// any session is busy, once per profile. Reading and decoding the whole
+/// document each time to pull two strings out of it is the kind of cost that
+/// does not show up on the machine it was written on and pins a core on a
+/// machine with real history behind it.
+///
+/// The gate is the one the rest of the app already uses: modification date and
+/// size, exactly as `ClaudeTranscriptReader` gates a transcript tail, resting on
+/// the same fact `CredentialCache` states outright — re-reading an unchanged
+/// item cannot produce a different answer. So nothing here decides when an
+/// answer is *too old*, and no caller has to trust a held copy: a file that has
+/// been rewritten is read again on the very next call, which is what keeps
+/// switching account in Claude Code visible as quickly as it was before.
+///
+/// Both halves of the stamp, because a rewrite inside the same second happens —
+/// and `.claude.json` is rewritten by a process that has no idea anyone is
+/// watching it.
+private final class AccountFileCache: @unchecked Sendable {
+    static let shared = AccountFileCache()
+
+    private struct Entry {
+        let modified: Date
+        let size: UInt64
+        let account: ClaudeProfile.AccountFile.Account?
+    }
+
+    private let lock = NSLock()
+    private var entries: [String: Entry] = [:]
+
+    /// The account recorded in one `.claude.json`, or nil for every way that can
+    /// fail: no file, no permission, not JSON, or no `oauthAccount` in it.
+    ///
+    /// A nil is cached too, and deliberately. Failing to find an account is the
+    /// case that costs a full decode to learn nothing, and nothing about it can
+    /// change until the file does.
+    func account(at url: URL,
+                 fileManager: FileManager = .default) -> ClaudeProfile.AccountFile.Account? {
+        guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              let modified = attributes[.modificationDate] as? Date
+        else {
+            // No file at all: signed out, or never signed in. Forget whatever
+            // was held rather than going on answering from a file that is gone.
+            lock.lock()
+            entries.removeValue(forKey: url.path)
+            lock.unlock()
+            return nil
+        }
+        let size = (attributes[.size] as? NSNumber)?.uint64Value ?? 0
+
+        lock.lock()
+        let held = entries[url.path]
+        lock.unlock()
+        if let held, held.modified == modified, held.size == size { return held.account }
+
+        // Decoded outside the lock. It is the slow call in here, and holding the
+        // lock across it would queue every other profile behind whichever one
+        // reached it first — on a machine where the decode is slow enough to
+        // matter, which is the only machine this exists for.
+        let account = Self.decode(url)
+
+        lock.lock()
+        // Two threads that stamped different versions can finish in either
+        // order, so the entry can end up holding an older decode under a newer
+        // stamp. Self-correcting: the stamps no longer match, and the next call
+        // reads the file again.
+        entries[url.path] = Entry(modified: modified, size: size, account: account)
+        lock.unlock()
+        return account
+    }
+
+    private static func decode(_ url: URL) -> ClaudeProfile.AccountFile.Account? {
+        guard let data = try? Data(contentsOf: url),
+              let config = try? JSONDecoder().decode(ClaudeProfile.AccountFile.self, from: data)
+        else { return nil }
+        return config.oauthAccount
+    }
+}
+
+/// One decode of a profile's `.claude.json`, held until the file changes.
+///
+/// Worth a type of its own because that file is not a small one. Claude Code
+/// keeps per-project prompt history in it, so on a machine with a long history
+/// it runs to tens or hundreds of megabytes — and `ClaudeProfile.account()` is
+/// on the polling path: `ClaudeOAuthProvider.desktopWindows()` asks for the
 /// organization on every refresh, which is every sixty seconds for as long as
 /// any session is busy, once per profile. Reading and decoding the whole
 /// document each time to pull two strings out of it is the kind of cost that

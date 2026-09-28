@@ -1,4 +1,11 @@
 #!/bin/bash
+# @name: 项目构建与文档
+# @Descripttion: 维护 sign-local.sh 的项目实现与上游兼容。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-11 15:51:14
+# @LastEditTime: 2026-09-11 15:51:14
+# @FilePath: Scripts/sign-local.sh
 #
 # Sign a local Debug build with a STABLE self-signed identity, so the macOS
 # keychain "Always Allow" grant persists across launches.

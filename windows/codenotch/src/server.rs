@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · server
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: windows/codenotch/src/server.rs
+ */
 //! Local event server: receives codenotch-hook's POST /event?e=<event>&ppid=<pid>
 //! with the Claude Code hook's stdin JSON as the body. Lenient parsing: no missing field is an error.
 

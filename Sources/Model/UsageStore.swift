@@ -1,3 +1,12 @@
+/**
+ @name: 额度查询调度
+ @Descripttion: 管理动态供应商、独立刷新及最近成功读数。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Model/UsageStore.swift
+ */
 import AppKit
 import Combine
 import os
@@ -31,37 +40,15 @@ final class UsageStore: ObservableObject {
     @Published private(set) var providerAccountRevision = 0
 
     private var providers: [UsageProvider]
-
-    /// Names chosen in Settings, by provider id. Applied to every snapshot the
-    /// store publishes, so the notch, the menu bar, the cards and the
-    /// notifications all call an account what its owner does.
-    var nicknames: [String: String] = [:] {
-        didSet {
-            guard nicknames != oldValue else { return }
-            snapshots = snapshots.map(named)
-        }
-    }
-
-    /// The snapshot with the chosen name, or the provider's own one back when
-    /// the name was cleared.
-    private func named(_ snapshot: ProviderSnapshot) -> ProviderSnapshot {
-        var snapshot = snapshot
-        if let nickname = nicknames[snapshot.id] {
-            snapshot.displayName = nickname
-        } else if let provider = providers.first(where: { $0.id == snapshot.id }) {
-            snapshot.displayName = provider.displayName
-        }
-        return snapshot
-    }
-
-    func registerCustomProviders(_ custom: [UsageProvider]) {
-        providers.removeAll { $0.id.hasPrefix("custom-endpoint-") }
-        providers.append(contentsOf: custom)
-        for provider in custom {
-            publish(Self.placeholder(provider))
-        }
-        refreshNow()
-    }
+    private var attempts: [String: Date] = [:]
+    private var backoffs: [String: Date] = [:]
+    private var isReconfiguring = false
+    private var usesConfiguredSchedule: Bool
+    /// A response belongs to the connection that started it. Checking only
+    /// `disconnected` would accept an old response after a quick off/on toggle.
+    /// Providers the user has switched off. They are not fetched at all — their
+    /// credential is never read, which is the whole point of switching one off.
+    /// Filtering the results afterwards would still touch the keychain.
 
     /// Provider ids plus any model cells currently on screen.
     var knownIDs: [String] {
@@ -71,6 +58,7 @@ final class UsageStore: ObservableObject {
     /// their cells so disabling one model does not stop the shared runtime.
     @Published var disconnected: Set<String> = [] {
         didSet {
+            guard !isReconfiguring else { return }
             guard disconnected != oldValue else { return }
             for id in disconnected.subtracting(oldValue) { cancelRefresh(providerID: id) }
             snapshots.removeAll { disconnected.contains($0.id) }
@@ -81,7 +69,7 @@ final class UsageStore: ObservableObject {
             // remembered forever and rebuilt from the archive at the next
             // launch, ring and all.
             for id in disconnected { lastGood.removeValue(forKey: id) }
-            archive.save(lastGood)
+            persistArchive()
             for provider in providers where oldValue.contains(provider.id) && !disconnected.contains(provider.id) {
                 publish(Self.placeholder(provider))
             }
@@ -141,6 +129,23 @@ final class UsageStore: ObservableObject {
 
     private let archive: UsageArchive
     private var lastGood: [String: (snapshot: ProviderSnapshot, fetchedAt: Date)] = [:]
+    private var archiveSaveTask: Task<Void, Never>?
+
+    /// Coalesce a burst without postponing the write indefinitely during polling.
+    private func scheduleArchiveSave() {
+        guard archiveSaveTask == nil else { return }
+        archiveSaveTask = Task { [weak self] in
+            do { try await Task.sleep(for: .milliseconds(250)) }
+            catch { return }
+            self?.persistArchive()
+        }
+    }
+
+    private func persistArchive() {
+        archiveSaveTask?.cancel()
+        archiveSaveTask = nil
+        archive.save(lastGood)
+    }
     private var timer: Timer?
     private var localTimer: Timer?
     private var fetchTasks: [String: Task<Void, Never>] = [:]
@@ -185,11 +190,13 @@ final class UsageStore: ObservableObject {
         refreshDeadline: TimeInterval = 60,
         archive: UsageArchive = UsageArchive(),
         disconnected: Set<String> = [],
+        configured: Bool = false,
         order: [String] = [],
         pollingNow: @escaping () -> Date = Date.init
     ) {
         self.pollingNow = pollingNow
         self.providers = providers
+        self.usesConfiguredSchedule = configured || providers.contains { $0 is ConfiguredUsageProvider }
         self.refreshInterval = refreshInterval
         self.localRefreshInterval = localRefreshInterval
         self.idleRefreshInterval = idleRefreshInterval
@@ -229,7 +236,7 @@ final class UsageStore: ObservableObject {
             guard let remembered = lastGood[provider.id] else { return Self.placeholder(provider) }
             var snapshot = remembered.snapshot
             snapshot.status = .stale(since: remembered.fetchedAt)
-            return snapshot
+            return (provider as? ConfiguredUsageProvider)?.decorate(snapshot) ?? snapshot
         }
         updateNotchSnapshots()
     }
@@ -269,9 +276,9 @@ final class UsageStore: ObservableObject {
     }
 
     func start() {
-        refreshNow()
+        if usesConfiguredSchedule { refreshDue() } else { refreshNow() }
 
-        let timer = Timer(timeInterval: refreshInterval, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: usesConfiguredSchedule ? 1 : refreshInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -287,7 +294,10 @@ final class UsageStore: ObservableObject {
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshNow() }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if self.usesConfiguredSchedule { self.refreshDue() } else { self.refreshNow() }
+            }
         }
 
         // A window's `label` is display text a provider resolved while it was
@@ -304,6 +314,7 @@ final class UsageStore: ObservableObject {
     }
 
     func stop() {
+        if archiveSaveTask != nil { persistArchive() }
         timer?.invalidate()
         timer = nil
         localTimer?.invalidate()
@@ -326,6 +337,7 @@ final class UsageStore: ObservableObject {
 
     /// Decides whether this tick is worth a request at all.
     private func tick() {
+        if usesConfiguredSchedule { refreshDue(); return }
         let now = pollingNow()
         let waited = lastAttempt.map { now.timeIntervalSince($0) } ?? .greatestFiniteMagnitude
         guard Self.shouldRefresh(
@@ -370,6 +382,10 @@ final class UsageStore: ObservableObject {
     }
 
     func refreshNow() {
+        if usesConfiguredSchedule {
+            for provider in providers { refresh(providerID: provider.id) }
+            return
+        }
         guard !isRefreshing else {
             Log.usage.notice("refresh skipped: one already in flight")
             return
@@ -451,6 +467,8 @@ final class UsageStore: ObservableObject {
             beginRefresh($0)
         }
         for task in tasks { await task.value }
+        // Awaiting a full refresh also guarantees that a new store can restore it.
+        if archiveSaveTask != nil { persistArchive() }
     }
 
     /// Refetch one provider, leaving the others alone.
@@ -467,20 +485,38 @@ final class UsageStore: ObservableObject {
         return beginRefresh(provider, holdIndicator: true)
     }
 
+    /// A changed account source makes an in-flight response and its archived
+    /// reading belong to the previous source, even if the provider ID stays put.
+    func invalidateUsageSource(providerID: String) {
+        guard let provider = providers.first(where: { $0.id == providerID }) else { return }
+        cancelRefresh(providerID: providerID)
+        attempts[providerID] = nil
+        backoffs[providerID] = nil
+        archive.saveBackoffUntil(nil, providerID: providerID)
+        lastGood[providerID] = nil
+        archive.forget(providerID)
+        if !disconnected.contains(providerID) { publish(Self.placeholder(provider)) }
+    }
+
     func refreshLocalRuntimes() {
         for provider in providers where provider.kind == .localRuntime && !disconnected.contains(provider.id) {
             _ = beginRefresh(provider)
         }
     }
 
+    private func underlyingProvider(_ id: String) -> UsageProvider? {
+        guard let provider = providers.first(where: { $0.id == id }) else { return nil }
+        return (provider as? ConfiguredUsageProvider)?.automatic ?? provider
+    }
+
     func updateOllamaEndpoint(_ endpoint: URL) {
-        guard let provider = providers.first(where: { $0.id == "ollama-local" }) as? OllamaLocalProvider,
+        guard let provider = underlyingProvider("ollama-local") as? OllamaLocalProvider,
               provider.endpoint != endpoint else { return }
         restart(provider) { provider.endpoint = endpoint }
     }
 
     func updateLMStudioEndpoint(_ endpoint: URL) {
-        guard let provider = providers.first(where: { $0.id == LMStudioMetrics.providerID }) as? LMStudioLocalProvider,
+        guard let provider = underlyingProvider(LMStudioMetrics.providerID) as? LMStudioLocalProvider,
               provider.endpoint != endpoint else { return }
         restart(provider) { provider.endpoint = endpoint }
     }
@@ -497,6 +533,17 @@ final class UsageStore: ObservableObject {
 
     private func beginRefresh(_ provider: UsageProvider, holdIndicator: Bool = false) -> Task<Void, Never> {
         if let task = fetchTasks[provider.id] { return task }
+        if provider is ConfiguredUsageProvider,
+           let until = backoffs[provider.id] ?? archive.loadBackoffUntil(providerID: provider.id), until > pollingNow() {
+            backoffs[provider.id] = until
+            if snapshots.contains(where: { $0.id == provider.id && $0.queryRetryAfter == until && $0.queryFailure != nil }) {
+                return Task {}
+            }
+            publish(configuredFailure(provider: provider,
+                error: UsageProviderError.rateLimited(retryAfter: until.timeIntervalSince(pollingNow()))))
+            return Task {}
+        }
+        attempts[provider.id] = pollingNow()
         let generation = generations[provider.id, default: 0]
         refreshing.insert(provider.id)
         let task = Task { [weak self] in
@@ -508,6 +555,7 @@ final class UsageStore: ObservableObject {
             }
             if holdIndicator { try? await Task.sleep(nanoseconds: 380_000_000) }
             guard generations[provider.id, default: 0] == generation else { return }
+            attempts[provider.id] = pollingNow()
             refreshing.remove(provider.id)
             fetchTasks.removeValue(forKey: provider.id)
         }
@@ -546,7 +594,7 @@ final class UsageStore: ObservableObject {
         refusedAccess.remove(providerID)
         snapshots.removeAll { $0.id == providerID }
         lastGood.removeValue(forKey: providerID)
-        archive.forget(providerID)
+        persistArchive()
 
         Task { await provider.signOut() }
     }
@@ -580,6 +628,10 @@ final class UsageStore: ObservableObject {
         refresh(providerID: providerID)
     }
 
+    func providerAccountChanged() {
+        providerAccountRevision &+= 1
+    }
+
     /// Say that a provider's saved login needs renewing by hand.
     ///
     /// Called by `ClaudeTokenRefresher` when it tried and the expiry did not
@@ -599,6 +651,26 @@ final class UsageStore: ObservableObject {
     /// the prompt never returns — the button would appear to do nothing.
     func reauthorize(providerID: String) {
         providers.first { $0.id == providerID }?.forgetCachedCredential()
+        if let miniMax = underlyingProvider(providerID) as? MiniMaxProvider {
+            providerAccountChanged()
+            let ids = providers.compactMap { provider -> String? in
+                if let native = provider as? MiniMaxProvider, native === miniMax {
+                    return provider.id
+                }
+                guard let configured = provider as? ConfiguredUsageProvider,
+                      configured.entry.usesLocalAccount,
+                      let automatic = configured.automatic as? MiniMaxProvider,
+                      automatic === miniMax
+                else { return nil }
+                return provider.id
+            }
+            for id in ids { invalidateUsageSource(providerID: id) }
+            Task {
+                await miniMax.credentialsDidChange()
+                for id in ids { refresh(providerID: id) }
+            }
+            return
+        }
         refresh(providerID: providerID)
     }
 
@@ -648,7 +720,7 @@ final class UsageStore: ObservableObject {
         guard let provider = providers.first(where: { $0.id == providerID }) else { return }
         if let idx = snapshots.firstIndex(where: { $0.id == providerID }) {
             var snapshot = snapshots[idx]
-            if let ag = provider as? AntigravityProvider {
+            if let ag = ((provider as? ConfiguredUsageProvider)?.automatic ?? provider) as? AntigravityProvider {
                 snapshot.headlineID = ag.resolveHeadlineID(for: snapshot.windows)
                 snapshot.weeklyID = ag.resolveWeeklyID(for: snapshot.windows)
                 snapshots[idx] = snapshot
@@ -662,13 +734,20 @@ final class UsageStore: ObservableObject {
         // its credential at all, as well as rejecting an obsolete response.
         guard acceptsResult(from: provider, generation: generation) else { return nil }
         do {
-            let fresh = try await provider.fetchSnapshot()
+            var fresh = try await provider.fetchSnapshot()
             guard acceptsResult(from: provider, generation: generation) else { return nil }
+            if let current = providers.first(where: { $0.id == provider.id }) as? ConfiguredUsageProvider {
+                fresh = current.decorate(fresh)
+            }
+            if provider is ConfiguredUsageProvider {
+                backoffs[provider.id] = nil
+                archive.saveBackoffUntil(nil, providerID: provider.id)
+            }
             // Model residency becomes untrue as soon as a server stops. It must
             // never use quota's last-good cache or survive an app relaunch.
             if provider.kind == .usage {
                 lastGood[provider.id] = (fresh, Date())
-                archive.save(lastGood)
+                scheduleArchiveSave()
             }
             refusedAccess.remove(provider.id)
             // A reading that actually came back is proof the credential works,
@@ -679,6 +758,15 @@ final class UsageStore: ObservableObject {
             return fresh
         } catch {
             guard acceptsResult(from: provider, generation: generation) else { return nil }
+            if provider is ConfiguredUsageProvider {
+                if case UsageProviderError.rateLimited(let delay) = error {
+                    let until = Date().addingTimeInterval(max(1, delay))
+                    backoffs[provider.id] = until
+                    archive.saveBackoffUntil(until, providerID: provider.id)
+                }
+                let current = providers.first { $0.id == provider.id } ?? provider
+                return configuredFailure(provider: current, error: error)
+            }
             if provider.kind == .localRuntime {
                 var empty = Self.placeholder(provider)
                 empty.status = .error(error.localizedDescription)
@@ -691,6 +779,7 @@ final class UsageStore: ObservableObject {
 
     private func acceptsResult(from provider: UsageProvider, generation: Int) -> Bool {
         !Task.isCancelled && !disconnected.contains(provider.id)
+            && providers.contains { $0.id == provider.id }
             && generations[provider.id, default: 0] == generation
     }
 
@@ -699,7 +788,7 @@ final class UsageStore: ObservableObject {
     private func degraded(provider: UsageProvider, error: Error) -> ProviderSnapshot? {
         if !provider.isVisibleWhenAbsent {
             lastGood[provider.id] = nil
-            archive.save(lastGood)
+            persistArchive()
             return nil
         }
 
@@ -724,7 +813,7 @@ final class UsageStore: ObservableObject {
         // longer read. So the remembered reading is dropped, not dimmed.
         if Self.supersedesHistory(status) {
             lastGood[provider.id] = nil
-            archive.save(lastGood)
+            persistArchive()
             var empty = Self.placeholder(provider)
             empty.status = status
             return empty
@@ -810,7 +899,7 @@ final class UsageStore: ObservableObject {
     }
 
     private static func placeholder(_ provider: UsageProvider) -> ProviderSnapshot {
-        var snapshot = ProviderSnapshot(
+        let snapshot = ProviderSnapshot(
             id: provider.id,
             displayName: provider.displayName,
             glyph: provider.glyph,
@@ -819,7 +908,89 @@ final class UsageStore: ObservableObject {
             windows: [],
             kind: provider.kind
         )
-        snapshot.customIconFilename = provider.customIconFilename
+        return (provider as? ConfiguredUsageProvider)?.decorate(snapshot) ?? snapshot
+    }
+
+    func reconfigure(providers next: [UsageProvider], disconnected nextDisconnected: Set<String>,
+                     invalidated: Set<String>) {
+        usesConfiguredSchedule = true
+        let old = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
+        let nextIDs = Set(next.map(\.id))
+        let removed = Set(old.keys).subtracting(nextIDs)
+        for provider in next {
+            let before = (old[provider.id] as? ConfiguredUsageProvider)?.entry
+            let after = (provider as? ConfiguredUsageProvider)?.entry
+            let queryChanged = before.map { previous in
+                after.map { !previous.sameQuery(as: $0) } ?? true
+            } ?? true
+            if queryChanged || before?.enabled != after?.enabled || invalidated.contains(provider.id) {
+                cancelRefresh(providerID: provider.id)
+                attempts[provider.id] = nil
+            }
+        }
+        for id in removed.union(invalidated).union(nextDisconnected) {
+            cancelRefresh(providerID: id)
+            refusedAccess.remove(id)
+            lastGood[id] = nil
+            attempts[id] = nil
+            backoffs[id] = nil
+            if removed.contains(id) || invalidated.contains(id) {
+                archive.saveBackoffUntil(nil, providerID: id)
+            }
+            archive.forget(id)
+        }
+        let previous = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0) })
+        providers = next
+        isReconfiguring = true
+        disconnected = nextDisconnected
+        isReconfiguring = false
+        snapshots = next.filter { !nextDisconnected.contains($0.id) }.map { provider in
+            guard !invalidated.contains(provider.id), let snapshot = previous[provider.id] else {
+                return Self.placeholder(provider)
+            }
+            return (provider as? ConfiguredUsageProvider)?.decorate(snapshot) ?? snapshot
+        }
+        for snapshot in snapshots {
+            if let old = lastGood[snapshot.id] { lastGood[snapshot.id] = (snapshot, old.fetchedAt) }
+        }
+        persistArchive()
+        refreshDue()
+    }
+
+    func refreshDue(now: Date? = nil) {
+        let now = now ?? pollingNow()
+        for case let provider as ConfiguredUsageProvider in providers where provider.kind == .usage {
+            let schedule = provider.entry.schedule
+            guard provider.entry.enabled, schedule.enabled,
+                  now.timeIntervalSince(attempts[provider.id] ?? .distantPast) >= schedule.interval(busy: isBusy())
+                    || Self.hasWindowRolledOver(in: snapshots.filter { $0.id == provider.id },
+                                               since: attempts[provider.id], at: now) else { continue }
+            refresh(providerID: provider.id)
+        }
+    }
+
+    private func configuredFailure(provider: UsageProvider, error: Error) -> ProviderSnapshot {
+        var snapshot = lastGood[provider.id]?.snapshot ?? Self.placeholder(provider)
+        let message: String
+        switch error {
+        case UsageProviderError.needsAuth:
+            message = (provider as? ConfiguredUsageProvider)?.entry.usesLocalAccount == true
+                ? provider.signInRoute.explanation : L10n.t("Update this provider's credentials in Settings.")
+        case UsageProviderError.accessDenied:
+            refusedAccess.insert(provider.id)
+            message = L10n.t("macOS denied credential access. Allow access in provider actions.")
+        case UsageProviderError.credentialExpired:
+            message = L10n.t("The saved token has expired.")
+        case UsageProviderError.rateLimited: message = L10n.t("Rate limited. Waiting before retrying.")
+        case UsageProviderError.badResponse(let status): message = "HTTP \(status)"
+        case let error as QueryError: message = error.localizedDescription
+        case is DecodingError: message = L10n.t("The provider returned an invalid response.")
+        case let error as URLError: message = "Network error (\(error.code.rawValue))."
+        default: message = L10n.t("Query failed.")
+        }
+        snapshot.queryFailure = message
+        snapshot.queryRetryAfter = backoffs[provider.id]
+        snapshot.status = snapshot.hasReading ? .stale(since: lastGood[provider.id]?.fetchedAt ?? Date()) : .error(message)
         return snapshot
     }
 }

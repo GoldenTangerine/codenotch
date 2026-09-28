@@ -1,3 +1,12 @@
+/**
+ @name: 会话与用量展示
+ @Descripttion: 读取本地活动并提供本地化展示文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 23:00:00
+ @LastEditTime: 2026-09-08 23:00:00
+ @FilePath: Sources/Sessions/CodexActivityMonitor.swift
+ */
 import AppKit
 import Combine
 import Darwin
@@ -13,6 +22,25 @@ struct CodexRolloutActivity {
         case success
     }
 
+    final class Cache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var key: String?
+        private var value: State?
+
+        func state(from url: URL, read: (URL) -> State? = CodexRolloutActivity.state) -> State? {
+            lock.lock()
+            defer { lock.unlock() }
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+                  let modified = attributes[.modificationDate] as? Date,
+                  let size = attributes[.size] as? NSNumber else { return nil }
+            let nextKey = "\(url.path)|\(modified.timeIntervalSince1970)|\(size)|\(attributes[.systemFileNumber] ?? "")"
+            if key == nextKey { return value }
+            value = read(url)
+            key = nextKey
+            return value
+        }
+    }
+
     /// One window into the end of the rollout. Rollouts run to hundreds of
     /// megabytes, so the file is walked backwards in slices rather than read
     /// whole — the same `tail` trick the Claude and Antigravity readers use.
@@ -26,6 +54,8 @@ struct CodexRolloutActivity {
     private static let maxWindows = 4
 
     static func state(from url: URL) -> State? {
+        // A rollout can grow for days. Bound each poll and skip a partial first
+        // record instead of loading the conversation into the main thread.
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         guard var windowEnd = try? handle.seekToEnd() else { return nil }
@@ -122,23 +152,31 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
     private let interval: TimeInterval
     /// How long after the last write a turn is still considered in flight.
     private let staleAfter: TimeInterval
+    private let usesRolloutCompletion: () -> Bool
     private var timer: Timer?
+    private let storeCache = CodexStoreCache()
+    private let rolloutCache = CodexRolloutActivity.Cache()
+    private var scanTask: Task<Void, Never>?
+    private var scanGeneration = 0
 
     init(
         profile: CodexProfile = .default(),
         stateStore: URL? = nil,
         desktopStore: URL? = nil,
         interval: TimeInterval = 2,
-        staleAfter: TimeInterval = 8
+        staleAfter: TimeInterval = 8,
+        usesRolloutCompletion: @escaping () -> Bool = { false }
     ) {
         self.profile = profile
         self.stateStore = stateStore ?? profile.stateURL
         self.desktopStore = desktopStore ?? profile.desktopStoreURL
         self.interval = interval
         self.staleAfter = staleAfter
+        self.usesRolloutCompletion = usesRolloutCompletion
     }
 
     func start() {
+        stop()
         rescan()
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.rescan() }
@@ -150,6 +188,10 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
     func stop() {
         timer?.invalidate()
         timer = nil
+        scanGeneration += 1
+        scanTask?.cancel()
+        scanTask = nil
+        sessions = []
     }
 
     private let storeCache = CodexStoreCache()
@@ -158,209 +200,71 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
     private var entered: [String: (state: AgentSession.State, at: Date)] = [:]
 
     private func rescan() {
-        let read = Self.read(stateStore: stateStore, desktopStore: desktopStore,
-                             staleAfter: staleAfter, profile: profile, cache: storeCache)
-        let found = Self.settled(read, entered: &entered)
-        guard found != sessions else { return }
-        // Only on a change, as the Claude monitor does, and for the same
-        // reason: it is the one way to see what the notch thinks is running
-        // without hovering over it.
-        let summary = found.map { "\($0.name)=\($0.state)" }.joined(separator: " ")
-        Log.sessions.debug("\(self.profile.id, privacy: .public): \(summary, privacy: .public)")
-        sessions = found
+        guard scanTask == nil else { return }
+        let generation = scanGeneration
+        let enabled = usesRolloutCompletion()
+        let stateStore = stateStore, desktopStore = desktopStore, profile = profile
+        let staleAfter = staleAfter, cache = rolloutCache, storeCache = storeCache
+        scanTask = Task { [weak self] in
+            let found = await Task.detached(priority: .utility) {
+                Self.read(stateStore: stateStore, desktopStore: desktopStore,
+                          staleAfter: staleAfter, profile: profile,
+                          usesRolloutCompletion: enabled, rolloutCache: cache, storeCache: storeCache)
+            }.value
+            guard let self, self.scanGeneration == generation else { return }
+            self.scanTask = nil
+            guard !Task.isCancelled, self.usesRolloutCompletion() == enabled else { return }
+            if found != self.sessions { self.sessions = found }
+        }
     }
 
-    /// Every Codex conversation working right now, each under its own name.
-    ///
-    /// This used to be one row at most, called "Codex": the newest rollout or
-    /// the newest desktop thread, whichever moved last. Two conversations
-    /// running at once drew as one, and nothing on the notch said which
-    /// request was being worked on — while the Claude rows beside it named
-    /// every session. Codex does name its conversations; the name is in the
-    /// same `threads` row the rollout path was already being read from.
-    static func read(stateStore: URL, desktopStore: URL,
+    nonisolated static func read(stateStore: URL, desktopStore: URL,
                      staleAfter: TimeInterval, now: Date = Date(),
                      profile: CodexProfile = .default(),
-                     cache: CodexStoreCache = CodexStoreCache(),
-                     openRollouts: Set<String>? = nil) -> [AgentSession] {
-        var found: [AgentSession] = []
-        // Every thread id that is part of a conversation drawn below, so the
-        // desktop app's copy of the same conversation is not drawn again.
-        var drawn: Set<String> = []
+                     usesRolloutCompletion: Bool = false,
+                     rolloutCache: CodexRolloutActivity.Cache? = nil,
+                     storeCache: CodexStoreCache = CodexStoreCache()) -> [AgentSession] {
+        // Both surfaces, because "Codex" is two programs that record their work
+        // in different places: the CLI and the VS Code extension append to a
+        // rollout, and the desktop app writes to its own catalogue. Whichever
+        // moved last is the one that is working.
+        var candidates: [(id: String, threadID: String, name: String, at: Date, rolloutURL: URL?)] = []
 
-        // "Codex" is two programs that record their work in different places:
-        // the CLI and the VS Code extension append to a rollout, and the
-        // desktop app writes to its own catalogue.
-        let openRollouts = openRollouts ?? CodexOpenRollouts.paths(
-            under: profile.configDirectory.appendingPathComponent("sessions")
-        )
-        for conversation in liveConversations(cache.recentThreads(in: stateStore),
-                                              staleAfter: staleAfter, now: now, cache: cache,
-                                              openRollouts: openRollouts) {
-            let root = conversation.root
-            // The id the single row always had, so a conversation that is not
-            // a sub-agent's keeps it and nothing keyed on it moves.
-            let handle = root.rollout?.lastPathComponent ?? root.id
-            guard let session = session(id: "\(profile.id).\(handle)",
-                                        name: root.label(fallback: profile.displayName),
-                                        modified: conversation.at, state: conversation.state,
-                                        staleAfter: staleAfter, now: now,
-                                        allowStale: conversation.isOpen)
-            else { continue }
-            found.append(session)
-            drawn.formUnion(conversation.members)
+        if let rollout = storeCache.newestRollout(in: stateStore),
+           let modified = (try? FileManager.default
+               .attributesOfItem(atPath: rollout.url.path))?[.modificationDate] as? Date {
+            candidates.append((id: "\(profile.id).\(rollout.url.lastPathComponent)", threadID: rollout.id,
+                               name: profile.displayName, at: modified,
+                               rolloutURL: rollout.url))
+        }
+        if let desktop = storeCache.newestDesktopThread(in: desktopStore) {
+            candidates.append((id: "\(profile.id).desktop:\(desktop.id)", threadID: desktop.id, name: desktop.title,
+                               at: desktop.updatedAt, rolloutURL: nil))
         }
 
-        if let desktop = cache.newestDesktopThread(in: desktopStore),
-           desktop.threadID.isEmpty || !drawn.contains(desktop.threadID),
-           let session = session(id: "\(profile.id).desktop", name: desktop.title,
-                                 modified: desktop.updatedAt, state: .busy,
-                                 staleAfter: staleAfter, now: now) {
-            found.append(session)
+        guard let newest = candidates.max(by: { $0.at < $1.at }),
+              now.timeIntervalSince(newest.at) <= staleAfter else { return [] }
+        var state: AgentSession.State = .busy
+        if usesRolloutCompletion, let url = newest.rolloutURL {
+            let activity = rolloutCache.map { $0.state(from: url) } ?? CodexRolloutActivity.state(from: url)
+            if activity == .success { state = .success }
         }
-
-        // Newest first, with the id breaking ties so two ticks that read the
-        // same thing cannot draw the rows in a different order.
-        return found.sorted { $0.since == $1.since ? $0.id < $1.id : $0.since > $1.since }
-    }
-
-    /// One working conversation: the thread it started from, when any of it
-    /// last moved, what it is doing, and every thread id that is part of it.
-    struct Conversation {
-        let root: CodexThread
-        let at: Date
-        let state: AgentSession.State
-        let members: Set<String>
-        let isOpen: Bool
-    }
-
-    /// Every conversation with a rollout written inside the window, each once.
-    ///
-    /// A sub-agent is folded into the conversation that spawned it rather than
-    /// drawn as a row of its own. Codex can run half a dozen for one request,
-    /// each with a rollout, and a row per helper would bury the one thing the
-    /// person asked for — while the parent, waiting on them, may write nothing
-    /// at all for minutes. So the work is credited to the root, under the
-    /// root's name, for as long as any of it is moving.
-    static func liveConversations(_ threads: [CodexThread],
-                                  staleAfter: TimeInterval,
-                                  now: Date,
-                                  cache: CodexStoreCache = CodexStoreCache(),
-                                  openRollouts: Set<String> = []) -> [Conversation] {
-        let byID = Dictionary(threads.filter { !$0.id.isEmpty }.map { ($0.id, $0) },
-                              uniquingKeysWith: { first, _ in first })
-
-        func root(of thread: CodexThread) -> CodexThread {
-            var current = thread
-            var seen: Set<String> = [thread.key]
-            while let parent = current.parentID, let next = byID[parent],
-                  seen.insert(next.key).inserted {
-                current = next
-            }
-            return current
-        }
-
-        var newest: [String: Date] = [:]
-        var roots: [String: CodexThread] = [:]
-        var members: [String: Set<String>] = [:]
-        var busyRoots: Set<String> = []
-        var openRoots: Set<String> = []
-        let rollouts = Set(threads.compactMap { $0.rollout?.path })
-        for thread in threads {
-            guard let rollout = thread.rollout,
-                  let modified = (try? FileManager.default
-                      .attributesOfItem(atPath: rollout.path))?[.modificationDate] as? Date
-            else { continue }
-            let activity = cache.rolloutState(of: rollout, keeping: rollouts)
-            let isRecent = now.timeIntervalSince(modified) <= staleAfter
-            guard isRecent || (openRollouts.contains(rollout.path) && activity == .busy)
-            else { continue }
-            let root = root(of: thread)
-            // A helper whose conversation cannot be found is not drawn at all.
-            // Drawing it as a conversation of its own is the one wrong answer:
-            // a row named after a prompt the person never wrote, announcing
-            // "Complete" for a review while the real request is still working.
-            guard !root.isHelper else { continue }
-            roots[root.key] = root
-            members[root.key, default: []].formUnion([thread.id, root.id].filter { !$0.isEmpty })
-            if activity == .busy || thread.key != root.key { busyRoots.insert(root.key) }
-            if openRollouts.contains(rollout.path), activity == .busy {
-                openRoots.insert(root.key)
-            }
-            if newest[root.key].map({ $0 < modified }) ?? true { newest[root.key] = modified }
-        }
-
-        let live = Set(roots.values.compactMap { $0.rollout?.path })
-        return roots.compactMap { key, root in
-            guard let at = newest[key] else { return nil }
-            return Conversation(root: root, at: at,
-                                state: busyRoots.contains(key) ? .busy
-                                    : state(of: root, staleAfter: staleAfter, now: now,
-                                            cache: cache, live: live),
-                                members: members[key] ?? [],
-                                isOpen: openRoots.contains(key))
-        }
-    }
-
-    /// The rows with `since` meaning what `AgentSession` says it means: when
-    /// the row entered its current state.
-    ///
-    /// What `read` can see is a rollout's last write, which moves every
-    /// second while a conversation works. As `since` that sorted two busy
-    /// conversations by whichever wrote last, so they swapped places every
-    /// few seconds, showed an elapsed time of about nothing, and made every
-    /// tick look like a change. So the first sighting of a row in a state is
-    /// kept until the state changes, and rows no longer present are
-    /// forgotten.
-    static func settled(_ sessions: [AgentSession],
-                        entered: inout [String: (state: AgentSession.State, at: Date)])
-    -> [AgentSession] {
-        var next: [String: (state: AgentSession.State, at: Date)] = [:]
-        let settled = sessions.map { session -> AgentSession in
-            let held = entered[session.id]
-            let at = held.flatMap { $0.state == session.state ? $0.at : nil } ?? session.since
-            next[session.id] = (session.state, at)
-            return AgentSession(id: session.id, name: session.name, detail: session.detail,
-                                state: session.state, waitingFor: session.waitingFor,
-                                since: at, processID: session.processID)
-        }
-        entered = next
-        return settled.sorted { $0.since == $1.since ? $0.id < $1.id : $0.since > $1.since }
-    }
-
-    /// The conversation's own answer when its root is writing, and busy when
-    /// only its helpers are.
-    ///
-    /// Never a helper's answer. A sub-agent finishing writes `task_complete`
-    /// into *its* rollout while the request it was helping with is still
-    /// under way, and reading that as the conversation's state would announce
-    /// "Complete" for work that is not.
-    ///
-    /// A stale rollout is not parsed at all — the parse is the expensive part,
-    /// and a file that has stopped moving has nothing current to say.
-    static func state(of root: CodexThread, staleAfter: TimeInterval, now: Date,
-                      cache: CodexStoreCache, live: Set<String>) -> AgentSession.State {
-        guard let rollout = root.rollout,
-              let modified = (try? FileManager.default
-                  .attributesOfItem(atPath: rollout.path))?[.modificationDate] as? Date,
-              now.timeIntervalSince(modified) <= staleAfter
-        else { return .busy }
-        switch cache.rolloutState(of: rollout, keeping: live) {
-        case .success: return .success
-        case .busy, .none: return .busy
-        }
+        guard let session = session(id: newest.id, name: newest.name,
+                                    modified: newest.at, state: state,
+                                    staleAfter: staleAfter, now: now, threadID: newest.threadID)
+        else { return [] }
+        return [session]
     }
 
     /// Only work recorded within the window counts. Anything older is a
     /// finished turn, and reporting it as work in progress would be a guess
     /// dressed as a fact.
-    static func session(
+    nonisolated static func session(
         id: String, name: String, modified: Date,
         state: AgentSession.State = .busy,
-        staleAfter: TimeInterval, now: Date,
-        allowStale: Bool = false
+        staleAfter: TimeInterval, now: Date, threadID: String? = nil
     ) -> AgentSession? {
-        guard allowStale || now.timeIntervalSince(modified) <= staleAfter else { return nil }
+        guard now.timeIntervalSince(modified) <= staleAfter else { return nil }
 
         return AgentSession(
             id: id,
@@ -368,7 +272,11 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
             detail: state == .success ? L10n.t("Complete") : L10n.t("Working"),
             state: state,
             waitingFor: nil,
-            since: modified
+            since: modified,
+            nativeSessionKey: threadID.flatMap {
+                let id = $0.trimmingCharacters(in: .whitespacesAndNewlines)
+                return id.isEmpty || id.utf8.count > 512 ? nil : HookEvent.sessionKey(tool: "codex", id: id)
+            }
         )
     }
 }

@@ -1,8 +1,17 @@
+<!--
+@name: 项目说明
+@Descripttion: 介绍应用功能与开发使用方式。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-08 14:12:37
+@LastEditTime: 2026-09-08 14:12:37
+@FilePath: README.md
+-->
 <div align="center">
 
 ![Codenotch](docs/design/codenotch-banner.png)
 
-[![CI](https://github.com/vinzdg/codenotch/actions/workflows/ci.yml/badge.svg)](https://github.com/vinzdg/codenotch/actions/workflows/ci.yml)
+[![Release](https://github.com/GoldenTangerine/codenotch/actions/workflows/release.yml/badge.svg)](https://github.com/GoldenTangerine/codenotch/actions/workflows/release.yml)
 ![Platform](https://img.shields.io/badge/platform-macOS%2026%2B-black)
 ![Swift](https://img.shields.io/badge/swift-5-orange)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -15,49 +24,55 @@ still working, done, or waiting on you.**
 
 </div>
 
-Hover a ring for its limit windows and when they reset. Claude's ring shows the
+Hover a ring for its limit windows and when they reset. By default, Claude's ring shows the
 same **current session** window Claude Code's own `/usage` leads with, so the
 two never disagree.
 
+In **Settings → Appearance → Tooltip height**, choose **Show all** to expand
+provider details to their content, including every session and available statistic.
+The bubble scrolls only when its content exceeds the current screen's usable
+height. **Default** preserves the existing compact layout.
+
+When joined to a MacBook's hardware notch, the collapsed bar shows active
+providers on the left and their count on the right, including providers waiting
+for your input. Multiple providers rotate every three seconds. Each uses its
+configured robot, or its provider icon when robots are disabled. Adjust the
+space on each side in **Settings → Appearance → Notch side width**. When all
+providers finish, the first provider stays visible with its idle or sleep
+animation (or its icon when robots are disabled), and the count becomes zero.
+**Idle notch display** defaults to **Follow first provider**. Choose
+**Custom idle robot** to set its personality, shape and colour independently;
+active calls still show the calling providers' own robots or icons.
+**Show notch when idle** is on by default. Turn it off to retract the sides,
+robot and count when no providers are working or waiting for input. Hovering
+over the hardware notch still opens it; calls restore the sides automatically.
+This setting only affects the collapsed hardware notch and preserves your
+idle robot appearance.
+Width and height adjustments temporarily reveal the sides for live preview,
+then restore the idle visibility setting when the preview ends.
+Colour changes preview immediately and are saved after a short pause, or when
+settings close. Windows showing only sleeping robots request 30 FPS; awake
+animations retain 60 FPS, and hidden animations remain paused.
+With no providers, the bar returns to the hardware notch's original size.
+**Notch height offset** adjusts only the collapsed bar, from −20 to +40 pt
+relative to the hardware notch, with a minimum height of 16 pt. Both size
+controls preview live on the collapsed bar; its robot and count sit closer
+to the central notch. Negative height offsets shorten the software sides,
+not the physical camera cutout.
+
 ## Download
 
-[![Download for macOS](docs/design/download-macos.svg)](../../releases/latest/download/Codenotch.dmg)
-
-That button is the disk image itself, not the page it sits on — the asset is
-named `Codenotch.dmg` in every release, so `releases/latest/download/` always
-resolves to the newest one and the link never needs updating. Signed,
-notarized, and updating itself from then on. Take this one unless you have a
-reason not to; the [release page](../../releases/latest) has the notes.
-
-To try unreleased `main` without an Xcode install, the [preview
-build](../../releases/tag/preview) is rebuilt from every commit, and the
-Package workflow keeps a per-commit disk image on each of its
-[runs](../../actions/workflows/package.yml). Neither is notarized — they are
-ad-hoc signed, because the Developer ID certificate exists on one machine — so
-macOS quarantines the download. Clear the flag once, after dragging the app to
-Applications:
-
-```sh
-xattr -dr com.apple.quarantine /Applications/Codenotch.app
-```
-
-If macOS says the app is *damaged*, that is the quarantine flag rather than a bad download — run the command above.
-
-Universal binary. macOS 15 or later. To build and install a copy from source
-instead, see [Building](#building).
+Download this fork from [Releases](https://github.com/GoldenTangerine/codenotch/releases/latest).
 
 ## Windows
 
 [![Download for Windows](docs/design/download-windows.svg)](../../releases/latest/download/Codenotch-Setup.exe)
 
 A Windows port — Rust/Tauri 2, same design and providers — lives in [`windows/`](windows/README.md).
-The button is the installer itself, named `Codenotch-Setup.exe` in every release for the same
-reason the dmg keeps one name. It installs for the current user without administrator rights,
-and fetches WebView2 if Windows does not already have it.
-
-The installer is not code-signed, so the first time it runs SmartScreen says *Windows protected
-your PC*. Choose **More info**, then **Run anyway**. Every Windows change also leaves an
-installer on its [Windows Package run](../../actions/workflows/windows-package.yml).
+Build instructions, including the optional NSIS installer, are in that document.
+Settings include configurable tray layouts with previews and Ukrainian usage cards.
+Windows also supports Grok, all four screen edges, monitor selection and a tray
+menu with per-provider usage readings and refresh actions.
 
 ## Connect your phone
 
@@ -84,6 +99,106 @@ wire-level details.
 
 ## What it reads
 
+### Code Switch R integration
+
+Linked quotas show inactive periods explicitly. Brand icons are bundled offline
+from `@lobehub/icons-static-svg` 1.73.0 (MIT; license in
+`Sources/CodeSwitchIcons.bundle/LICENSE.txt`), using the same color aliases as
+Code Switch R. The PNG resources total about 1.7 MB and require no network access.
+The provider editor's searchable Brand icon menu previews all 723 bundled SVG variants
+under `Sources/CodeSwitchIcons.bundle/SVG`, using their matching PNGs for
+reliable SwiftUI rendering. Selections are saved locally;
+monochrome icons follow the foreground color and colored variants retain their
+brand colors, including fixed palettes without a `-color` filename suffix.
+Kimi uses background-aware colors for visibility.
+
+With a compatible Code Switch R running on the same Mac, Codenotch automatically
+appends its current tray suppliers after your existing providers. Active requests
+select the active suppliers; idle platforms show their default supplier. Hover a
+ring for quota, balance, reset time, calling status and daily statistics. Disable
+this on the dedicated **Settings → Code Switch R** page.
+
+While integration is enabled, Codenotch subscribes to all providers whose switch
+is on or which were automatically disabled by quota, including hidden platforms
+and platforms without proxy hosting. Manually disabled providers are excluded.
+Settings retains the complete received list. The notch scope can follow the tray
+(the default), show all eligible providers, show only providers not exhausted,
+show only exhausted providers, or show only providers with active requests.
+Unknown quotas remain visible under "Not exhausted". Any valid finite quota
+reaching zero marks a provider exhausted; automatic quota disable also does so.
+Active or waiting sessions can temporarily restore a filtered provider, but
+manual hiding always wins. Existing scope, hidden-provider and order preferences
+are preserved. Older publishers show an upgrade message and use the available
+full list, or fall back to the tray when full-list support is absent.
+
+The same page shows compact supplier rows with today's requests and cost plus
+the most-used allowance or a quota error. Expand a row for success rate, tokens,
+latency, speed, all quotas and reset times. Drag a row by its handle to reorder
+linked suppliers in both Settings and the notch; the order is saved only in
+Codenotch and does not change Code Switch R priorities. Clear search before
+reordering. An insertion line shows whether the drop goes before or after a row;
+cancelling clears the drag state. Both views use the same name-based default order.
+The Settings window can be resized from its edges and remembers its
+size and position. Missing data stays distinct from zero.
+Warning colors follow the notch's usage thresholds. Providers
+retained only for session association keep their visibility control but show no
+cached statistics or quotas as current readings.
+Search by name, platform or supplier ID, and hide individual linked suppliers. Choices are
+saved by platform and provider ID, apply in every scope, and also hide associated
+session activity. Hidden entries remain available to restore, including while
+offline. Local accounts and Code Switch R provider switches are unaffected.
+
+Full mode additionally reads `codenotch-providers-v1.json` in the same cache folder
+and renews `codenotch-subscription-v1.json` every five seconds. Only an active
+subscription enables extra collection and quota jobs. Turning it off or quitting
+revokes that subscription; a crashed consumer expires after 15 seconds. Full data
+is written only on changes and decoded off the main thread only on new revisions.
+It does not read Code Switch R credentials or query suppliers itself. Supplier
+changes normally appear within two seconds; quota and statistics become eligible
+for refresh every 60 seconds in Code Switch R, including while its tray is closed.
+Tray and full mode share four query workers, so slow suppliers may take longer.
+Normal exit
+removes the linked providers; a heartbeat older than three seconds also hides
+them. They return automatically when Code Switch R reconnects. Both applications
+must include this integration; older installed versions do not publish snapshots.
+
+With the activity integration on both sides, Claude Code and Codex CLI hooks
+can also attach a live session to the supplier that actually handled its latest
+request. The optional `sessionBindings` field in each platform snapshot uses
+SHA-256 of `<tool>\n<trimmed session id>` (lowercase hex), plus supplier identity,
+icon, a monotonically increasing route sequence and a millisecond timestamp.
+Code Switch R records this independently of session affinity, including fallback
+attempts, and retains at most 4,096 recent associations for 24 hours. It exports
+no prompts, tool arguments or credentials. Claude native subagent routes are
+excluded when their agent-id header identifies them, so they cannot move their
+parent's indicator.
+
+Waiting sessions keep their supplier visible after requests settle, with the
+last available quota reading. When an association cannot be established, or the
+bridge disconnects, the session appears under its CLI tool instead. The same
+fallback applies until an association is newer than the current submitted turn;
+when the turn's start event was missed, the latest explicit association for the
+same session is used instead. A late association moves the session to its supplier
+and removes the CLI entry if no unresolved sessions remain. Unlinked CLI entries
+say **Provider not linked yet**, since they do not query usage themselves.
+For Codex, an unlinked CLI entrance is shown only while an answer or approval is
+needed, or briefly after completion. Answering removes that empty entrance even
+if the hook still reports ongoing work. Native Codex activity also carries the
+thread ID from its existing database index, so it can resolve the same supplier
+and merge with hooks without reading rollout contents. An empty local Codex
+placeholder is suppressed beside linked suppliers; accounts with readings,
+authentication problems or query errors remain visible.
+**Settings → Notifications → Codex activity** optionally enables completion
+detection from recent local Codex log events. It is off by default, so hooks
+remain the default completion source. Enabling it reads at most the final
+256 KiB of a rollout and uses turn lifecycle events; both modes retain database
+thread IDs and Code Switch R session associations. The choice is saved and
+takes effect on the next activity poll.
+The same event is announced once even if its supplier changes. Older snapshots keep the
+existing request spinner without guessing which supplier a question belongs to.
+
+### Local providers
+
 | Provider | Source | How |
 |---|---|---|
 | **Claude Code** | official | Claude Desktop's own cached usage response, where Desktop is running and signed into the same account. Then Claude Code's own `/usage`, asked of the installed `claude`. Then the OAuth token in the login keychain, against the endpoint that command uses. |
@@ -93,32 +208,101 @@ wire-level details.
 | **Antigravity** | official where licensed, otherwise a request count | Antigravity's local language server first, then Google's quota endpoint; a plain count when neither will answer for the account. |
 | **GLM** | official | Z.ai's Coding Plan monitor endpoint, with a key borrowed from whichever coding tool already holds one — Claude Code's `settings.json`, ZCode, or OpenCode. |
 | **MiniMax** | official where a Coding Plan key is used, derived from official Platform responses for the in-app sign-in | A Coding Plan key pasted in Settings, or explicit sign-in in Codenotch's own WKWebView. |
-| **QianwenAI** | derived from official console responses | Explicit sign-in in Codenotch's own WKWebView, then the console's own Token Plan gateway. Shows the plan's credits window for whichever period the console reports — weekly or monthly. |
 | **Ollama (Local)** | local runtime | Automatically detected local models, RAM/VRAM, unload time and context. Optional response capture adds thinking and generation speed. |
 | **LM Studio** | local runtime | Loaded models from LM Studio's own listing, what each one is doing (prompt, generating, queue) from its SDK socket, and speed, context use and tokens per day from its server log. No relay needed. |
 | **Grok** | official | The Grok CLI session in `~/.grok/auth.json`, against the same credits billing endpoint `/usage` uses. |
 | **OpenCode** | official | The Go plan's official usage endpoint, with the `opencode-go` key OpenCode itself stores on sign-in. |
 | **Command Code** | official | The GOAT plan's `/alpha` billing endpoints, with the key the Command Code app writes to `~/.commandcode/auth.json`. |
 | **GitHub Copilot** | official | GitHub's Copilot quota endpoint, authenticated with the GitHub CLI session already on the Mac (`gh auth login`). |
+| **Gemini API** | local token usage | Token usage from Gemini CLI, OpenCode and Hermes, with an optional monthly token budget in Settings. |
 | **Kimi** | official | The Kimi Code CLI session in `~/.kimi-code/credentials/kimi-code.json`, against the same `/usages` endpoint the CLI's `/usage` asks. Shows the 5-hour rate window and the weekly quota. |
 | **Kiro** | official | The kiro-cli session already on this Mac, against the same `/usage` that command prints. Shows monthly credits. |
-| **Amp** | official subscription percentages; derived free-allowance percentage | The Amp CLI login in `~/.local/share/amp/secrets.json`, against Amp's `userDisplayBalanceInfo` endpoint. Shows Agent and Orb usage, or the Free allowance and replenishment rate. See [Amp details](docs/providers/amp.md). |
-| **Apify** | official | The `apify login` session already on this Mac (`~/.apify/auth.json`, or the token the CLI keeps in the keychain), or a token pasted in Settings or exported as `APIFY_TOKEN`, against the `/v2/users/me/limits` endpoint the Console's Billing page draws from. Shows this cycle's platform spend against the account's monthly usage limit. See [Apify details](docs/providers/apify.md). |
-| **Kilo** | official | The Kilo CLI's own sign-in (`~/.local/share/kilo/auth.json`), against the same coding-plan quota and balance endpoints the CLI asks. Shows the plan's quota windows and the credit balance. |
+
+Codenotch supports automatic credentials from local tools and independent manual
+credentials. Settings → Accounts lets you add multiple accounts for the same
+provider, choose a brand/system/image icon, edit, reorder, disable or delete a query.
+Existing providers and their enabled states migrate on first launch. Deleted
+entries stay deleted; new local profiles can be added from the editor.
+Existing configurations can add GitHub Copilot or Gemini API through
+**Add provider → Automatic → Local provider**. Drag a provider's handle to
+reorder it.
+Kimi and Kiro are added once with their switches off. Existing account choices
+are preserved, and deleting either new entry keeps it deleted after relaunch.
+
+Manual queries accept the credential required by the selected endpoint: for
+example, Claude's OAuth access token, Cursor's Cookie, or a GLM API key. Manual
+mode never falls back to another account on this Mac. Credentials are stored in
+Codenotch's own macOS Keychain entries. Disabling a provider stops queries and
+forgets readings; deleting it also removes its saved credentials and icon.
+
+### Query templates
+
+Choose a built-in query, an official balance template (DeepSeek, StepFun,
+SiliconFlow, OpenRouter, Novita), NewAPI, Sub2API, GLM/Kimi/MiniMax Token Plan,
+or custom JavaScript. Templates are editable. **Test query** previews results
+before saving, and **Primary metric** selects the value shown beside the icon.
+Other metrics and reset times appear on hover. Balances without a total are
+shown as amounts, without inventing a percentage; unlimited quotas are distinct
+from zero balances. Long provider lists and quota details can be scrolled.
+
+Each entry has active and idle refresh intervals in **seconds**, defaulting to
+60 and 300. Each interval starts when the previous refresh finishes, so slow
+queries do not trigger continuous retries. Activity uses the app's existing local session signal; manual
+accounts do not inherit local account sessions. Automatic refresh can be turned
+off independently. Rate-limit responses defer retries, and failures mark the
+last successful reading stale. Changing credentials or the query clears it.
+Clicking a ring retries a failed query; the card shows when a refresh is running
+or when a rate-limit cooldown ends. A timed-out query releases the refresh slot
+even if its underlying I/O is slow to cancel. The timeout includes reading manual
+credentials; a late credential read cannot start another query. Late results are discarded, and a
+successful retry restores the normal reading and ring color.
+Cancellation before or during script startup also cancels the worker and stops
+its helper process; cleanup does not depend on the deadline operation starting.
+
+Scripts return `{ request, extractor }`, matching Code Switch R's query shape:
+
+```js
+({
+  request: {
+    url: baseUrl + '/user/balance',
+    method: 'GET',
+    headers: { Authorization: 'Bearer ' + apiKey }
+  },
+  extractor: response => ({
+    key: 'balance', label: 'Balance', remaining: response.balance, unit: 'USD'
+  })
+})
+```
+
+Available variables are `baseUrl`, `apiKey`, `accessToken`, `cookie`, `accountId`
+and `userId`, also accessible through `variables`. Legacy quoted placeholders
+such as `'Bearer {{apiKey}}'` are supported. Store secrets in credential fields
+rather than embedding them in scripts. The extractor may return one item or an
+array of up to 64, with unique `key`, `label`, `used`, `total`, `remaining`,
+`unit`, `unlimited`, `nextReset` (ISO 8601), and `isValid` fields. A progress ring
+requires a positive total and enough data to calculate used quota.
+
+Scripts run in a separate JavaScriptCore helper process with no exposed file or
+command APIs. Codenotch performs the HTTP request using an isolated session;
+redirects are rejected and responses are limited to 2 MB. The configured timeout
+limits the whole query, including the HTTP request and script execution; reaching
+it cancels the request and terminates the script. Automatic and manual built-in
+queries also use this deadline, although a provider may fail earlier under its
+own network timeout. Query templates depend on provider endpoints and may need
+updating when a provider changes its response. Saved scripts are preserved when
+templates change; selecting another query method and then the desired template
+loads its latest code.
 
 Most providers borrow a credential or session from a tool already on your Mac.
 DeepSeek is the explicit browser-login exception: it never reads a browser's
 cookies or credentials, and only makes requests after you choose **Sign in to
 DeepSeek** from Codenotch. MiniMax is the same kind of exception — a key you
-paste in Settings, or an explicit WKWebView sign-in. QianwenAI is a third: it
-publishes no usage API and has no key to paste, so that WKWebView session is the
-only way in. None of them opens a browser's cookie store.
+paste in Settings, or an explicit WKWebView sign-in. It never opens a browser's
+cookie store.
 
-Ollama Cloud accepts an API key in Settings. Apify borrows the `apify login`
-session when there is one and otherwise takes a token pasted in Settings or
-exported as `APIFY_TOKEN`. Switching a provider off stops its usage polling
-and forgets its readings; borrowed accounts stay signed in to the tools that
-own them.
+Ollama Cloud accepts an API key in Settings. Switching a provider off stops its
+usage polling and forgets its readings; borrowed accounts stay signed in to
+the tools that own them.
 
 **Local Ollama is detected automatically.** Configure its address or stop monitoring in **Settings → Ollama**.
 Each loaded model gets a notch cell; reorder or hide it in **Settings → Accounts**.
@@ -164,12 +348,12 @@ provider's ring while a session is busy, and becomes a pulsing amber ring when
 one is blocked waiting on you. Hover for every live session by name, where it
 is running, and what it wants.
 
-Two Claude Code logins are two rings. Anyone who keeps a work account apart with
-`CLAUDE_CONFIG_DIR=~/.claude-work claude` gets a **Claude (work)** ring beside the
-personal one, with its own limits, its own sessions and its own row in Settings.
-Any `~/.claude-<slug>` directory Claude Code has run against is found at launch;
-the default `~/.claude` always comes first, the rest in alphabetical order, so the
-rings never swap places.
+Two Claude Code logins can have separate rings. A work profile created with
+`CLAUDE_CONFIG_DIR=~/.claude-work claude` can be selected under **Add provider →
+Automatic → Local provider**, with its own limits and sessions.
+Available `~/.claude-<slug>` directories are discovered at launch. The initial
+list places the default first and the other profiles alphabetically; subsequent
+ordering follows your saved provider list.
 
 Codex accounts work the same way: `~/.codex` stays the **Codex** ring, and each
 used `~/.codex-<slug>` directory adds a **Codex (slug)** ring with its own limits,
@@ -196,9 +380,65 @@ to renew it. Directories outside the `~/.codex-<slug>` convention are not
 discovered automatically, and adding a profile requires restarting Codenotch,
 just as it does for Claude.
 
-## When a session ends
+## Session notifications
 
-The notch opens itself for five seconds when an agent stops working, or stops
+For **Claude Code and Codex CLI**, open **Settings → Notifications → Hooks**
+and install the integration separately for each configuration directory. Existing
+third-party hooks and other JSON settings are preserved. Repair updates only
+Codenotch entries; uninstall removes only those entries. Additional profile
+directories can be selected there. No CLI configuration is changed at launch.
+Uninstall also clears that directory's activity immediately and ignores hooks
+still emitted by an already running CLI until the integration is installed again.
+
+After installation, start a new CLI session. **Codex additionally requires you
+to open `/hooks` and review/trust the Codenotch definitions**; changed definitions
+need review again. See the [official Codex hooks documentation](https://developers.openai.com/codex/hooks).
+The installed indicator and last received event are separate: installation alone
+does not prove that a CLI has loaded or trusted the hooks. Use a current CLI
+version that supports the configured lifecycle events; older versions without
+hooks retain only their existing monitoring capabilities.
+
+Hooks report a submitted turn, question-tool calls, approval requests and an
+explicit turn stop. Questions are recognized as tool events, not inferred from
+punctuation in an ordinary reply. The helper sends bounded metadata over a
+private local Unix datagram socket and exits without approving, denying or
+answering anything. Codenotch does not need to be running for the CLI to proceed.
+The helper briefly retries a full socket queue. Codex approvals without call IDs
+are reconciled against in-flight calls of the same tool; ambiguous parallel calls
+retain the waiting mark until all candidate calls finish.
+For question and approval completion events with an ID missing on one side,
+only a unique matching invocation of the same tool can clear the wait. Different
+explicit IDs and ambiguous parallel calls are not merged. A permission event
+that supplies the ID for a unique anonymous question replaces that question's
+anonymous record. Multiple anonymous questions stay distinct; when completion
+ownership cannot be determined, the wait remains until an explicit turn stop,
+interruption, session end, or new turn. Routing and completion
+matching failures log only reason codes and counts when their state changes.
+Return to the original application to answer or approve; the panel does not
+offer remote approval controls.
+
+While running, the existing spinner is unchanged. A waiting session adds an
+amber breathing ring and question-mark badge while retaining the supplier logo,
+on the top notch and either screen edge. Reduced Motion keeps the waiting mark
+static. Waiting takes priority if another session on the same supplier is still
+working. Hover for sessions and click a row to activate its application; overflow
+rows remain available from the “and N more” menu. A temporary activity-only entry
+is removed shortly after completion, while a waiting entry stays visible.
+
+Claude's local session records remain a fallback, merged with hook events by
+process. A newer explicit Claude status can replace a missed hook transition.
+Codex's older log-write heuristic remains a running-only fallback:
+silence in the log is never treated as a completed turn. Desktop applications,
+IDE extensions and other CLI tools retain their previous monitoring paths.
+
+With Claude Code or Codex CLI hooks installed, submitting a message opens the
+notch for five seconds. In **Settings → Notifications → When a turn starts**,
+switch this off or choose 3, 5 or 10 seconds independently of completion alerts.
+Start sounds default to off, with `8bit_start` selected when enabled. Opening a
+CLI session, running tools or resuming after approval does not trigger this alert;
+desktop apps and activity monitoring without hooks do not infer turn starts.
+
+The notch also opens itself for five seconds when an agent stops working, or stops
 to ask you something, and sounds the system alert. Clicking it while it is open
 brings that session's application to the front.
 
@@ -213,8 +453,11 @@ terminals and silently doing nothing in a third.
 
 Both halves switch off separately in Settings, because they fail differently:
 the peek is no use behind a full-screen window, and the sound is no use in a
-meeting. Each of the two events — finished, and waiting on you — picks its own
-sound there, with a preview button beside it.
+meeting. Started, finished and waiting events each have their own sound choice
+and preview button. All three share a volume control with a continuous slider
+and percentage display; previews remain available with notification sounds off.
+The six bundled CodeIsland `8bit_*.wav` sounds are available in every sound picker,
+alongside macOS and user-installed sounds, without requiring CodeIsland at runtime.
 
 The sound is played as a file on the ordinary output rather than handed to
 `NSSound` as a system alert. A system alert goes through the interface
@@ -228,6 +471,18 @@ to jump to. Nothing is announced from the first reading either: every session
 already running at launch arrives with no history, and treating that as a
 transition would ring once per open window on every start.
 
+That transition rule applies to the fallback monitors. A fresh, explicit hook
+turn submission or request for input is announced even if it is the first event seen for that
+session. Hook cancellations and process exits are silent; replayed notifications
+are deduplicated. Several events arriving together produce one sound and peek,
+with waiting taking priority over finished, then started. Disabled and outdated
+events are skipped before choosing an announcement.
+After a waiting alert is displayed or sounded, new start alerts are suppressed
+for its configured duration, or until that wait is resolved. Suppressed starts
+are not replayed later; completion and new waiting alerts remain available.
+When a submission omits its turn ID, later tool events can supply it without
+discarding the start alert or resetting the turn's activity.
+
 ## Alerts
 
 A provider's headline limit crossing **80%** — and reaching **100%** —
@@ -237,6 +492,39 @@ Each provider can be muted from its own row in Settings, and macOS permission
 is asked on the first real alert rather than at launch.
 
 ## Placement
+
+Right-click the notch to open **Settings…** or **Edit position**. The bar has
+no separate settings or move handles by default.
+
+Appearance → **Secondary quota ring** shows another quota period beside the main
+ring. Code Switch R uses the next available period in its supplied order, so a
+weekly main ring can have a monthly second ring. Balance-only, unlimited and
+invalid quotas do not become a second ring. The inside ring temporarily yields
+to the working indicator; the outside ring remains visible.
+
+**Dashed weekly ring** draws this secondary quota ring with dashes, including
+Code Switch R periods. **Usage Limits** sets the colour thresholds for watch
+and critical usage (50% and 70% by default), across rings, quota cards and
+Code Switch R details. Actual limit and reset notifications keep their existing
+rules. **Dark glass** keeps the notch and its cards dark while retaining glass
+transparency; reduced transparency still uses the opaque surface.
+
+**Show usage pace** also applies to Code Switch R details for 5-hour, daily and
+weekly quotas with a reset time. Monthly and custom periods need an exact cycle
+length before their pace can be calculated; their quota rings still work.
+
+Right-click the notch and choose **Edit position** to drag it along any of the
+four edges or onto another display. Release to save; press Escape to cancel.
+The position survives relaunches. A disconnected display temporarily falls back
+to the main display and restores when reconnected, unless you save a new position.
+Changing the edge in Settings centres the notch on that edge of the selected display.
+On a Mac with a hardware notch, dragging near the top centre snaps into it;
+other top positions stay below the menu bar.
+
+Settings → Appearance can show the notch on one display or every display.
+Each display expands independently; the chosen edge and relative drag position
+are shared. In single-display mode, choose a named display or follow the active
+window. Option-drag also nudges the notch along its current edge.
 
 The notch lives on any of the four screen edges. Right and left keep a
 vertical column; top and bottom lay the readings out side by side. It pins
@@ -263,17 +551,37 @@ read it; clicking it again lets it fold away as usual. That click has to land
 on the body itself, since a ring takes its own click to refetch that provider
 and the orb takes one to open Settings. Right-clicking offers the same thing as
 a menu item, **Keep open**, ticked while the notch is being held open, which is
-the surer way to release one that was kept open by accident. The item is
-greyed out when Settings says Always show, because that choice is Settings' to
-change.
+the surer way to release one that was kept open by accident. The item follows the same persistent visibility setting as Settings → Appearance.
+
+In Settings → Appearance, enable **Show move handle** to add a drag handle
+on every display. It is off by default and the choice survives relaunches;
+**Edge** still changes the notch's screen edge while the handle is hidden.
+
+Click the move handle or choose **Edit position** from the right-click menu to
+enter position editing. You can also drag the handle directly. Move the capsule
+anywhere along any screen edge, including on another display; release after
+dragging to save, or press Esc to cancel. Four dashed outlines mark the centered
+positions on the current display. The capsule snaps near a center and highlights
+its outline; drag farther away to release it. Centers follow the usable screen
+area, except the top center joins the physical notch on MacBooks that have one.
+
+Below it, **Show settings button** independently adds a settings arc at the
+opposite end. Hover to reveal the gear and click to open Settings. Both controls
+are hidden by default, remember their choices and apply to every display.
+The transparent space between the two handles passes clicks through to the desktop.
 
 In Settings → Appearance → Reset time, choose **Time remaining** for countdowns
 like "Resets in 3 Days 3h". **Reset date** keeps the reset date and time, with
 minutes shown when less than an hour remains.
 
-Appearance also carries the ring's accent colour. The device accent is the
-default; fixed presets are available for pink, red, orange, yellow, green,
-teal, blue, indigo, purple and off-white.
+Appearance has separate **Interface accent color** and **Notch accent color**
+choices. The interface colour applies to Settings and What's New; the notch
+colour applies to rings and detail cards on every display. Each choice is saved
+independently and takes effect immediately. Both default to the device accent;
+fixed presets are available for pink, red, orange, yellow, green, teal, blue,
+indigo, purple and off-white. Upgrading preserves the previous colour for both
+choices, which can then be changed independently. Warning and error colours
+keep their existing meaning.
 
 The app itself can show a Dock icon, a menu bar item, or neither. The menu bar
 item is the Codenotch icon until you switch on **Show limit information in
@@ -302,8 +610,9 @@ No signing identity is required for either. `make release` — which archives,
 notarizes, and produces a signed auto-update feed — needs a Developer ID
 certificate and an App Store Connect notary profile, and is only ever run by
 the maintainer to cut an official release. See
-[CONTRIBUTING.md](CONTRIBUTING.md). CI runs the same unit tests unsigned via
-`make test-ci`.
+[CONTRIBUTING.md](CONTRIBUTING.md). GitHub Actions runs tests, packages the DMG,
+and publishes a release only when a version tag such as `v1.6.2` is pushed.
+Branch pushes and pull requests do not trigger a separate CI workflow.
 
 A Debug build is ad-hoc signed, which means it has no stable code identity, so
 macOS cannot match it to a saved keychain "Always Allow" — the prompt to read a
@@ -317,6 +626,18 @@ Scripts/sign-local.sh   # signs /Applications/Codenotch.app (pass a path to over
 It creates a reusable `Codenotch Local Signing` certificate in your login
 keychain (no Apple Developer account needed) and re-signs the app. Grant the
 keychain prompt once more after signing; it will not ask again.
+
+Each successful stable tag release includes `Codenotch.dmg` and a real
+Sparkle-signed update in `appcast.xml`. GitHub Actions requires only the
+`SPARKLE_EDDSA_KEY` secret for the default ad-hoc build; no Apple Developer ID
+or notarization is required. First launch may require approval in macOS
+Privacy & Security. Apple signing remains optional via `RELEASE_SIGNING=true`.
+See [Sparkle key setup](CONTRIBUTING.md#sparkle-key-setup) for configuration.
+Before publication, CI verifies the DMG signature against the app's embedded
+public key. Feed metadata is checked again from the published attachment before
+promoting the highest stable version to Latest. Older tags cannot move it
+backwards. Settings → Check now can install a newer compatible release through
+Sparkle; existing installations must trust the same update key.
 
 Run with `CODENOTCH_DEMO=1` to see fixed sample data instead of live readings.
 
@@ -387,6 +708,12 @@ Developer ID identity so a grant survives rebuilds, and the secret is read
 only when the owning app has actually changed it — checked via the item's
 modification date, which isn't behind the same access prompt as the
 credential — so a valid grant does not mean a prompt on every poll.
+
+Choosing **Deny** for Claude's requested keychain access stops its usage reads,
+including CLI and Desktop-cache fallbacks, until **Allow access…** is requested
+again. This choice survives relaunches. Claude's automatic renewal runs from a
+dedicated temporary directory with session persistence disabled and strict MCP
+configuration.
 
 **Rate limits:** Claude's endpoint returns 429 if polled too hard, with an
 unhelpful `Retry-After: 0`. The back-off treats that as a floor-raiser only —

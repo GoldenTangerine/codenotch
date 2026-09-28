@@ -1,0 +1,254 @@
+# @name: GitHub 发布流程
+# @Descripttion: 构建、验证并发布 macOS 安装包。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-08 13:45:00
+# @LastEditTime: 2026-09-08 13:45:00
+# @FilePath: .github/workflows/release.yml
+# Current policy: every release requires SPARKLE_EDDSA_KEY and a real signed
+# appcast. RELEASE_SIGNING only enables optional Apple signing/notarization.
+# The original track notes below describe the earlier policy, not this guard.
+# Release pipeline: push a version tag (v1.5.1, bumping the patch digit each
+# time) and this builds and publishes the release.
+#
+# Two tracks, picked by the repository variable RELEASE_SIGNING
+# (Settings → Secrets and variables → Actions → Variables):
+#
+#   unset / anything else — unsigned: ad-hoc signed dmg, GitHub Release only.
+#     Needs no secrets at all. Unsigned builds are deliberately kept OUT of
+#     the appcast: Sparkle rejects an update whose code-signing identity does
+#     not match the installed copy, so serving one would break auto-update for
+#     everyone already on a signed build.
+#     Caveats of this track: first launch needs right-click → Open (or Privacy
+#     & Security → Open Anyway), and the keychain's "Always Allow" grant keys
+#     on the build's identity, which ad-hoc signing changes every build — so
+#     each update asks once more for Claude Code's credential.
+#
+#   "true" — signed: the full pipeline (Developer ID + notarization + appcast
+#     + Pages publish). Requires these repository secrets:
+#       DEVELOPER_ID_P12_BASE64   base64 of the exported "Developer ID
+#                                 Application" certificate with its private key
+#       DEVELOPER_ID_P12_PASSWORD the password the .p12 was exported with
+#       KEYCHAIN_PASSWORD         any fresh password for the throwaway CI
+#                                 keychain
+#       APPLE_ID                  the Apple ID that notarizes
+#       APP_SPECIFIC_PASSWORD     appleid.apple.com → Sign-In and Security →
+#                                 App-Specific Passwords
+#       SPARKLE_EDDSA_KEY         the Sparkle EdDSA private key matching
+#                                 SUPublicEDKey (export from the keychain that
+#                                 holds it: generate_keys -x <file>)
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+
+env:
+  SIGNED: ${{ vars.RELEASE_SIGNING == 'true' }}
+
+jobs:
+  release:
+    runs-on: macos-26
+    env:
+      DMG: build/release/Codenotch.dmg
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The build number is the commit count, so history has to be whole.
+          fetch-depth: 0
+
+      - name: Require Sparkle update signing
+        env:
+          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+        run: |
+          if [ -z "$SPARKLE_EDDSA_KEY" ]; then
+            echo "Set the SPARKLE_EDDSA_KEY repository secret. See CONTRIBUTING.md. Apple signing is optional." >&2
+            exit 1
+          fi
+
+      - name: Read the version from the tag
+        id: version
+        run: |
+          echo "marketing=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          # Monotonic by construction — Sparkle compares CFBundleVersion to
+          # decide what is newer, so it must only ever go up.
+          echo "build=$(git rev-list --count HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        run: |
+          set -euo pipefail
+          awk -v version="${GITHUB_REF_NAME#v}" '
+            /^## / { active = ($2 == "[" version "]"); next }
+            active { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "Missing changelog entry for $GITHUB_REF_NAME" >&2
+            exit 1
+          fi
+
+      - name: Install xcodegen
+        run: brew install xcodegen
+
+      - name: Set up the signing keychain
+        if: env.SIGNED == 'true'
+        env:
+          DEVELOPER_ID_P12_BASE64: ${{ secrets.DEVELOPER_ID_P12_BASE64 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "$DEVELOPER_ID_P12_BASE64" | base64 --decode > signing.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security list-keychains -d user -s build.keychain login.keychain
+          security set-keychain-settings -lut 21600 build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import signing.p12 -k build.keychain \
+            -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm signing.p12
+          # Fails the run here, rather than three steps later, if the import
+          # did not yield a usable Developer ID identity.
+          security find-identity -v -p codesigning | grep "Developer ID Application"
+
+      - name: Validate release tooling
+        run: |
+          python3 -m unittest discover -s Scripts -p 'test_*.py'
+
+      - name: Archive and package the dmg (signed)
+        if: env.SIGNED == 'true'
+        run: >
+          make dmg XC_FLAGS="MARKETING_VERSION=${{ steps.version.outputs.marketing }}
+          CURRENT_PROJECT_VERSION=${{ steps.version.outputs.build }}"
+
+      - name: Archive and package the dmg (unsigned)
+        if: env.SIGNED != 'true'
+        env:
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing }}
+          CURRENT_PROJECT_VERSION: ${{ steps.version.outputs.build }}
+        run: |
+          set -euo pipefail
+          make gen
+          rm -rf build/release
+          mkdir -p build/release
+          touch build/.metadata_never_index
+          # Ad-hoc: no Developer ID identity exists on this runner. The same
+          # fallback `make build` uses on any machine without the certificate.
+          # Ad-hoc has no Team ID. Hardened Runtime's library validation would
+          # reject the embedded Sparkle binary signed by its upstream team.
+          xcodebuild -project Codenotch.xcodeproj -scheme Codenotch \
+            -destination 'platform=macOS,arch=arm64' \
+            -configuration Release -archivePath build/release/Codenotch.xcarchive \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$CURRENT_PROJECT_VERSION" \
+            CODE_SIGN_IDENTITY="-" CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM="" \
+            ENABLE_HARDENED_RUNTIME=NO \
+            archive
+          # No -exportArchive: that re-signs for a distribution identity,
+          # which is exactly what this track does not have. The .app sits in
+          # the xcarchive as built.
+          mkdir -p build/release/stage
+          cp -R build/release/Codenotch.xcarchive/Products/Applications/Codenotch.app \
+            build/release/stage/
+          APP=build/release/stage/Codenotch.app
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          # Signature validity alone does not detect the launch-time Team ID
+          # mismatch. Check the actual executable before publishing the dmg.
+          SIGNATURE=$(codesign --display --verbose=4 "$APP" 2>&1)
+          printf '%s\n' "$SIGNATURE"
+          if ! printf '%s\n' "$SIGNATURE" | grep -q '^Signature=adhoc$'; then
+            echo "Expected an ad-hoc signature for the unsigned release" >&2
+            exit 1
+          fi
+          if printf '%s\n' "$SIGNATURE" | grep -Eq 'flags=.*(runtime|library-validation)'; then
+            echo "Unsigned release must not enforce Team ID library validation" >&2
+            exit 1
+          fi
+          ln -s /Applications build/release/stage/Applications
+          hdiutil create -volname Codenotch -srcfolder build/release/stage \
+            -ov -format UDZO "$DMG"
+          rm -rf build/release/stage
+
+      - name: Notarize, staple, verify
+        if: env.SIGNED == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APP_SPECIFIC_PASSWORD: ${{ secrets.APP_SPECIFIC_PASSWORD }}
+        run: |
+          set -euo pipefail
+          xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" \
+            --password "$APP_SPECIFIC_PASSWORD" --team-id 6WFPL8B9FB --wait
+          xcrun stapler staple "$DMG"
+          make verify-release
+
+      - name: Build the appcast
+        env:
+          SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
+        run: |
+          set -euo pipefail
+          # Sparkle ships its tools inside the resolved package artifacts; the
+          # archive step above is what fetched them.
+          SPARKLE_TOOL=$(find "$HOME/Library/Developer/Xcode/DerivedData" \
+            -type f -path '*/SourcePackages/artifacts/sparkle/*/generate_appcast' -print -quit)
+          if [ -z "$SPARKLE_TOOL" ] || [ ! -x "$SPARKLE_TOOL" ]; then
+            echo "Sparkle generate_appcast tool was not found in resolved package artifacts" >&2
+            exit 1
+          fi
+          SPARKLE_BIN=$(dirname "$SPARKLE_TOOL")
+          mkdir -p site
+          # Rebuilt from what is actually in the folder, never merged into the
+          # old one — see the appcast target in the Makefile.
+          rm -f site/appcast.xml
+          cp "$DMG" site/
+          # The private key goes in over stdin; a file would sit on disk.
+          printf '%s' "$SPARKLE_EDDSA_KEY" | \
+            "$SPARKLE_BIN/generate_appcast" site \
+            --download-url-prefix "https://github.com/GoldenTangerine/codenotch/releases/download/$GITHUB_REF_NAME/" --ed-key-file -
+
+      - name: Validate the update feed
+        run: |
+          python3 Scripts/promote-release.py --validate "$GITHUB_REF_NAME" site/appcast.xml "$DMG" \
+            build/release/Codenotch.xcarchive/Products/Applications/Codenotch.app/Contents/Info.plist
+
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          gh release create "$GITHUB_REF_NAME" "$DMG" site/appcast.xml
+          --repo GoldenTangerine/codenotch --latest=false
+          --title "Codenotch $GITHUB_REF_NAME"
+          --notes-file "$RUNNER_TEMP/release-notes.md"
+
+      - name: Promote the newest stable release
+        id: latest
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          promoted=$(python3 Scripts/promote-release.py "$GITHUB_REF_NAME")
+          echo "promoted=$promoted" >> "$GITHUB_OUTPUT"
+
+      - name: Publish the appcast and download to Pages
+        if: steps.latest.outputs.promoted == 'true'
+        run: |
+          set -euo pipefail
+          # The job checked out the tag, so HEAD is detached — the site update
+          # has to land on main instead.
+          mv site /tmp/site-release
+          git fetch origin main
+          git checkout main
+          rm -rf site
+          mv /tmp/site-release site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add site/
+          git commit -m "Release $GITHUB_REF_NAME"
+          git push

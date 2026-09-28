@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 CodenotchZstd.h 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Vendor/zstd/CodenotchZstd.h
+ */
 // The four Zstandard entry points Codenotch uses, and nothing else.
 //
 // `zstddeclib.c` beside this file is the official single-file *decoder*

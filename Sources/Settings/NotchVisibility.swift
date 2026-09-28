@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 NotchVisibility.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Settings/NotchVisibility.swift
+ */
 import Foundation
 
 /// How much of itself the notch shows when you are not using it.

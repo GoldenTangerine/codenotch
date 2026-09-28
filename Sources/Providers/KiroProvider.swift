@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · KiroProvider
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/Providers/KiroProvider.swift
+ */
 import Foundation
 import os
 
@@ -59,7 +68,7 @@ actor KiroProvider: UsageProvider {
     }
 
     nonisolated var signInRoute: SignInRoute {
-        .command("kiro-cli login", name: "Kiro", install: URL(string: "https://kiro.dev/cli/"))
+        .guidance(L10n.t("Run kiro-cli login — it writes and refreshes the session this reads."))
     }
 
     nonisolated func forgetCachedCredential() {

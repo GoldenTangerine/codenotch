@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · UsageResetWatcherTests
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Tests/UsageResetWatcherTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -115,6 +124,27 @@ final class UsageResetWatcherTests: XCTestCase {
         watcher.observe([snapshot("claude", "Claude", 0.95)])
         watcher.observe([snapshot("claude", "Claude", 0.00)])
         XCTAssertTrue(alerts.isEmpty, "muted provider is silent")
+    }
+
+    func testMutedResetStillEmitsAnimationOnceWithoutLaterReplay() {
+        var events: [UsageResetEvent] = []
+        var notifications: [UsageResetEvent] = []
+        var isMuted = true
+        let watcher = UsageResetWatcher(isMuted: { _ in isMuted },
+                                        onReset: { events.append($0) },
+                                        deliver: { notifications.append($0) })
+        watcher.observe([snapshot("claude", "Claude", 0.95)])
+        watcher.observe([snapshot("claude", "Claude", 0.05)])
+        XCTAssertEqual(events.count, 1)
+        XCTAssertTrue(notifications.isEmpty)
+        isMuted = false
+        watcher.observe([snapshot("claude", "Claude", 0.05)])
+        XCTAssertEqual(events.count, 1)
+        XCTAssertTrue(notifications.isEmpty)
+        watcher.observe([snapshot("claude", "Claude", 0.9)])
+        watcher.observe([snapshot("claude", "Claude", 0.02)])
+        XCTAssertEqual(events.count, 2)
+        XCTAssertEqual(notifications.count, 1)
     }
 
     func testMultipleProvidersTrackedIndependently() {

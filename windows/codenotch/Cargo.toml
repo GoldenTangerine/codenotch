@@ -1,6 +1,13 @@
+# @name: 项目构建与文档
+# @Descripttion: 维护 Cargo.toml 的项目实现与上游兼容。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-11 15:51:14
+# @LastEditTime: 2026-09-11 15:51:14
+# @FilePath: windows/codenotch/Cargo.toml
 [package]
 name = "codenotch"
-version = "1.18.0"
+version = "1.17.1"
 edition = "2021"
 description = "Codenotch for Windows — usage notch for Claude, Codex, Cursor and Antigravity"
 license = "MIT"

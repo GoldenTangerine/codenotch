@@ -1,3 +1,12 @@
+/**
+@name: 上游功能同步
+@Descripttion: 提供上游新增功能或对应回归验证。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-17 16:29:47
+@LastEditTime: 2026-09-17 16:29:47
+@FilePath: windows/scripts/check-ui-scripts.mjs
+*/
 // Parses the inline <script> of every page in codenotch/ui without running it.
 //
 // A syntax error anywhere in a page's script stops all of it, and the window

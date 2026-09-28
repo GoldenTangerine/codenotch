@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏窗口
+ @Descripttion: 处理显示栏窗口事件和位置编辑键盘输入。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Notch/NotchPanel.swift
+ */
 import AppKit
 
 /// Borderless, non-activating panel that floats over everything, including the
@@ -12,6 +21,11 @@ final class NotchPanel: NSPanel {
     /// A left click on the visible chrome. Handled here for the same reason the
     /// menu is: the hit test lands on a SwiftUI subview that may consume it.
     var onClick: ((CGPoint) -> Void)?
+    /// Handle controls before SwiftUI gesture routing; other content keeps its own events.
+    var onControlMouseDown: ((CGPoint) -> Bool)?
+    var positionEventHandler: ((NSEvent) -> Bool)?
+    var onPointerEvent: (() -> Void)?
+    var isEditingPosition = false
     /// ⌥-drag on the chrome, reported as the raw pointer delta since the last
     /// event — not a cumulative offset, so the caller decides what "along the
     /// edge" means for the current one. Chosen over a plain click-and-hold
@@ -22,6 +36,17 @@ final class NotchPanel: NSPanel {
     var onDragEnd: (() -> Void)?
 
     override func sendEvent(_ event: NSEvent) {
+        // 系统和 SwiftUI 先处理光标事件，再恢复当前交互区域要求的光标。
+        defer {
+            if [.mouseMoved, .mouseEntered, .mouseExited, .cursorUpdate,
+                .leftMouseUp].contains(event.type) {
+                onPointerEvent?()
+            }
+        }
+        if positionEventHandler?(event) == true { return }
+        if event.type == .leftMouseDown, !event.modifierFlags.contains(.option),
+           contentView?.hitTest(event.locationInWindow) != nil,
+           onControlMouseDown?(event.locationInWindow) == true { return }
         guard event.type == .rightMouseDown,
               let menu = contextMenuProvider?(),
               let view = contentView,
@@ -70,6 +95,8 @@ final class NotchPanel: NSPanel {
             backing: .buffered,
             defer: false
         )
+        // 必须在首次 push/set 前启用；AppKit 可能跳过重复设置同一个光标。
+        _ = BackgroundCursorAccess.isEnabled
         level = .statusBar
         collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         isOpaque = false
@@ -77,11 +104,12 @@ final class NotchPanel: NSPanel {
         hasShadow = false
         isMovable = false
         isMovableByWindowBackground = false
+        acceptsMouseMovedEvents = true
         hidesOnDeactivate = false
         becomesKeyOnlyIfNeeded = true
         isReleasedWhenClosed = false
     }
 
-    override var canBecomeKey: Bool { false }
+    override var canBecomeKey: Bool { isEditingPosition }
     override var canBecomeMain: Bool { false }
 }

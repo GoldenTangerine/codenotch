@@ -1,3 +1,12 @@
+/**
+ @name: 上游功能同步模块
+ @Descripttion: 维护 state.rs 的上游功能与本地兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-17 11:04:24
+ @LastEditTime: 2026-09-17 11:04:24
+ @FilePath: windows/codenotch/src/state.rs
+ */
 //! Four-state machine: attention > running > done > idle (ordered by attention cost).
 //! done persists: it is cleared only by a new UserPromptSubmit for that session, the user's ✕, or the > 24 h stale sweep.
 

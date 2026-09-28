@@ -1,3 +1,12 @@
+/**
+ @name: ClaudeSessionRecord 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Sessions/ClaudeSessionRecord.swift
+ */
 import Foundation
 
 /// One entry in `~/.claude/sessions/<pid>.json`, as Claude Code writes it.
@@ -92,7 +101,8 @@ struct ClaudeSessionRecord {
             // this is what holds still until it is.
             since: millis.map { Date(timeIntervalSince1970: $0 / 1000) }
                 ?? self.startedAt ?? Date(),
-            processID: pid
+            processID: pid,
+            processStartedAt: ProcessLiveness.startTime(pid: pid)
         )
     }
 

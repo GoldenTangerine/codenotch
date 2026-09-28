@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · PhoneLinkRegistry
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/PhoneLink/PhoneLinkRegistry.swift
+ */
 import Foundation
 
 struct PairedDevice: Codable, Identifiable, Equatable, Sendable {
@@ -7,14 +16,14 @@ struct PairedDevice: Codable, Identifiable, Equatable, Sendable {
     let pairedAt: Date
     var lastSeenAt: Date
     var lastSeenIP: String
-    
+
     var id: String { deviceId }
 }
 
 final class PhoneLinkRegistry: ObservableObject, @unchecked Sendable {
     @Published private(set) var devices: [PairedDevice] = []
     @Published private(set) var discardedLegacyDevices = false
-    
+
     private let url: URL
     private let secretStore: PhoneLinkSecretStore
     private let queue = DispatchQueue(label: "PhoneLinkRegistry")
@@ -30,21 +39,21 @@ final class PhoneLinkRegistry: ObservableObject, @unchecked Sendable {
         }
     }
     private var secrets: [String: Data] = [:]
-    
+
     init(directory: URL, secretStore: PhoneLinkSecretStore = PhoneLinkKeychainSecretStore()) {
         let dir = directory
         self.url = dir.appendingPathComponent("devices.json")
         self.secretStore = secretStore
-        
+
         do {
             try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         } catch {
             print("Failed to create phone-link directory: \(error)")
         }
-        
+
         load()
     }
-    
+
     private func load() {
         guard let data = try? Data(contentsOf: url),
               let records = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return }
@@ -74,18 +83,18 @@ final class PhoneLinkRegistry: ObservableObject, @unchecked Sendable {
             performSave(decoded)
         }
     }
-    
+
     private func saveImmediate() {
         queue.async {
             self.lock.lock()
             let currentDevices = self.backingDevices
             self.lock.unlock()
-            
+
             self.performSave(currentDevices)
             self.pendingWrite = false
         }
     }
-    
+
     private func scheduleThrottledSave() {
         queue.async {
             let now = Date()
@@ -109,7 +118,7 @@ final class PhoneLinkRegistry: ObservableObject, @unchecked Sendable {
             self.performSave(latestDevices)
         }
     }
-    
+
     private func performSave(_ devicesToSave: [PairedDevice]) {
         lastWrite = Date()
         do {
@@ -120,7 +129,7 @@ final class PhoneLinkRegistry: ObservableObject, @unchecked Sendable {
             print("Failed to save devices: \(error)")
         }
     }
-    
+
     func addOrUpdate(device: PairedDevice, immediate: Bool = true) {
         lock.lock()
         if let index = backingDevices.firstIndex(where: { $0.deviceId == device.deviceId }) {
@@ -129,7 +138,7 @@ final class PhoneLinkRegistry: ObservableObject, @unchecked Sendable {
             backingDevices.append(device)
         }
         lock.unlock()
-        
+
         if immediate {
             saveImmediate()
         } else {
@@ -146,7 +155,7 @@ final class PhoneLinkRegistry: ObservableObject, @unchecked Sendable {
         addOrUpdate(device: device)
         return true
     }
-    
+
     func remove(deviceId: String) {
         lock.lock()
         backingDevices.removeAll { $0.deviceId == deviceId }
@@ -155,7 +164,7 @@ final class PhoneLinkRegistry: ObservableObject, @unchecked Sendable {
         secretStore.remove(deviceId: deviceId)
         saveImmediate()
     }
-    
+
     func getDevice(id: String) -> PairedDevice? {
         lock.lock()
         defer { lock.unlock() }

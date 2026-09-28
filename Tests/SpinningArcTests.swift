@@ -1,3 +1,12 @@
+/**
+ @name: 上游功能同步模块
+ @Descripttion: 维护 SpinningArcTests.swift 的上游功能与本地兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-17 11:04:24
+ @LastEditTime: 2026-09-17 11:04:24
+ @FilePath: Tests/SpinningArcTests.swift
+ */
 import AppKit
 import XCTest
 @testable import Codenotch
@@ -69,5 +78,47 @@ final class SpinningArcTests: XCTestCase {
     func testItNeverTakesAClick() {
         let view = arcView()
         XCTAssertNil(view.hitTest(NSPoint(x: view.bounds.midX, y: view.bounds.midY)))
+    }
+
+    func testRefreshArcUsesMainTrackAndPulseTiming() throws {
+        let view = arcView()
+        let inset = NotchLayout.trackStroke / 2
+        view.configure(color: .green, arcFraction: 0.16, dashed: false,
+                       inset: inset, turns: true, lineWidth: NotchLayout.progressStroke,
+                       duration: 0.85, startAngle: .pi / 2)
+        let window = hosted(view)
+        defer { window.close() }
+
+        XCTAssertEqual(view.arc.strokeEnd, 0.16)
+        XCTAssertEqual(view.arc.lineWidth, NotchLayout.progressStroke)
+        let path = try XCTUnwrap(view.arc.path)
+        XCTAssertEqual(path.boundingBoxOfPath.width, view.bounds.width - 2 * inset, accuracy: 0.01)
+        XCTAssertEqual(path.currentPoint.x, view.bounds.midX, accuracy: 0.01)
+        XCTAssertEqual(path.currentPoint.y, view.bounds.maxY - inset, accuracy: 0.01)
+        let turn = try XCTUnwrap(view.arc.animation(forKey: SpinningArcView.animationKey) as? CABasicAnimation)
+        XCTAssertEqual(turn.duration, 0.85)
+        XCTAssertEqual(turn.repeatCount, .infinity)
+        XCTAssertEqual((turn.toValue as? Double) ?? 0, -2 * .pi, accuracy: 0.0001)
+    }
+
+    func testRefreshStopsOffscreenAndRestartsWhenReattached() {
+        let view = arcView()
+        view.configure(color: .green, arcFraction: 0.16, dashed: false,
+                       inset: 2, turns: true, lineWidth: 3, duration: 0.85)
+        let window = hosted(view)
+        defer { window.close() }
+        XCTAssertNotNil(view.arc.animation(forKey: SpinningArcView.animationKey))
+        view.removeFromSuperview()
+        XCTAssertNil(view.arc.animation(forKey: SpinningArcView.animationKey))
+        window.contentView?.addSubview(view)
+        XCTAssertNotNil(view.arc.animation(forKey: SpinningArcView.animationKey))
+
+        view.configure(color: .green, arcFraction: 0.16, dashed: false,
+                       inset: 2, turns: false, lineWidth: 3, duration: 0.85)
+        XCTAssertNil(view.arc.animation(forKey: SpinningArcView.animationKey))
+        XCTAssertEqual(view.arc.strokeEnd, 0.16)
+        view.configure(color: .green, arcFraction: 0.16, dashed: false,
+                       inset: 2, turns: true, lineWidth: 3, duration: 0.85)
+        XCTAssertNotNil(view.arc.animation(forKey: SpinningArcView.animationKey))
     }
 }

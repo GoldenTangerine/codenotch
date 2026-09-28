@@ -1,3 +1,12 @@
+/**
+ @name: 会话与用量展示
+ @Descripttion: 读取本地活动并提供本地化展示文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 23:00:00
+ @LastEditTime: 2026-09-08 23:00:00
+ @FilePath: Sources/Sessions/AntigravityActivityMonitor.swift
+ */
 import Combine
 import Foundation
 import SQLite3
@@ -51,6 +60,7 @@ final class AntigravityActivityMonitor: AgentActivityMonitor {
     func stop() {
         timer?.invalidate()
         timer = nil
+        sessions = []
     }
 
     private func poll() {
@@ -113,13 +123,13 @@ final class AntigravityActivityMonitor: AgentActivityMonitor {
 
     static func parseState(inTail data: Data) -> (state: AgentSession.State, waitingFor: String?) {
         let lines = data.split(separator: UInt8(ascii: "\n"), omittingEmptySubsequences: true)
-        
+
         var isTurnOver = false
-        
+
         for line in lines.reversed() {
             guard let json = (try? JSONSerialization.jsonObject(with: Data(line))) as? [String: Any],
                   let type = json["type"] as? String else { continue }
-            
+
             if type == "USER_INPUT" {
                 if isTurnOver {
                     return (.idle, nil)
@@ -155,7 +165,7 @@ final class AntigravityActivityMonitor: AgentActivityMonitor {
                 }
             }
         }
-        
+
         return (.idle, nil)
     }
 
@@ -166,11 +176,11 @@ final class AntigravityActivityMonitor: AgentActivityMonitor {
         trajectory: URL, modified: Date, staleAfter: TimeInterval, now: Date
     ) -> AgentSession? {
         var (state, waitingFor) = tail(of: trajectory).map(parseState(inTail:)) ?? (.idle, nil)
-        
+
         if state == .busy {
             let conversationID = trajectory.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().lastPathComponent
             let dbURL = trajectory.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("conversations/" + conversationID + ".db")
-            
+
             if let db = SQLiteStore.open(dbURL) {
                 defer { sqlite3_close(db) }
                 let rows = SQLiteStore.rows(in: db, sql: "SELECT status FROM steps ORDER BY idx DESC LIMIT 1")
@@ -180,9 +190,9 @@ final class AntigravityActivityMonitor: AgentActivityMonitor {
                 }
             }
         }
-        
+
         let age = now.timeIntervalSince(modified)
-        
+
         if state == .idle {
             if age <= 9 {
                 state = .success
@@ -200,7 +210,7 @@ final class AntigravityActivityMonitor: AgentActivityMonitor {
         // `transcript.jsonl`.
         let id = trajectory.deletingLastPathComponent()
             .deletingLastPathComponent().deletingLastPathComponent().lastPathComponent
-            
+
         let detail: String
         switch state {
         case .busy: detail = L10n.t("Working")

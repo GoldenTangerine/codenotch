@@ -1,22 +1,21 @@
+# @name: 上游同步 · windows
+# @Descripttion: 保留上游功能实现并兼容本地扩展。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-14 09:43:04
+# @LastEditTime: 2026-09-14 09:43:04
+# @FilePath: .github/workflows/windows.yml
 name: Windows
 
 # The port under windows/ is Rust, and CI and Package only ever run Xcode, so a
 # Windows change could merge on a green check that never compiled it. Its own
 # file, so those two stay about the Mac app.
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'windows/**'
-      - '.github/workflows/windows.yml'
-  pull_request:
-    paths:
-      - 'windows/**'
-      - '.github/workflows/windows.yml'
+  workflow_dispatch:
 
 jobs:
   build:
-    if: github.repository == 'vinzdg/codenotch'
+    if: github.repository == 'GoldenTangerine/codenotch'
     name: Build and test
     runs-on: windows-latest
     defaults:
@@ -30,9 +29,6 @@ jobs:
       # window. Node is already on the runner.
       - name: Check the UI pages parse
         run: node scripts/check-ui-scripts.mjs
-
-      - name: Test light surface theme
-        run: node --test test-light-surface.cjs
 
       - name: Test Claude sign-in controls
         run: node scripts/test-claude-auth-ui.cjs

@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · cursor
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: windows/codenotch/src/cursor.rs
+ */
 //! Cursor usage adapter, implemented from the upstream Codenotch's documented behaviour.
 //!
 //! Data path (same trade-off as upstream: borrow the editor's own session):

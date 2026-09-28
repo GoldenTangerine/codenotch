@@ -1,3 +1,12 @@
+/**
+ @name: 项目构建与文档
+ @Descripttion: 维护 activity.rs 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: windows/codenotch/src/activity.rs
+ */
 //! "Is it working?" for the non-Claude providers (Claude's local sessions go through the hooks +
 //! transcript-watcher engine, not here).
 //!

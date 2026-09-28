@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · DeepSeekPricing
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/Providers/DeepSeekPricing.swift
+ */
 import Foundation
 
 /// The currently published DeepSeek API peak/off-peak schedule.

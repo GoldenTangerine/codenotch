@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 CodexResetCreditsTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/CodexResetCreditsTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -81,7 +90,7 @@ final class CodexResetCreditsTests: XCTestCase {
             id: "codex", displayName: "Codex", glyph: .openai,
             fidelity: .official, status: .ok, windows: []
         )
-        snapshot.resetCredits = UsageResetCredits(availableCount: 0)
+        snapshot.resetCredits = CodexResetCredits(availableCount: 0)
 
         XCTAssertFalse(snapshot.hasAvailableResetCredits)
         XCTAssertEqual(
@@ -98,7 +107,7 @@ final class CodexResetCreditsTests: XCTestCase {
             id: "codex", displayName: "Codex", glyph: .openai,
             fidelity: .official, status: .ok, windows: []
         )
-        snapshot.resetCredits = UsageResetCredits(availableCount: 1)
+        snapshot.resetCredits = CodexResetCredits(availableCount: 1)
 
         XCTAssertTrue(snapshot.hasAvailableResetCredits)
         XCTAssertGreaterThan(

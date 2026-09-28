@@ -1,3 +1,12 @@
+/**
+ @name: GeminiAPIProvider 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Providers/GeminiAPIProvider.swift
+ */
 import Foundation
 
 /// Tokens spent against a bare `GEMINI_API_KEY`, added up from the logs the
@@ -112,8 +121,8 @@ actor GeminiAPIProvider: UsageProvider {
         var windows = [
             LimitWindow(
                 id: "month",
-                label: budget.map { "Tokens this month · budget \(LimitWindow.compact($0))" }
-                    ?? "Tokens this month · billed per token, no limit",
+                label: budget.map { L10n.t("Tokens this month · budget \(LimitWindow.compact($0))") }
+                    ?? L10n.t("Tokens this month · billed per token, no limit"),
                 usedFraction: budget.map { Double(total.tokensThisMonth) / Double($0) },
                 used: total.tokensThisMonth,
                 resetsAt: month?.end,
@@ -121,14 +130,14 @@ actor GeminiAPIProvider: UsageProvider {
             ),
             LimitWindow(
                 id: "today",
-                label: "Tokens today",
+                label: L10n.t("Tokens today"),
                 used: total.tokensToday,
                 resetsAt: calendar.dateInterval(of: .day, for: now)?.end
             )
         ]
         // The rows that make the headline checkable: which tool spent what.
         windows += sources.map {
-            LimitWindow(id: $0.id, label: "\($0.name) · this month", used: $0.usage.tokensThisMonth)
+            LimitWindow(id: $0.id, label: L10n.t("\($0.name) · this month"), used: $0.usage.tokensThisMonth)
         }
 
         return ProviderSnapshot(

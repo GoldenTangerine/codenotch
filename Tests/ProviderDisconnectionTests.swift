@@ -1,9 +1,25 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 ProviderDisconnectionTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/ProviderDisconnectionTests.swift
+ */
 import Combine
 import XCTest
 @testable import Codenotch
 
 @MainActor
 final class ProviderDisconnectionTests: XCTestCase {
+    private func waitForArchive(_ archive: UsageArchive, id: String) async {
+        for _ in 0..<200 {
+            if archive.load()[id] != nil { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
     private func makeStore(_ providers: [UsageProvider], disconnected: Set<String> = [],
                            order: [String] = [])
         -> (UsageStore, UsageArchive) {
@@ -72,6 +88,7 @@ final class ProviderDisconnectionTests: XCTestCase {
         XCTAssertEqual(queued.calls, 0)
         XCTAssertEqual(store.snapshots.map(\.id), [first.id])
         XCTAssertNil(archive.load()[queued.id])
+        await waitForArchive(archive, id: first.id)
         XCTAssertNotNil(archive.load()[first.id])
     }
 
@@ -88,6 +105,7 @@ final class ProviderDisconnectionTests: XCTestCase {
         }.prefix(1).sink { _ in firstRead.fulfill() }
         await fulfillment(of: [firstRead], timeout: 2)
         withExtendedLifetime(subscription) {}
+        await waitForArchive(archive, id: first.id)
         XCTAssertNotNil(archive.load()[first.id])
 
         store.disconnected = [first.id]
@@ -95,6 +113,7 @@ final class ProviderDisconnectionTests: XCTestCase {
 
         XCTAssertEqual(store.snapshots.map(\.id), [second.id])
         XCTAssertNil(archive.load()[first.id])
+        await waitForArchive(archive, id: second.id)
         XCTAssertNotNil(archive.load()[second.id])
     }
 
@@ -117,6 +136,7 @@ final class ProviderDisconnectionTests: XCTestCase {
         await store.refresh()
         XCTAssertEqual(provider.calls, 2)
         XCTAssertEqual(store.snapshots.map(\.id), [provider.id])
+        await waitForArchive(archive, id: provider.id)
         XCTAssertNotNil(archive.load()[provider.id])
     }
 
@@ -182,6 +202,7 @@ final class ProviderDisconnectionTests: XCTestCase {
 
         await store.refresh()
         XCTAssertEqual(provider.calls, 1)
+        await waitForArchive(archive, id: provider.id)
         XCTAssertNotNil(archive.load()[provider.id])
     }
 

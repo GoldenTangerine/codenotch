@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · diag
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: windows/codenotch/src/diag.rs
+ */
 //! `codenotch.exe doctor deep`: deep diagnostics for finding "is it working?" signals.
 //! Prints only structure, times and scalar types/lengths — never a scalar value itself, and never
 //! a process command line, so no token or conversation content ever appears (#160).

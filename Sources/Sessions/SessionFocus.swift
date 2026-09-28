@@ -1,3 +1,12 @@
+/**
+ @name: 会话应用跳转
+ @Descripttion: 验证进程身份并激活会话所属应用。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 12:25:00
+ @LastEditTime: 2026-09-09 12:25:00
+ @FilePath: Sources/Sessions/SessionFocus.swift
+ */
 import AppKit
 import Darwin
 import Foundation
@@ -16,6 +25,15 @@ import Foundation
 /// by tty over AppleScript, Warp and Ghostty publish nothing. `focus` tries
 /// the tab and settles for the app; `activateApp` is the app-only route.
 enum SessionFocus {
+    @MainActor
+    static func activate(session: AgentSession) {
+        guard let pid = session.processID else { return }
+        if let started = session.processStartedAt {
+            guard let actual = HookSocket.process(pid)?.started,
+                  abs(actual - started.timeIntervalSince1970) < 0.01 else { return }
+        }
+        Task { _ = await focus(pid: pid) }
+    }
     /// Select the tab this process runs in where the terminal allows it, then
     /// raise the owning application either way.
     ///

@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · UsageLimitWatcher
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/Model/UsageLimitWatcher.swift
+ */
 import Foundation
 
 /// Watches store snapshots and detects when a provider's session or weekly
@@ -5,14 +14,7 @@ import Foundation
 @MainActor
 final class UsageLimitWatcher {
     private struct TrackedLimit {
-        /// False until this window has been read once. The first reading of a
-        /// window only records: a limit already spent when Codenotch starts is
-        /// not news. Kept per window rather than per provider because the
-        /// windows do not arrive together: the store's first publication can
-        /// be a placeholder with no window at all, and the weekly window can
-        /// appear a fetch after the session one. Counting the placeholder as
-        /// the baseline is what announced "limit reached" at launch.
-        var seeded = false
+        var windowID: String?
         var isExhausted: Bool = false
         var resetsAt: Date?
         var fraction: Double = 0
@@ -24,28 +26,16 @@ final class UsageLimitWatcher {
     }
 
     private var states: [String: ProviderLimitState] = [:]
+    private var linkedStates: [String: [String: TrackedLimit]] = [:]
     private let isMuted: (String) -> Bool
     private let deliver: (UsageAlertEvent) -> Void
-    private let now: () -> Date
 
     init(
         isMuted: @escaping (String) -> Bool = { _ in false },
-        deliver: @escaping (UsageAlertEvent) -> Void = { _ in },
-        now: @escaping () -> Date = Date.init
+        deliver: @escaping (UsageAlertEvent) -> Void = { _ in }
     ) {
         self.isMuted = isMuted
         self.deliver = deliver
-        self.now = now
-    }
-
-    /// A later reset timestamp alone is not a new window: APIs which report a
-    /// relative countdown move that timestamp by a few seconds on every
-    /// refresh, and re-arming on that announced "limit reached" again on every
-    /// fetch while the limit stayed spent. The tracked window must have
-    /// actually elapsed, the same rule the reset watcher applies.
-    private func rolledOver(from previous: Date?, to current: Date?) -> Bool {
-        guard let previous, let current else { return false }
-        return previous <= now() && current > previous
     }
 
     func observe(_ snapshots: [ProviderSnapshot]) {
@@ -55,28 +45,29 @@ final class UsageLimitWatcher {
     }
 
     private func observe(_ snapshot: ProviderSnapshot) {
-        // Same rule as the reset watcher: an archived (stale) reading is not a
-        // baseline, so the first live reading after one only records.
-        guard !snapshot.status.isStale else {
-            states.removeValue(forKey: snapshot.id)
+        if snapshot.linked != nil {
+            observeLinked(snapshot)
             return
         }
         var state = states[snapshot.id] ?? ProviderLimitState()
+        let isFirstObservation = states[snapshot.id] == nil
 
         // 1. Session limit (headline window)
         if let headline = snapshot.headline, let fraction = snapshot.usedFraction {
+            let changedWindow = state.session.windowID != headline.id
+            if changedWindow { state.session = TrackedLimit(windowID: headline.id) }
             let isExhausted = fraction >= 1.0 || snapshot.block != nil
 
-            let dateRolledOver = rolledOver(from: state.session.resetsAt, to: headline.resetsAt)
+            let dateRolledOver = headline.resetsAt != nil
+                && state.session.resetsAt != nil
+                && headline.resetsAt != state.session.resetsAt
+                && headline.resetsAt! > state.session.resetsAt!
 
-            if dateRolledOver || fraction < 0.95 {
+            if snapshot.block == nil && (dateRolledOver || fraction < 0.95) {
                 state.session.isExhausted = false
             }
 
-            if !state.session.seeded {
-                state.session.seeded = true
-                state.session.isExhausted = isExhausted
-            } else if isExhausted && !state.session.isExhausted && !isMuted(snapshot.id) {
+            if isExhausted && !state.session.isExhausted && !isFirstObservation && !changedWindow && !isMuted(snapshot.id) {
                 state.session.isExhausted = true
                 deliver(UsageAlertEvent(
                     kind: .sessionLimitReached,
@@ -88,6 +79,8 @@ final class UsageLimitWatcher {
                     currentFraction: fraction,
                     resetsAt: headline.resetsAt
                 ))
+            } else if (isFirstObservation || changedWindow) && isExhausted {
+                state.session.isExhausted = true
             }
 
             state.session.fraction = fraction
@@ -96,18 +89,20 @@ final class UsageLimitWatcher {
 
         // 2. Weekly limit (secondary window)
         if let weekly = snapshot.weeklyWindow, let weeklyFraction = snapshot.weeklyFraction {
+            let changedWindow = state.weekly.windowID != weekly.id
+            if changedWindow { state.weekly = TrackedLimit(windowID: weekly.id) }
             let isWeeklyExhausted = weeklyFraction >= 1.0
 
-            let dateRolledOver = rolledOver(from: state.weekly.resetsAt, to: weekly.resetsAt)
+            let dateRolledOver = weekly.resetsAt != nil
+                && state.weekly.resetsAt != nil
+                && weekly.resetsAt != state.weekly.resetsAt
+                && weekly.resetsAt! > state.weekly.resetsAt!
 
             if dateRolledOver || weeklyFraction < 0.95 {
                 state.weekly.isExhausted = false
             }
 
-            if !state.weekly.seeded {
-                state.weekly.seeded = true
-                state.weekly.isExhausted = isWeeklyExhausted
-            } else if isWeeklyExhausted && !state.weekly.isExhausted && !isMuted(snapshot.id) {
+            if isWeeklyExhausted && !state.weekly.isExhausted && !isFirstObservation && !changedWindow && !isMuted(snapshot.id) {
                 state.weekly.isExhausted = true
                 deliver(UsageAlertEvent(
                     kind: .weeklyLimitReached,
@@ -119,6 +114,8 @@ final class UsageLimitWatcher {
                     currentFraction: weeklyFraction,
                     resetsAt: weekly.resetsAt
                 ))
+            } else if (isFirstObservation || changedWindow) && isWeeklyExhausted {
+                state.weekly.isExhausted = true
             }
 
             state.weekly.fraction = weeklyFraction
@@ -126,5 +123,30 @@ final class UsageLimitWatcher {
         }
 
         states[snapshot.id] = state
+    }
+
+    private func observeLinked(_ snapshot: ProviderSnapshot) {
+        var states = linkedStates[snapshot.id] ?? [:]
+        for window in snapshot.linkedAlertWindows {
+            guard let fraction = window.usedFraction else { continue }
+            let previous = states[window.id]
+            var state = previous ?? TrackedLimit(windowID: window.id)
+            let blocked = window.id == snapshot.headlineID && snapshot.block != nil
+            let rolled = window.resetsAt.map { next in state.resetsAt.map { next > $0 } ?? false } ?? false
+            if !blocked && (rolled || fraction < 0.95) { state.isExhausted = false }
+            let exhausted = fraction >= 1 || blocked
+            if exhausted && !state.isExhausted && previous != nil && !isMuted(snapshot.id) {
+                deliver(UsageAlertEvent(kind: window.id == "weekly" ? .weeklyLimitReached : .sessionLimitReached,
+                    providerID: snapshot.id, providerName: snapshot.displayName, windowLabel: window.label,
+                    glyph: snapshot.glyph, previousFraction: state.fraction, currentFraction: fraction,
+                    resetsAt: window.resetsAt, windowID: window.id))
+            }
+            // 静音期间的耗尽也记入状态，取消静音后不补发旧通知。
+            if exhausted { state.isExhausted = true }
+            state.fraction = fraction
+            state.resetsAt = window.resetsAt
+            states[window.id] = state
+        }
+        linkedStates[snapshot.id] = states
     }
 }

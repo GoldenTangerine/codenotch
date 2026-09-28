@@ -1,3 +1,12 @@
+/**
+@name: 上游功能同步
+@Descripttion: 提供上游新增功能或对应回归验证。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-17 16:29:47
+@LastEditTime: 2026-09-17 16:29:47
+@FilePath: windows/codenotch/src/grok.rs
+*/
 //! Grok usage adapter, ported from the Mac app's `GrokLocalProvider` / `GrokUsage` / `GrokCredentials`.
 //!
 //! Data path (the same bargain the other providers strike: borrow the CLI's own session):

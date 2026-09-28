@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · TerminalTabFocus
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/Sessions/TerminalTabFocus.swift
+ */
 import AppKit
 import Foundation
 
@@ -12,6 +21,9 @@ import Foundation
 ///   by tty), but the server refuses any client that is not itself inside a
 ///   cmux terminal session (manaflow-ai/cmux#3089) — and Codenotch never is.
 /// * **Terminal.app** and **iTerm2** match a tab by tty.
+/// 旧版说明保留；本次扩展后的行为见下方实现。
+/// * Everything else publishes nothing (Warp, Ghostty), and the caller falls
+///   back to raising the app — the honest answer rather than a silent no-op.
 /// * **Ghostty** (1.3+) scripts its terminals with an id, a title and a
 ///   *working directory* but no tty, so it is matched by the session's cwd
 ///   like cmux; `focus` selects the tab and raises its window in one go.

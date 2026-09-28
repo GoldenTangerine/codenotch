@@ -1,3 +1,12 @@
+/**
+ @name: 活动摘要与 Cursor 会话测试
+ @Descripttion: 验证活动优先级、语义颜色和 Cursor 会话识别。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 14:02:08
+ @LastEditTime: 2026-09-09 14:02:08
+ @FilePath: Tests/ActivitySummaryTests.swift
+ */
 import SQLite3
 import XCTest
 @testable import Codenotch
@@ -32,7 +41,8 @@ final class ActivitySummaryTests: XCTestCase {
     /// sits inside a ring whose colour already means something else.
     func testWorkingIsNeutralAndWaitingIsNot() {
         XCTAssertEqual(ActivitySummary(sessions: [session(.busy)])?.color, Palette.textPrimary)
-        XCTAssertEqual(ActivitySummary(sessions: [session(.waiting)])?.color, Palette.watch)
+        XCTAssertEqual(ActivitySummary(sessions: [session(.waiting)])?.color, Palette.activityWaiting)
+        XCTAssertNotEqual(ActivitySummary(sessions: [session(.waiting)])?.color, Palette.watch)
     }
 }
 
@@ -250,7 +260,7 @@ final class CursorActivityTests: XCTestCase {
         let atTheEdge = try XCTUnwrap(session(fixture, staleAfter: 60,
                                               now: runAt.addingTimeInterval(60)))
         XCTAssertEqual(atTheEdge.state, .busy)
-        
+
         let justPastEdge = try XCTUnwrap(session(fixture, staleAfter: 60,
                                                  now: runAt.addingTimeInterval(61)))
         XCTAssertEqual(justPastEdge.state, .success)
@@ -258,7 +268,7 @@ final class CursorActivityTests: XCTestCase {
         let wayPastEdge = try XCTUnwrap(session(fixture, staleAfter: 60,
                                                  now: runAt.addingTimeInterval(70)))
         XCTAssertEqual(wayPastEdge.state, .idle)
-        
+
         XCTAssertNil(session(fixture, staleAfter: 60, now: runAt.addingTimeInterval(76)))
     }
 

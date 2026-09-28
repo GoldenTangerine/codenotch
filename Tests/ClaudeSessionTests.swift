@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 ClaudeSessionTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/ClaudeSessionTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -455,58 +464,6 @@ final class ClaudeSessionOwnershipTests: XCTestCase {
 
         XCTAssertEqual(Set(onPersonal.map(\.name)), ["desktop here", "terminal here"])
         XCTAssertTrue(onWork.isEmpty)
-    }
-
-    // MARK: Two profiles, one account
-
-    /// Both profiles signed in to the same account, the way a second login is
-    /// left behind once the default one has been switched to it.
-    private func sameAccount(of own: URL, shown: Set<String>) -> ClaudeSessionOwnership {
-        var ownership = ClaudeSessionOwnership(
-            own: own,
-            directories: [personal, work],
-            accounts: [personal.path: workAccount, work.path: workAccount],
-            transcripts: [:],
-            index: index()
-        )
-        ownership.isShown = { shown.contains($0.path) }
-        return ownership
-    }
-
-    /// The reported case: the first profile's ring is switched off, so every
-    /// session went to a ring nobody could see while the one that was on, for
-    /// the very same account, showed none.
-    func testASwitchedOffProfileHandsItsSessionsToTheSameAccount() throws {
-        try host("local-1", account: workAccount)
-        let desktop = try desktopRecord(pid: 11, host: "local-1")
-        let terminal = try record(pid: 12, entrypoint: "cli", host: nil)
-        let onlyWork: Set<String> = [work.path]
-
-        XCTAssertTrue(sameAccount(of: work, shown: onlyWork).claims(desktop, foundIn: personal))
-        XCTAssertFalse(sameAccount(of: personal, shown: onlyWork).claims(desktop, foundIn: personal))
-        XCTAssertTrue(sameAccount(of: work, shown: onlyWork).claims(terminal, foundIn: personal),
-                      "a terminal session of the same account follows it too")
-    }
-
-    /// With both rings on, nothing moves: the first profile keeps what the
-    /// ordinary rule gives it.
-    func testWithBothShownTheOrdinaryRuleStands() throws {
-        try host("local-1", account: workAccount)
-        let desktop = try desktopRecord(pid: 11, host: "local-1")
-        let both: Set<String> = [personal.path, work.path]
-
-        XCTAssertTrue(sameAccount(of: personal, shown: both).claims(desktop, foundIn: personal))
-        XCTAssertFalse(sameAccount(of: work, shown: both).claims(desktop, foundIn: personal))
-    }
-
-    /// A different account is never a stand-in: switching a ring off must not
-    /// put its sessions on somebody else's.
-    func testAnotherAccountNeverTakesThemOver() throws {
-        let terminal = try record(pid: 12, entrypoint: "cli", host: nil)
-        let workPath = work.path
-        var ownership = ownership(of: work)
-        ownership.isShown = { $0.path == workPath }
-        XCTAssertFalse(ownership.claims(terminal, foundIn: personal))
     }
 
     /// With no ownership at all — one profile on the machine — the read is

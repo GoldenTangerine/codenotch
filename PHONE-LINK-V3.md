@@ -1,3 +1,12 @@
+<!--
+@name: 上游同步 · PHONE-LINK-V3
+@Descripttion: 保留上游功能实现并兼容本地扩展。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-14 09:43:04
+@LastEditTime: 2026-09-14 09:43:04
+@FilePath: PHONE-LINK-V3.md
+-->
 # Codenotch Phone Link — protocol v3
 
 **Status:** contract for implementation. Both the Mac server and the phone client

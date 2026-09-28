@@ -1,19 +1,23 @@
+# @name: 项目构建与文档
+# @Descripttion: 维护 package.yml 的项目实现与上游兼容。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-11 15:51:14
+# @LastEditTime: 2026-09-11 15:51:14
+# @FilePath: .github/workflows/package.yml
 name: Package
 
 # Separate from CI on purpose: that job answers "do the tests pass", this one
 # answers "can somebody run this without a Mac dev setup". Tying them together
 # would mean a failing unit test also removes the only way to try the build.
 on:
-  push:
-    branches: [main]
-  pull_request:
   # So a build can be produced from any branch on demand, without pushing to
   # main first — this is the button to press when you just want to try it.
   workflow_dispatch:
 
 jobs:
   package:
-    if: github.repository == 'vinzdg/codenotch'
+    if: github.repository == 'GoldenTangerine/codenotch'
     name: Unsigned app bundle
     # Only the preview release step writes anything; the token is read-only by
     # default on this repository, and `gh release create` fails without this.
@@ -76,7 +80,7 @@ jobs:
             echo
             echo "If macOS says the app is *damaged*, that is the quarantine flag rather than a bad download — run the command above."
             echo
-            echo "Universal binary — Apple Silicon and Intel. Requires macOS 15 or later."
+            echo "Universal binary — Apple Silicon and Intel. Requires macOS 26 or later."
           } >> "$GITHUB_STEP_SUMMARY"
 
       # --- Preview release ---------------------------------------------------
@@ -117,7 +121,7 @@ jobs:
 
           For a signed and notarized build, take the latest release instead.
 
-          Universal binary. Requires macOS 15 or later.
+          Universal binary. Requires macOS 26 or later.
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then

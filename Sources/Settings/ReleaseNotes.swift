@@ -1,3 +1,12 @@
+/**
+ @name: 应用内更新记录
+ @Descripttion: 提供各版本首次启动时展示的更新内容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:34:20
+ @LastEditTime: 2026-09-08 14:34:20
+ @FilePath: Sources/Settings/ReleaseNotes.swift
+ */
 import Foundation
 
 /// What one release changed, in the app's own words.
@@ -29,48 +38,883 @@ struct ReleaseNote: Equatable {
 /// Bumping `MARKETING_VERSION` without adding an entry is caught by
 /// `testTheCurrentVersionHasANote`.
 enum ReleaseNotes {
-    static var all: [ReleaseNote] {
+    private static var local: [ReleaseNote] { [
+        ReleaseNote(
+            version: "1.6.62",
+            headline: L10n.t("Quota bars in expanded details"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Restore quota progress bars in Code Switch R details while keeping list summaries text-only")),
+                ReleaseNote.Change(title: L10n.t("Keep actual percentages, status colors and reset times in expanded quotas"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.61",
+            headline: L10n.t("Compact account and provider lists"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Keep quota values, robots and appearance controls together, with details last")),
+                ReleaseNote.Change(title: L10n.t("Replace quota bars with text and keep percentages readable")),
+                ReleaseNote.Change(title: L10n.t("Keep refresh and access warnings visible beside saved readings")),
+                ReleaseNote.Change(title: L10n.t("Reduce repeated snapshot lookups and formatting while preserving shared animation clocks"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.57",
+            headline: L10n.t("Active providers beside the hardware notch"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Rotate provider robots or icons and show the active provider count while collapsed")),
+                ReleaseNote.Change(title: L10n.t("Adjust and save the width on each side of the notch")),
+                ReleaseNote.Change(title: L10n.t("Resume robot animations between rotations and release finished providers from memory")),
+                ReleaseNote.Change(title: L10n.t("Keep active calls counted after a session completes and make both side indicators respond to hover")),
+                ReleaseNote.Change(title: L10n.t("Reuse activity calculations and reduce unnecessary interface updates"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.52",
+            headline: L10n.t("Complete robot routines and reliable sleep"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Play all eight personalities' routines in order and keep work ribbons out of idle actions")),
+                ReleaseNote.Change(title: L10n.t("Sleep without quota readings or after 20 minutes of inactivity")),
+                ReleaseNote.Change(title: L10n.t("Track CLI, local model and Code Switch R activity together")),
+                ReleaseNote.Change(title: L10n.t("Keep sleep states current with reduced motion and after restoring hidden views")),
+                ReleaseNote.Change(title: L10n.t("Preserve complete eyes during animation and brighten Kimi's default blue")),
+                ReleaseNote.Change(title: L10n.t("Reduce repeated animation calculations and unnecessary idle updates"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.51",
+            headline: L10n.t("Smoother robot gaze and clearer expressions"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Look inward on the left and right edges, and forward at the top and bottom")),
+                ReleaseNote.Change(title: L10n.t("Turn smoothly between edges and follow the pointer across the capsule center")),
+                ReleaseNote.Change(title: L10n.t("Keep both eyes inside the face and prevent overlapping expressions")),
+                ReleaseNote.Change(title: L10n.t("Improve reduced-motion gaze and reuse capsule hit regions")),
+                ReleaseNote.Change(title: L10n.t("Clarify Chinese robot settings"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.49",
+            headline: L10n.t("Less background work and more reliable usage readings"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Reduce repeated activity reads and fullscreen checks")),
+                ReleaseNote.Change(title: L10n.t("Recover Codex readings after temporary database locks")),
+                ReleaseNote.Change(title: L10n.t("Clarify Claude access requests and unavailable usage limits")),
+                ReleaseNote.Change(title: L10n.t("Improve Ghostty tab focus, Kiro output parsing and Grok sign-in checks")),
+                ReleaseNote.Change(title: L10n.t("Hide empty Codex reset details and correct translated formats"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.48",
+            headline: L10n.t("Hover delay"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Set hover delay from 0.00 to 1.00 seconds in 0.05-second steps")),
+                ReleaseNote.Change(title: L10n.t("Leaving cancels the delay; data refreshes preserve continuous hovering"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.44",
+            headline: L10n.t("More appearance options and smoother activity tracking"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Add dark glass, adjustable usage colors and dashed secondary rings")),
+                ReleaseNote.Change(title: L10n.t("Support Ukrainian and reduce idle activity monitoring")),
+                ReleaseNote.Change(title: L10n.t("Prevent false completion notifications when reconnecting accounts")),
+                ReleaseNote.Change(title: L10n.t("Keep multiple accounts, Code Switch R and independent inner rings"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.43",
+            headline: L10n.t("Top avoidance height"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Automatically expand the capsule while adjusting height or ring spacing")),
+                ReleaseNote.Change(title: L10n.t("Keep the preview open while dragging and for 1.2 seconds after release or reset"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.42",
+            headline: L10n.t("Top avoidance height"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Keep content below the hardware notch at smaller sizes")),
+                ReleaseNote.Change(title: L10n.t("Calibrate top avoidance and adjust ring spacing on every edge")),
+                ReleaseNote.Change(title: L10n.t("Improve slider accessibility and combine window updates while dragging"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.41",
+            headline: L10n.t("Independent inner ring"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Space all three rings evenly between their edges")),
+                ReleaseNote.Change(title: L10n.t("Use the same middle layer for two rings without changing line widths"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.40",
+            headline: L10n.t("Independent inner ring"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Bring two rings closer while keeping the daily budget inside")),
+                ReleaseNote.Change(title: L10n.t("Keep three-ring positions and provider spacing unchanged"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.39",
+            headline: L10n.t("Daily budget"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Use today's reported cost when daily quota usage is unavailable")),
+                ReleaseNote.Change(title: L10n.t("Keep recorded daily use when statistics are temporarily unavailable")),
+                ReleaseNote.Change(title: L10n.t("Stop reusing known old costs after a day or time zone change"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.38",
+            headline: L10n.t("Daily budget"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Estimate daily availability from remaining quota and reset time")),
+                ReleaseNote.Change(title: L10n.t("Track daily use across restarts and show available amounts in the tooltip")),
+                ReleaseNote.Change(title: L10n.t("Keep all provider rings the same size with a stronger inner ring")),
+                ReleaseNote.Change(title: L10n.t("Preserve daily readings during refresh and support unlimited daily counters"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.37",
+            headline: L10n.t("Independent inner ring"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Keep quota rings and add daily pace or period ratio inside")),
+                ReleaseNote.Change(title: L10n.t("Show the innermost reading below the ring")),
+                ReleaseNote.Change(title: L10n.t("Keep full details on screen and preserve missing Claude session readings"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.36",
+            headline: L10n.t("Code Switch R period ratio rings"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Optionally show daily use against weekly limits and weekly use against monthly limits")),
+                ReleaseNote.Change(title: L10n.t("Get alerts for each linked quota using its actual limit")),
+                ReleaseNote.Change(title: L10n.t("Handle invalid quota values safely and reduce repeated ring calculations"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.35",
+            headline: L10n.t("MiniMax plans and upstream updates with Code Switch R preserved."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Read MiniMax plans using a saved key, Cookie or in-app sign-in")),
+                ReleaseNote.Change(title: L10n.t("Switch MiniMax regions without reusing old readings or rate limits")),
+                ReleaseNote.Change(title: L10n.t("Update Kiro while keeping Code Switch R sessions and Phone Link")),
+                ReleaseNote.Change(title: L10n.t("Show Codex extra limits, Claude daily pace and DeepSeek pricing")),
+                ReleaseNote.Change(title: L10n.t("Refresh limit alerts promptly and choose when to fold for full-screen apps"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.33",
+            headline: L10n.t("Reliable background activity and complete German elapsed times."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Keep Codex profile activity isolated during background polling")),
+                ReleaseNote.Change(title: L10n.t("Show German elapsed times correctly for minutes and hours")),
+                ReleaseNote.Change(title: L10n.t("Includes the provider, alert and Code Switch R improvements from 1.6.32"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.32",
+            headline: L10n.t("More providers and reliable alerts, with Code Switch R integration preserved."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Add Kimi, Kiro and phone link; new Kimi and Kiro accounts start disabled")),
+                ReleaseNote.Change(title: L10n.t("Get quota reset and limit alerts, plus Claude daily pace for multiple accounts")),
+                ReleaseNote.Change(title: L10n.t("Keep hooks as the default for Codex completion, with optional background log detection")),
+                ReleaseNote.Change(title: L10n.t("Preserve Code Switch R session links, saved account choices and hidden models")),
+                ReleaseNote.Change(title: L10n.t("Fix repeated alerts and shared sound volume, while keeping free positioning and independent handles"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.31",
+            headline: L10n.t("Freely position the capsule with clearer center guides."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Edit position from the menu or move handle, with free placement along every edge")),
+                ReleaseNote.Change(title: L10n.t("Drag across displays, release to save, or press Escape to cancel")),
+                ReleaseNote.Change(title: L10n.t("Snap to centered guides that stay aligned and visible at every size")),
+                ReleaseNote.Change(title: L10n.t("Less repeated layout work while dragging, with side placement clear of the Dock"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.30",
+            headline: L10n.t("Clearer Code Switch R statistics at a glance."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Highlight numbers while keeping labels, currencies and units distinct")),
+                ReleaseNote.Change(title: L10n.t("Aligned details adapt to narrow windows and long quota titles")),
+                ReleaseNote.Change(title: L10n.t("Readable quota colors in light and dark appearance, with missing readings kept subtle"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.29",
+            headline: L10n.t("Independent handles and more precise interaction."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Enable the settings button independently below the move handle in Appearance")),
+                ReleaseNote.Change(title: L10n.t("Handle arcs now follow the notch corners accurately")),
+                ReleaseNote.Change(title: L10n.t("Settings clicks respond reliably, and transparent gaps let desktop clicks through"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.28",
+            headline: L10n.t("Independent handles and more precise interaction."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Enable the settings button independently below the move handle in Appearance")),
+                ReleaseNote.Change(title: L10n.t("Handle arcs now follow the notch corners accurately")),
+                ReleaseNote.Change(title: L10n.t("Settings clicks respond reliably, and transparent gaps let desktop clicks through"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.27",
+            headline: L10n.t("Optional move handle and more reliable placement."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Enable the move handle in Appearance settings")),
+                ReleaseNote.Change(title: L10n.t("The move handle stays clickable when scaled and near screen edges")),
+                ReleaseNote.Change(title: L10n.t("Completed refreshes now save readings before returning"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.26",
+            headline: L10n.t("Optional move handle and more reliable placement."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Enable the move handle in Appearance settings")),
+                ReleaseNote.Change(title: L10n.t("The move handle stays clickable when scaled and near screen edges")),
+                ReleaseNote.Change(title: L10n.t("Fewer repeated writes when saving provider readings"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.25",
+            headline: L10n.t("Simpler controls and clearer quota rings."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Open settings and edit position from the right-click menu")),
+                ReleaseNote.Change(title: L10n.t("Drag placement now matches the visible bar")),
+                ReleaseNote.Change(title: L10n.t("Show another quota period in the secondary ring")),
+                ReleaseNote.Change(title: L10n.t("Usage pacing now supports linked 5-hour, daily and weekly quotas"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.24",
+            headline: L10n.t("Simpler controls and clearer quota rings."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Open settings and edit position from the right-click menu")),
+                ReleaseNote.Change(title: L10n.t("Drag placement now matches the visible bar")),
+                ReleaseNote.Change(title: L10n.t("Show another quota period in the secondary ring")),
+                ReleaseNote.Change(title: L10n.t("Usage pacing now supports linked 5-hour, daily and weekly quotas"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.23",
+            headline: L10n.t("More providers and clearer usage tracking."),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Weekly limits and usage pacing")),
+                ReleaseNote.Change(title: L10n.t("DeepSeek, Devin, Command Code and local models")),
+                ReleaseNote.Change(title: L10n.t("Glass appearance, notch sizing and more languages")),
+                ReleaseNote.Change(title: L10n.t("Keep your Code Switch R integration and custom queries"))
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.19",
+            headline: L10n.t("More control over linked provider visibility."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Choose from five display scopes"),
+                    detail: L10n.t("Follow the tray, show all providers, or filter by remaining quota, exhausted quota or active requests. Settings keeps the complete list, including providers with unknown quota.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Include quota-disabled providers"),
+                    detail: L10n.t("Code Switch R 2.11.22 sends enabled and quota-disabled providers across platforms without requiring proxy hosting. Manually disabled providers stay excluded.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Keep sessions and quota alerts visible"),
+                    detail: L10n.t("Busy or waiting sessions can restore filtered suppliers without duplicate Codex placeholders. Manual hiding takes priority, and display filters no longer suppress quota alerts.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.18",
+            headline: L10n.t("More control over linked provider visibility."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Choose from five display scopes"),
+                    detail: L10n.t("Follow the tray, show all providers, or filter by remaining quota, exhausted quota or active requests. Settings keeps the complete list, including providers with unknown quota.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Include quota-disabled providers"),
+                    detail: L10n.t("Code Switch R 2.11.22 sends enabled and quota-disabled providers across platforms without requiring proxy hosting. Manually disabled providers stay excluded.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Keep sessions and quota alerts visible"),
+                    detail: L10n.t("Busy or waiting sessions can restore filtered suppliers without duplicate Codex placeholders. Manual hiding takes priority, and display filters no longer suppress quota alerts.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.17",
+            headline: L10n.t("Visible provider icons and a searchable brand library."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Restore linked Codex icons"),
+                    detail: L10n.t("OpenAI and other monochrome icons are visible on dark backgrounds again. Colored icons keep their original palette.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Find your brand icon"),
+                    detail: L10n.t("Search 723 offline icon variants with previews and a selected indicator. Existing choices are preserved.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.16",
+            headline: L10n.t("Clearer Kimi icons and reliable update sources."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Kimi stays visible on light and dark backgrounds"),
+                    detail: L10n.t("The icon keeps its blue accent and original size. Missing or outdated readings use a consistent gray appearance in the notch, details and linked provider settings.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Updates from this repository"),
+                    detail: L10n.t("Automatic updates use signed releases from GoldenTangerine/codenotch. If the old update address is unavailable, install this version manually once.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.15",
+            headline: L10n.t("Arrange linked providers your way."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("One provider order across settings and the notch"),
+                    detail: L10n.t("Drag linked providers to reorder them locally. Settings and the notch share the same default and saved order without changing Code Switch R priorities.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Clearer drag placement"),
+                    detail: L10n.t("Wider handles and insertion lines make placement easier. Cancelling a drag clears its state, and search must be cleared before reordering.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Compact rows with room for details"),
+                    detail: L10n.t("See requests, cost and the main quota at a glance, then expand for more. Resize Settings from its edges; the window remembers its size and position.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.14",
+            headline: L10n.t("Arrange linked providers your way."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("One provider order across settings and the notch"),
+                    detail: L10n.t("Drag linked providers to reorder them locally. Settings and the notch share the same default and saved order without changing Code Switch R priorities.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Clearer drag placement"),
+                    detail: L10n.t("Wider handles and insertion lines make placement easier. Cancelling a drag clears its state, and search must be cleared before reordering.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Compact rows with room for details"),
+                    detail: L10n.t("See requests, cost and the main quota at a glance, then expand for more. Resize Settings from its edges; the window remembers its size and position.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.13",
+            headline: L10n.t("Compare your linked providers at a glance."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Provider statistics in one table"),
+                    detail: L10n.t("Compare daily usage, latency, speed and quotas in Code Switch R settings. Search, hide or restore providers, and expand additional quotas when needed.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Current readings and consistent warnings"),
+                    detail: L10n.t("Session-only providers no longer show cached data as current. Quotas use the same warning colors as the notch and highlight errors or the most-used allowance.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Restore all enabled providers"),
+                    detail: L10n.t("Fix subscriptions that kept showing only tray providers. Code Switch R 2.11.21 also supports subscriptions from older Codenotch versions.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.12",
+            headline: L10n.t("Choose your linked providers."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Customize Code Switch R integration"),
+                    detail: L10n.t("Choose tray providers or all proxy-hosted, enabled providers. Search, hide and restore suppliers in the new settings page. Full mode requires Code Switch R 2.11.20.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Keep Codex questions on the right supplier"),
+                    detail: L10n.t("Native sessions and hooks share their supplier identity. Empty duplicate entries disappear, and hiding linked suppliers preserves independent local accounts.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Prevent continuous refresh loops"),
+                    detail: L10n.t("Automatic refresh waits after each attempt finishes. Credential reads share the query timeout, so a stalled read releases the refresh state and allows a retry.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.11",
+            headline: L10n.t("Reliable refresh and session recovery."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Retry failed usage queries"),
+                    detail: L10n.t("Timed-out queries no longer block another refresh. Successful retries restore the ring color, and the card shows refresh progress or the rate-limit retry time.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Keep activity on its supplier"),
+                    detail: L10n.t("Recover supplier links when a session start event is missed. Unlinked CLI activity is labeled clearly. Update Code Switch R to 2.11.19 for packed session metadata support.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Recover waiting states safely"),
+                    detail: L10n.t("Answers clear uniquely matched questions even when a call ID is missing or arrives later. Ambiguous parallel questions keep their waiting mark until the turn ends.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.10",
+            headline: L10n.t("A simpler provider menu."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Drag to reorder providers"),
+                    detail: L10n.t("In Accounts, reorder providers by dragging their handles. The duplicate move actions have been removed from the menu.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.9",
+            headline: L10n.t("Start alerts and more sounds."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Alerts when a turn starts"),
+                    detail: L10n.t("With CLI hooks installed, Claude Code and Codex can open the rings when you submit a message. Start alerts default to 5 seconds with sound off, with separate controls in Notifications.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Six new sounds and a smoother volume slider"),
+                    detail: L10n.t("Choose from six bundled 8-bit sounds for start, finish and waiting alerts. The shared volume slider is now continuous, with a percentage and previews.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Waiting alerts keep your attention"),
+                    detail: L10n.t("Start alerts from other sessions no longer interrupt a waiting alert during its set duration. Turn starts are also tracked more reliably when session details arrive later.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.8",
+            headline: L10n.t("Separate colors for your interface and notch."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Choose each accent independently"),
+                    detail: L10n.t("In Appearance, set Interface accent color for Settings and What's New, and Notch accent color for rings and detail cards.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Keep your existing colors"),
+                    detail: L10n.t("Upgrading keeps your previous accent for both choices. Future changes are saved separately and take effect immediately.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Position editing matches your notch"),
+                    detail: L10n.t("The outline shown while moving the notch now uses its accent color. Warning and error colors keep their existing meaning.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.7",
+            headline: L10n.t("More room for provider details."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Choose your tooltip height"),
+                    detail: L10n.t("In Appearance, choose Show all to fit every session, quota and available statistic. Default keeps the existing layout.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Fits your screen"),
+                    detail: L10n.t("Bubbles grow with their content and scroll only when the screen cannot fit it all. Edge positioning and pointer interaction follow the new size.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Start each provider at the top"),
+                    detail: L10n.t("Switching providers resets the bubble's scroll position. Refreshing the same provider keeps your place.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.6",
+            headline: L10n.t("Notification sounds, at your volume."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Adjust notification volume"),
+                    detail: L10n.t("Set a shared volume from 0 to 100% for notifications and previews. Your choice is saved without changing system volume.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Choose which events make a sound"),
+                    detail: L10n.t("Choose Off for Finished or Waiting on you to silence that event while keeping its visual alert.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Hear your changes right away"),
+                    detail: L10n.t("Changing a sound or finishing a volume adjustment plays a preview. Manual replay remains available, even when notification sounds are off.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.5",
+            headline: L10n.t("CLI activity alerts, ready to install."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Claude Code and Codex CLI hooks"),
+                    detail: L10n.t("Install hooks in Notifications to receive completion and waiting alerts. Click a session to return to its application. Codex also requires review in /hooks.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Waiting marks on every edge"),
+                    detail: L10n.t("A question badge and amber breathing ring mark waiting sessions. Running keeps its spinner, and Code Switch R 2.11.17 can show the current supplier.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.4",
+            headline: L10n.t("Know when your CLI needs you."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Claude Code and Codex CLI hooks"),
+                    detail: L10n.t("Install hooks in Notifications to receive completion and waiting alerts. Click a session to return to its application. Codex also requires review in /hooks.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Waiting marks on every edge"),
+                    detail: L10n.t("A question badge and amber breathing ring mark waiting sessions. Running keeps its spinner, and Code Switch R 2.11.17 can show the current supplier.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("More reliable activity tracking"),
+                    detail: L10n.t("Improved approval recovery, parallel calls and supplier changes. Uninstall clears activity immediately, with fewer repeated updates and alerts.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.3",
+            headline: L10n.t("A cleaner trigger height setting."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Clearer trigger height layout"),
+                    detail: L10n.t("Removed the duplicate label and prevented wrapping. The number, pt unit and stepper stay vertically centered, with the number right-aligned.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.2",
+            headline: L10n.t("Fewer accidental openings below your Mac's notch."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("A closer hover target"),
+                    detail: L10n.t("When attached to the hardware notch, the default trigger boundary is now just 2pt below its bottom edge to reduce accidental openings over browser tabs.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Adjust the trigger height"),
+                    detail: L10n.t("In Appearance, set Trigger height from -20 to +20pt. Positive values extend downward; negative values require moving further into the notch. Changes apply immediately and are saved.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.1",
+            headline: L10n.t("Complete Chinese copy and clearer live request counts."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Chinese throughout the new features"),
+                    detail: L10n.t("Settings, menus, notifications, provider guidance, session activity, reset countdowns and release history now use localized copy.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Live request counts stand out"),
+                    detail: L10n.t("In Code Switch R details, Calling follows your accent color while the count stays bold green with monospaced digits.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.6.0",
+            headline: L10n.t("More displays, providers and alerts, with your custom queries preserved."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Your custom providers stay with you"),
+                    detail: L10n.t("Keep multiple accounts, manual credentials, query scripts, language settings and Code Switch R integration. Existing configurations can add Copilot and Gemini API from Add provider.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Drag to reorder the rings"),
+                    detail: L10n.t("Settings keeps your configured providers and accounts; drag a provider row by its handle to change the order the notch draws them in.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Pin the notch to one display, or show it on every one"),
+                    detail: L10n.t("A Displays picker in Appearance offers the main display or all of them; a second picker pins a single notch to a named screen.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("A ring says when it crosses 80% and 100%"),
+                    detail: L10n.t("A system notification once per crossing, muted per provider from its own settings row.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("GitHub Copilot is a new ring"),
+                    detail: L10n.t("Reads GitHub's Copilot quota endpoint using the GitHub CLI session already on the Mac.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Say when a session ends"),
+                    detail: L10n.t("The notch opens itself for a few seconds and sounds a chime when an agent stops working or starts waiting on you; a click jumps to it.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("⌥-drag the pill along its edge"),
+                    detail: L10n.t("Nudge it clear of another menu-bar app anchored to the same spot; remembered per edge.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Choose an accent colour"),
+                    detail: L10n.t("The device accent by default, or a fixed colour for the ring's positive state — the amber and red warning colours stay fixed regardless.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("A countdown instead of a reset date"),
+                    detail: L10n.t("Appearance's Reset time picker can show \"Resets in 3h 20m\" instead of a date and time.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Read Cursor from cursor-agent, and enterprise plans correctly"),
+                    detail: L10n.t("A CLI-only Cursor login now gets a ring, and enterprise/team plans read their real usage instead of reporting nothing to meter.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Fewer keychain prompts for Claude and Antigravity"),
+                    detail: L10n.t("Claude reads its own CLI's /usage first, touching the keychain only as a fallback; Antigravity's language server is asked before it.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Sub-1% usage no longer reads as 0%"),
+                    detail: L10n.t("A reading under one percent shows a tenth (\"<0.1%\") instead of rounding to nothing.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Contributors can build without Xcode signing"),
+                    detail: L10n.t("make build and make test sign themselves automatically when the maintainer's certificate isn't present, and CI now runs the suite on every push and pull request.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.5.8",
+            headline: L10n.t("Follow your active Code Switch R providers."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Live tray providers"),
+                    detail: L10n.t("Active providers appear after your local entries, with the default provider shown when idle. Requires Code Switch R v2.11.16 or later on the same Mac.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Quotas, balances and daily usage"),
+                    detail: L10n.t("Hover to inspect quota periods, request activity and statistics, with offline brand icons and explicit inactive periods.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Automatic connection recovery"),
+                    detail: L10n.t("Linked entries hide when Code Switch R stops and return when it reconnects. Disable integration in Settings at any time.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.5.7",
+            headline: L10n.t("Custom provider queries with reliable refresh status."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Manage providers and manual queries"),
+                    detail: L10n.t("Add accounts with independent credentials, icons, query scripts and refresh settings.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Refresh indicators recover correctly"),
+                    detail: L10n.t("Signing out no longer leaves a spinner running. An older request cannot clear the indicator for a newer refresh.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Updated release history"),
+                    detail: L10n.t("The in-app update history now includes the provider query features and these fixes.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.5.6",
+            headline: L10n.t("Manage providers and query quotas with your own credentials."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Your providers and accounts"),
+                    detail: L10n.t("Add, reorder and customize providers, with separate credentials and icons for each account.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Manual credentials and query scripts"),
+                    detail: L10n.t("Use API keys, access tokens or cookies with built-in queries, presets or custom JavaScript.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Independent refresh settings"),
+                    detail: L10n.t("Choose a primary metric, refresh intervals and timeout for each query. Failed refreshes keep the last successful reading.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.5.5",
+            headline: L10n.t("Put the notch where you need it, on any display."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Drag to position"),
+                    detail: L10n.t("Choose Edit position from the right-click menu, then drag to any screen edge. Release to save, or press Escape to cancel.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Your display and position are remembered"),
+                    detail: L10n.t("Move between displays and restore the same position after relaunch. Disconnecting a display temporarily moves the notch to the main display.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Fits the corners and the camera notch"),
+                    detail: L10n.t("Details stay visible near corners. The top centre snaps to the camera notch; other top positions stay below the menu bar.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.5.0",
+            headline: L10n.t("Two more providers, and a live account plan that was silently dropped."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Grok is a new ring"),
+                    detail: L10n.t("SuperGrok's weekly Grok Build allowance, read from the same billing endpoint the CLI uses, with the session in ~/.grok/auth.json.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("OpenCode's Go plan is a new ring"),
+                    detail: L10n.t("Reads the Go plan's official usage endpoint with the key OpenCode itself stores on sign-in — no second sign-in.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("A real Codex account went unmetered"),
+                    detail: L10n.t("Codex's live reading only recognised a 5-hour and a 7-day window. A free-plan account's real limit was a 30-day one, which fell through unnoticed and showed as nothing metered on an account that was genuinely tracked.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Switching a provider off now really stops it"),
+                    detail: L10n.t("Opening Settings could still read a switched-off provider's account, and a reply already in flight could restore a reading you had just asked it to forget.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Contributors can build without a certificate"),
+                    detail: L10n.t("make build and make test now sign themselves automatically when the maintainer's Developer ID isn't present — no Apple account needed to work on this.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.4.1",
+            headline: L10n.t("Waking from sleep no longer erases a reading."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("A ring survives waking your Mac"),
+                    detail: L10n.t("A brief window right after sleep, where macOS won't allow a keychain prompt yet, was mistaken for being signed out — which erased the reading and left \"waiting for the first reading\" on screen. It now ages the number instead of throwing it away, and picks back up on its own.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.4.0",
+            headline: L10n.t("Two more accounts, four community fixes, and honest duplicates."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Multiple Claude Code accounts"),
+                    detail: L10n.t("Keep a work login apart with CLAUDE_CONFIG_DIR? It now gets its own ring, its own limits, and its own row in Settings, beside your personal one.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("GLM added"),
+                    detail: L10n.t("Z.ai's Coding Plan reads live now too, with a key borrowed from whichever tool already holds one.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("A stuck Claude ring recovers on its own"),
+                    detail: L10n.t("One momentary failure — the Mac waking from sleep, most often — used to lock the ring until the app restarted. It now clears itself on the next check.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Cursor sessions stop reporting work that already ended"),
+                    detail: L10n.t("A crashed or abandoned chat could read as \"still working\" for a day or more. It now notices when the writing has actually stopped.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("A months-old duplicate can no longer win"),
+                    detail: L10n.t("Claude Code files a new keychain entry on every token rotation. An account signed in for a while could pick an old, expired one at random and show \"waiting for the first reading\" forever.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("A stray click no longer pins the notch open"),
+                    detail: L10n.t("Clicking near the screen edge before the notch had even opened could leave it stuck open with nothing on screen explaining why.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.3.0",
+            headline: L10n.t("Codex reads live, and Always show stays on."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Codex is read live instead of from a log"),
+                    detail: L10n.t("The figure came from a file Codex writes during a turn, so it was as old as the last time you used it — three days stale in one case. Codenotch now asks Codex itself, and matches its own panel.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("The Codex ring notices the desktop app"),
+                    detail: L10n.t("It only ever watched the files the CLI and the VS Code extension write, so work done in the desktop app never made it spin.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Always show no longer turns itself off"),
+                    detail: L10n.t("Clicking the notch toggled the same flag the setting used, so a stray click quietly put it back to showing on hover.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Far fewer keychain prompts"),
+                    detail: L10n.t("Once a token expired, every check went back to the keychain — a prompt a minute. It now reads the secret only when the owning app has changed it, and never retries a refusal on a timer.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("A paused limit is shown as paused"),
+                    detail: L10n.t("Some limits are reached while the headline still shows room. The ring reads as spent and says when it lifts.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Long messages are no longer cut off"),
+                    detail: L10n.t("A tooltip with something to explain reserved one line for it however much it said.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.2.0",
+            headline: L10n.t("Every session, and a tooltip that fits on the screen."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Tooltips are no longer cut off"),
+                    detail: L10n.t("A card is centred on the ring it belongs to, so the first and last providers threw half of it past the end of the panel — and what fell off was the title. The panel now keeps room for it.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("As many sessions as your screen can hold"),
+                    detail: L10n.t("The list was capped at four whatever you were running on. It is now solved for the display: ten on a large one, and \"and N more\" only when there is genuinely no room for the rest.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("The ones that need you come first"),
+                    detail: L10n.t("Waiting, then busy, then idle — so if anything is summarised away, it is what matters least.")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.1.0",
+            headline: L10n.t("Antigravity's real numbers, and a switch that stays off."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Antigravity shows its actual quota"),
+                    detail: L10n.t("Google will not answer Codenotch directly, so it asks Antigravity's own language server instead — the same place Antigravity's usage panel gets its figure.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Usage reads both ways"),
+                    detail: L10n.t("\"12% used · 88% left\", so a reading lines up with whichever end your vendor happens to show.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("A way back from a declined keychain prompt"),
+                    detail: L10n.t("Declining no longer looks like being signed out, and Allow access… asks macOS again.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Switching a provider off now sticks"),
+                    detail: L10n.t("It stopped being read but its last reading was kept, so the ring came back at the next launch.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Distant resets show a date"),
+                    detail: L10n.t("A limit renewing in four weeks said \"Mon\", which read as this Monday. It says \"28 Sep\".")
+                )
+            ]
+        ),
+        ReleaseNote(
+            version: "1.0.0",
+            headline: L10n.t("The first release."),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Put the notch anywhere"),
+                    detail: L10n.t("Right, left, top or bottom. It keeps clear of the Dock and the menu bar, and follows when the Dock moves.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("It joins your Mac's own notch"),
+                    detail: L10n.t("On the top edge it takes the hardware's shape, so the two read as one rather than as a bar parked underneath.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Claude, Cursor, Codex and Gemini"),
+                    detail: L10n.t("Each read from the tool already signed in on this Mac. Codenotch never asks for a password.")
+                ),
+                ReleaseNote.Change(
+                    title: L10n.t("Choose where Codenotch appears"),
+                    detail: L10n.t("In the Dock, in the menu bar, or nowhere at all.")
+                )
+            ]
+        )
+    ] }
+    private static var upstream: [ReleaseNote] {
         [
             ReleaseNote(
-                version: "1.18.0",
-                headline: L10n.t("On a MacBook the notch is now your Mac's own — the readings sit either side of the camera housing rather than under it."),
+                version: "1.17.1",
+                headline: L10n.t("Your own endpoints, 한국어 and Oʻzbekcha, and a notch that knows whose account it is."),
                 changes: [
                     ReleaseNote.Change(
-                        title: L10n.t("The readings moved beside the notch"),
-                        detail: L10n.t("On a Mac with a camera housing the rings used to hang below it, so the app read as a second notch under the real one. They now sit either side of the cutout, in a bar drawn to the hardware's own measurements: its depth, and a corner fitted to the real thing rather than guessed at. Folded away it is the cutout exactly, and reaching for it widens the notch the Mac already has.")
-                    ),
-                    ReleaseNote.Change(
-                        title: L10n.t("A fold that flows"),
-                        detail: L10n.t("Opening and closing morphs the shape itself rather than swapping one for another, on a spring with enough weight to settle instead of snapping. The curve into the screen's border grows with the ears as they extend.")
-                    ),
-                    ReleaseNote.Change(
-                        title: L10n.t("The percentage under each ring is now yours to choose"),
-                        detail: L10n.t("Appearance has a switch for it. Beside the Mac's own notch the bar is exactly as deep as the cutout and a ring fills it, so showing the figure there makes room by drawing the rings smaller — worth offering rather than deciding for you.")
-                    ),
-                    ReleaseNote.Change(
-                        title: L10n.t("A click that misses the rings no longer locks the notch open"),
-                        detail: L10n.t("It used to pin it, with nothing on screen to say so or to undo it. Keep open is on the right-click menu, where it is named and carries a checkmark.")
-                    ),
-                    ReleaseNote.Change(
-                        title: L10n.t("The weekly limit can be the main ring"),
-                        detail: L10n.t("For anyone who budgets by the week rather than by the session. The session moves to the thin ring and the card.")
-                    ),
-                    ReleaseNote.Change(
-                        title: L10n.t("Claude's unused resets, and a steadier Desktop reading"),
-                        detail: L10n.t("Resets you did not spend are shown rather than dropped, dated grants survive a refresh, and the search through Desktop's cache is bounded so an unusable reading backs off instead of retrying.")
-                    ),
-                    ReleaseNote.Change(
-                        title: L10n.t("Türkçe and Bahasa Indonesia"),
-                        detail: L10n.t("Two more languages, both complete.")
-                    ),
-                    ReleaseNote.Change(
-                        title: L10n.t("A colour ramp across the whole range"),
-                        detail: L10n.t("Opt in to a ring that shifts colour continuously from empty to full, instead of stepping at the thresholds.")
-                    ),
-                    ReleaseNote.Change(
-                        title: L10n.t("Qianwen's monthly Token Plan, and two numbers that are not numbers"),
-                        detail: L10n.t("The monthly plan the weekly fields miss is read properly, and a MiniMax count that overflows or comes back non-finite is treated as no reading rather than as a zero.")
-                    ),
+                        title: L10n.t("Your own endpoints"),
+                        detail: L10n.t("Add any OpenAI-compatible endpoint and give it a ring: a name, an icon, a colour, a monthly budget in dollars or tokens, and a live check that says whether it is actually answering. The key goes to the keychain. A scan finds the usual local ports, so a model running on this Mac does not have to be typed in.")
+                    )
                 ]
             ),
             ReleaseNote(
@@ -702,6 +1546,10 @@ enum ReleaseNotes {
                 ]
             )
         ]
+    }
+
+    static var all: [ReleaseNote] {
+        local + upstream.filter { entry in !local.contains { $0.version == entry.version } }
     }
 
     static func note(for version: String) -> ReleaseNote? {

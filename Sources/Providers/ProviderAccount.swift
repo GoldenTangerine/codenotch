@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 ProviderAccount.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/ProviderAccount.swift
+ */
 import Foundation
 
 /// Whose readings these are.
@@ -55,7 +64,7 @@ enum SignInRoute: Equatable {
     var explanation: String {
         switch self {
         case .modal(let name):      return L10n.t("Sign in to \(name) to read this account.")
-        case .openApp(_, let name): 
+        case .openApp(_, let name):
             if name == "Antigravity" {
                 return L10n.t("Ensure Antigravity IDE is running to read this account.")
             }
@@ -138,12 +147,8 @@ struct ProviderSummary: Identifiable, Equatable {
     /// are read from their own directory's `oauth_creds.json` or `agent.db`
     /// and never raise the dialogue, so offering to restore access there would
     /// point at a prompt that cannot appear.
-    ///
-    /// Apify's CLI files its token in the login keychain too, so a Deny is
-    /// possible there — and "Allow access…" is the only way back from one.
     var usesKeychain: Bool {
         ClaudeProfile.isClaude(providerID: id) || id == AntigravityProfile.defaultID || id == "cursor"
-            || id == "apify"
     }
 
     let id: String

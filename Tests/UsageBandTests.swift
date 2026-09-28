@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 UsageBandTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/UsageBandTests.swift
+ */
 import AppKit
 import SwiftUI
 import XCTest
@@ -147,6 +156,8 @@ final class PaletteAppearanceTests: XCTestCase {
     }
 
     func testOnlyDarkStandardLiquidGlassGetsReadableSecondaryInk() {
+        assertOpaque(TooltipGlassContrast.secondaryInk(surfaceStyle: .glass, colorScheme: .light),
+                     .aqua, is: 0x6B6B6B)
         assertOpaque(TooltipGlassContrast.secondaryInk(surfaceStyle: .glass, colorScheme: .dark),
                      .darkAqua, is: 0xC2C2C2)
         assertOpaque(TooltipGlassContrast.secondaryInk(surfaceStyle: .darkGlass, colorScheme: .dark),
@@ -173,7 +184,8 @@ final class PaletteAppearanceTests: XCTestCase {
     }
 
     func testReadableLiquidGlassDimStaysDarkAndTranslucent() throws {
-        let dim = try XCTUnwrap(resolve(Palette.liquidGlassTooltipDim, .darkAqua))
+        let dim = try XCTUnwrap(TooltipGlassContrast.dim(surfaceStyle: .glass, colorScheme: .dark)
+            .flatMap { resolve($0, .darkAqua) })
         // `resolve` deliberately returns sRGB. `whiteComponent` is undefined
         // for that colour space and raises an AppKit exception, so assert the
         // three channels directly just as `assertOpaque` does above.
@@ -183,11 +195,19 @@ final class PaletteAppearanceTests: XCTestCase {
         XCTAssertEqual(dim.alphaComponent, 0.35, accuracy: 1.0 / 255)
 
         let darkGlassDim = try XCTUnwrap(TooltipGlassContrast.dim(surfaceStyle: .darkGlass,
-                                                                   colorScheme: .dark)
-                .flatMap({ resolve($0, .darkAqua) }))
+                                                               colorScheme: .dark)
+            .flatMap { resolve($0, .darkAqua) })
         XCTAssertEqual(darkGlassDim.alphaComponent, 0.80, accuracy: 1.0 / 255)
         let notchDim = try XCTUnwrap(resolve(Palette.darkGlassDim, .darkAqua))
         XCTAssertEqual(notchDim.alphaComponent, 0.60, accuracy: 1.0 / 255)
+    }
+
+    func testLightSolidAndReducedTransparencyDoNotAddALiquidGlassDim() {
+        XCTAssertNil(TooltipGlassContrast.dim(surfaceStyle: .glass, colorScheme: .light))
+        XCTAssertNil(TooltipGlassContrast.dim(surfaceStyle: .solid, colorScheme: .dark))
+        XCTAssertNil(TooltipGlassContrast.dim(surfaceStyle: .glass, colorScheme: .dark,
+                                            reduceTransparency: true))
+        XCTAssertEqual(EnvironmentValues().tooltipSecondaryInk, Palette.textSecondary)
     }
 
     // MARK: -

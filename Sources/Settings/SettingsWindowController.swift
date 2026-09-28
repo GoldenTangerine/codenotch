@@ -1,3 +1,12 @@
+/**
+ @name: 设置窗口控制器
+ @Descripttion: 承载应用设置和供应商管理界面。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Settings/SettingsWindowController.swift
+ */
 import AppKit
 import SwiftUI
 
@@ -21,9 +30,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let switchAccount: (String) -> Bool
     private let retry: (String) -> Void
     private let updater: Updater
+    private let catalog: QueryCatalog?
+    private let usageStore: UsageStore?
+    private let botModel: NotchViewModel?
+    private let hooks: HookSettings?
+    private let codeSwitch: CodeSwitchBridge?
     private let ollamaRelay: OllamaActivityRelay?
     private let lmstudioMetrics: LMStudioMetrics?
-    private let usageStore: UsageStore?
     let phoneLinkPairing: PhoneLinkPairing?
     let phoneLinkRegistry: PhoneLinkRegistry?
     let phoneLinkServerStatus: PhoneLinkServerStatus?
@@ -32,7 +45,6 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let previewResetAlert: (() -> Void)?
     private let previewSessionLimitAlert: (() -> Void)?
     private let previewWeeklyLimitAlert: (() -> Void)?
-    private let sendTestNotification: (() -> Void)?
 
     init(preferences: Preferences,
          providers: @escaping () -> [ProviderSummary],
@@ -41,27 +53,31 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
          signIn: @escaping (String) -> Bool,
          switchAccount: @escaping (String) -> Bool,
          retry: @escaping (String) -> Void,
-         resetPosition: @escaping () -> Void,
-         quit: @escaping () -> Void,
+         resetPosition: @escaping () -> Void = {},
+         catalog: QueryCatalog? = nil, hooks: HookSettings? = nil, codeSwitch: CodeSwitchBridge? = nil,
+         quit: @escaping () -> Void = { NSApp.terminate(nil) },
          previewResetAlert: (() -> Void)? = nil,
          previewSessionLimitAlert: (() -> Void)? = nil,
          previewWeeklyLimitAlert: (() -> Void)? = nil,
-         sendTestNotification: (() -> Void)? = nil,
          usageStore: UsageStore? = nil,
+         botModel: NotchViewModel? = nil,
          ollamaRelay: OllamaActivityRelay? = nil,
          lmstudioMetrics: LMStudioMetrics? = nil, phoneLinkPairing: PhoneLinkPairing? = nil, phoneLinkRegistry: PhoneLinkRegistry? = nil, phoneLinkServerStatus: PhoneLinkServerStatus? = nil) {
         self.ollamaRelay = ollamaRelay
         self.lmstudioMetrics = lmstudioMetrics
         self.usageStore = usageStore
+        self.botModel = botModel
         self.phoneLinkPairing = phoneLinkPairing
         self.phoneLinkRegistry = phoneLinkRegistry
         self.phoneLinkServerStatus = phoneLinkServerStatus
         self.resetPosition = resetPosition
+        self.catalog = catalog
+        self.hooks = hooks
+        self.codeSwitch = codeSwitch
         self.quit = quit
         self.previewResetAlert = previewResetAlert
         self.previewSessionLimitAlert = previewSessionLimitAlert
         self.previewWeeklyLimitAlert = previewWeeklyLimitAlert
-        self.sendTestNotification = sendTestNotification
         self.switchAccount = switchAccount
         self.retry = retry
         self.updater = updater
@@ -151,6 +167,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
+        preferences.flushIdleBotAppearance()
         NSApp.setActivationPolicy(preferences.appPresence.activationPolicy)
     }
 
@@ -189,6 +206,18 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     func windowDidBecomeKey(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
         layoutTrafficLights(in: window)
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow else { return }
+        layoutTrafficLights(in: window)
+    }
+
+    static func configureResizing(_ window: NSWindow, autosaveName: String = "CodenotchSettings") {
+        window.styleMask.insert(.resizable)
+        window.contentMinSize = NSSize(width: SettingsView.width, height: SettingsView.height)
+        if !window.setFrameUsingName(autosaveName) { window.center() }
+        window.setFrameAutosaveName(autosaveName)
     }
 
     /// Put the window away if it is already in front, otherwise bring it up.
@@ -268,13 +297,15 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                                    quit: quit,
                                    updater: updater,
                                    ollamaRelay: ollamaRelay, lmstudioMetrics: lmstudioMetrics,
-                                   usageStore: usageStore,
+                                   catalog: catalog, usageStore: usageStore, hooks: hooks, codeSwitch: codeSwitch,
                                    previewResetAlert: previewResetAlert,
                                    previewSessionLimitAlert: previewSessionLimitAlert,
-                                   previewWeeklyLimitAlert: previewWeeklyLimitAlert,
-                                   sendTestNotification: sendTestNotification)
+                                   previewWeeklyLimitAlert: previewWeeklyLimitAlert)
+                .environment(\.settingsBotContext, botModel.flatMap { model in
+                    usageStore.map { SettingsBotContext(model: model, store: $0) }
+                })
         )
-        window.center()
+        Self.configureResizing(window)
         window.isReleasedWhenClosed = false
         self.window = window
         layoutTrafficLights(in: window)

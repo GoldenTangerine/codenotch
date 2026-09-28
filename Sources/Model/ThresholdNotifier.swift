@@ -1,3 +1,11 @@
+// @name: 用量阈值通知
+// @Descripttion: 监测用量阈值并发送本地化通知。
+// @version: 1.0.0
+// @Author: sm
+// @Date: 2026-09-08 23:00:00
+// @LastEditTime: 2026-09-08 23:00:00
+// @FilePath: Sources/Model/ThresholdNotifier.swift
+
 import Foundation
 import UserNotifications
 
@@ -11,6 +19,7 @@ struct ThresholdAlert: Equatable {
     let glyph: ProviderGlyph
     let usedPercent: Int
     let resetsAt: Date?
+    var windowID: String? = nil
 }
 
 /// Watches the store's snapshots and reports the moment a provider's headline
@@ -25,6 +34,11 @@ struct ThresholdAlert: Equatable {
 /// testable without ever touching the notification centre.
 @MainActor
 final class ThresholdNotifier {
+    private struct LinkedThreshold {
+        var level: Int
+        var resetsAt: Date?
+    }
+    private var linkedCrossed: [String: [String: LinkedThreshold]] = [:]
     private var crossed: [String: Int] = [:]
     private let isMuted: (String) -> Bool
     private let deliver: (ThresholdAlert) -> Void
@@ -42,16 +56,12 @@ final class ThresholdNotifier {
     }
 
     private func observe(_ snapshot: ProviderSnapshot) {
-        // An archived reading is not a baseline. At launch the store publishes
-        // what it remembered from the last run, marked stale, and the first
-        // live fetch follows seconds later; measured against the archive it
-        // read as a crossing, and rang on every start. Forgetting the provider
-        // here makes that first live reading the one that only records.
-        guard !snapshot.status.isStale else {
-            crossed.removeValue(forKey: snapshot.id)
+        if snapshot.linked != nil {
+            observeLinked(snapshot)
             return
         }
-        guard let fraction = snapshot.usedFraction else { return }
+        guard let fraction = snapshot.usedFraction,
+              let usedPercent = Percent.roundedValue(for: fraction) else { return }
         let percent = fraction * 100
         let level = percent >= 100 ? 100 : percent >= 80 ? 80 : 0
 
@@ -73,11 +83,30 @@ final class ThresholdNotifier {
                 providerID: snapshot.id,
                 providerName: snapshot.displayName,
                 windowLabel: headline.label,
-                glyph: snapshot.glyph,
-                usedPercent: Int((percent).rounded()),
+                usedPercent: usedPercent,
                 resetsAt: headline.resetsAt
             ))
         }
+    }
+
+    private func observeLinked(_ snapshot: ProviderSnapshot) {
+        var crossed = linkedCrossed[snapshot.id] ?? [:]
+        for window in snapshot.linkedAlertWindows {
+            guard let fraction = window.usedFraction,
+                  let usedPercent = Percent.roundedValue(for: fraction) else { continue }
+            let level = fraction >= 1 ? 100 : fraction >= 0.8 ? 80 : 0
+            let old = crossed[window.id]
+            let rolled = window.resetsAt.map { next in old?.resetsAt.map { next > $0 } ?? false } ?? false
+            let previous = rolled ? 0 : old?.level ?? 0
+            crossed[window.id] = LinkedThreshold(level: level, resetsAt: window.resetsAt)
+            guard level > previous, !isMuted(snapshot.id) else { continue }
+            for threshold in [80, 100] where threshold > previous && threshold <= level {
+                deliver(ThresholdAlert(threshold: threshold, providerID: snapshot.id,
+                    providerName: snapshot.displayName, windowLabel: window.label,
+                    usedPercent: usedPercent, resetsAt: window.resetsAt, windowID: window.id))
+            }
+        }
+        linkedCrossed[snapshot.id] = crossed
     }
 }
 
@@ -106,7 +135,43 @@ enum ThresholdAlerts {
             content.threadIdentifier = alert.providerID
 
             let request = UNNotificationRequest(
-                identifier: "\(alert.providerID).\(alert.threshold).\(Int(Date().timeIntervalSince1970))",
+                identifier: "\(alert.providerID).\(alert.windowID ?? "headline").\(alert.threshold).\(UUID().uuidString)",
+                content: content, trigger: nil)
+            center.add(request)
+        }
+    }
+}
+
+/// The out-of-notch end of the usage reset and limit alerts.
+///
+/// The card in the notch is the primary form; this is what is owed when there
+/// is no notch open to put it in — a hidden notch used to swallow the alert
+/// silently, which for a weekly limit is the one alert worth not missing.
+enum UsageAlertNotifications {
+    static func deliver(_ event: UsageAlertEvent) {
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert]) { granted, _ in
+            guard granted else { return }
+
+            let content = UNMutableNotificationContent()
+            let window = event.windowLabel.lowercased()
+            switch event.kind {
+            case .reset:
+                content.title = L10n.t("\(event.providerName) has reset")
+                content.body = L10n.t("Its \(window) limit is available again.")
+            case .sessionLimitReached, .weeklyLimitReached:
+                content.title = L10n.t("\(event.providerName) limit reached")
+                content.body = event.resetsAt.map {
+                    L10n.t("Its \(window) limit is spent — resets \($0.formatted(date: .omitted, time: .shortened))")
+                } ?? L10n.t("Its \(window) limit is spent.")
+            }
+            // Same threading as the crossing alerts: one pile per provider.
+            content.threadIdentifier = event.providerID
+
+            // The kind rather than the window label: the label is display text
+            // and changes with the language, and an identifier should not.
+            let request = UNNotificationRequest(
+                identifier: "\(event.providerID).\(event.windowID ?? "headline").\(event.kind).\(UUID().uuidString)",
                 content: content, trigger: nil)
             center.add(request)
         }

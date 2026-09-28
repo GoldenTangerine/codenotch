@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏窗口控制器
+ @Descripttion: 管理显示栏定位和鼠标键盘交互。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Notch/NotchWindowController.swift
+ */
 import AppKit
 import SwiftUI
 import Combine
@@ -26,6 +35,38 @@ final class NotchWindowController {
     var onRefreshProvider: ((String) async -> Void)?
     /// Open the settings window, asked for by clicking the handle.
     var onOpenSettings: (() -> Void)?
+    var onPositionCommitted: ((NotchPosition) -> Void)?
+    private(set) var savedPosition: NotchPosition?
+    private var previewPosition: NotchPosition?
+    private var editOriginalEdge: NotchEdge = .right
+    private var editWasExpanded = false
+    private weak var previousKeyWindow: NSWindow?
+    private var previousApplication: NSRunningApplication?
+    private var dragStart: CGPoint?
+    /// Screen points keep the grab stable when joining hardware changes the bar's length.
+    private var dragGrabOffset: CGFloat = 0
+    private var didDrag = false
+    private var accumulatedScroll: CGFloat = 0
+
+    private var activePosition: NotchPosition {
+        previewPosition ?? savedPosition ?? NotchPosition(edge: model.edge)
+    }
+
+    private var selectedScreen: NSScreen? {
+        if let previewPosition { return NSScreen.notchScreen(for: previewPosition) }
+        if let assignedScreen, NSScreen.screens.contains(where: { $0 === assignedScreen }) {
+            return assignedScreen
+        }
+        if savedPosition?.displayID == nil {
+            return NotchGeometry.preferredScreen(from: NSScreen.screens, preference: displayPreference)
+        }
+        return NSScreen.notchScreen(for: activePosition)
+    }
+
+    func restore(position: NotchPosition?) {
+        savedPosition = position
+        if let position { model.edge = position.edge }
+    }
     /// An ⌥-drag on the pill settled at a new `model.alongOffset`. The
     /// controller only holds the live value; persisting it per edge is
     /// Preferences' job, the same division `apply(edge:)` already keeps.
@@ -36,6 +77,18 @@ final class NotchWindowController {
 
     private var panel: NotchPanel?
     private var hostingView: NotchHostingView<NotchRootView>?
+    private let mouseLocation: () -> CGPoint
+    private let scheduleInteractionWork: (TimeInterval, DispatchWorkItem) -> Void
+
+    init(panel: NotchPanel? = nil, mouseLocation: @escaping () -> CGPoint = { NSEvent.mouseLocation },
+         scheduleInteractionWork: @escaping (TimeInterval, DispatchWorkItem) -> Void = { delay, work in
+             DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
+         }) {
+        self.panel = panel
+        self.mouseLocation = mouseLocation
+        self.scheduleInteractionWork = scheduleInteractionWork
+        panel?.onPointerEvent = { [weak self] in self?.cursorMoved() }
+    }
 
     /// The display this notch belongs to. Nil follows the menu-bar screen,
     /// which is what a single-controller setup did before the fleet existed —
@@ -46,6 +99,32 @@ final class NotchWindowController {
     private var clearHoverWork: DispatchWorkItem?
     private var clockTimer: Timer?
     private var cursorTimer: Timer?
+    private var collapsedActivitySleeping = false
+    var isPreviewingCollapsedGeometry: Bool { model.isPreviewingCollapsedGeometry }
+    private var isEditingCollapsedGeometry = false
+    private var collapsedPreviewWork: DispatchWorkItem?
+
+    private func updateCollapsedActivity() {
+        if isPreviewingCollapsedGeometry && !model.canShowCollapsedSummary { endCollapsedPreview() }
+        let visible = !collapsedActivitySleeping && panel?.isVisible == true
+            && panel?.occlusionState.contains(.visible) == true
+        model.updateCollapsedRotation(at: Date(), visible: visible)
+    }
+    private var hoverDelay: TimeInterval = 0
+    private var unfoldWork: DispatchWorkItem?
+    private var hoverDelayElapsed = false
+
+    private func cancelPendingUnfold() {
+        unfoldWork?.cancel()
+        unfoldWork = nil
+        hoverDelayElapsed = false
+    }
+
+    func apply(notchHoverDelay: Double) {
+        hoverDelay = Preferences.normalizedHoverDelay(notchHoverDelay)
+        cancelPendingUnfold()
+        cursorMoved()
+    }
     /// Full-screen state on its own, slower beat. See `startWatchingFullScreen`.
     private var fullScreenTimer: Timer?
     private var fullScreenFollowUp: DispatchWorkItem?
@@ -68,7 +147,7 @@ final class NotchWindowController {
     /// what keeps the two apart — without it, the *next* click on the notch,
     /// minutes later and about something else, would still be raising a
     /// terminal window.
-    private var pendingFocus: (pid: pid_t, until: Date)?
+    private var pendingFocus: (pid: pid_t, until: Date, started: Double)?
     /// When the current peek's five seconds are up.
     ///
     /// The hover fold has to be told to leave it alone until then. Without
@@ -78,10 +157,11 @@ final class NotchWindowController {
     /// second. A peek is not the pointer arriving, so the pointer leaving is
     /// not what should end it.
     private var peekUntil: Date?
+    private var isEditingGeometry = false
     /// The standing visibility choice, so a peek never overrides Hidden.
     private var visibility: NotchVisibility = .onHover
     /// Whether we have pushed the pointing hand onto the cursor stack.
-    private var isPointing = false
+    private(set) var isPointing = false
     /// Option-drag moves the whole notch under the pointer. Hovering rings
     /// while that happens is accidental — the pointer necessarily crosses
     /// them as the panel follows it — so cursor tracking is suspended until
@@ -104,7 +184,7 @@ final class NotchWindowController {
     /// the change any sooner. A space or app switch drops it, so those
     /// still answer at once.
     private var lastFullScreenReading: (at: Date, screen: NSScreen?, value: Bool)?
-    static let fullScreenReadingLifetime: TimeInterval = 0.25
+    static let fullScreenReadingLifetime: TimeInterval = fullScreenPollInterval
 
     private func fullScreenReading() -> Bool {
         let screen = currentScreen()
@@ -127,13 +207,14 @@ final class NotchWindowController {
     /// When a full-screen app is active on the current space, auto-folds the notch.
     /// When returning to a desktop space with `isAlwaysOn`, restores the unfolded state.
     func handleActiveSpaceOrAppChange() {
-        if foldsForFullScreen && isFullScreenActive() && !model.isPinned {
+        guard !isPreviewingCollapsedGeometry else { return }
+        if foldsForFullScreen && isFullScreenActive() {
             if let panel {
                 let local = localCursor(in: panel.frame)
                 let overTooltip = model.hoveredIndex
                     .flatMap(tooltipRect(index:))
                     .map { model.isExpanded && $0.contains(local) } ?? false
-                if liveRect.contains(local) || overTooltip {
+                if isInLiveRegion(local) || overTooltip {
                     return
                 }
             }
@@ -148,6 +229,7 @@ final class NotchWindowController {
 
     /// Immediately folds the notch and clears pending hover timers when a full-screen app takes focus.
     func foldForFullScreen() {
+        cancelPendingUnfold()
         if let peekUntil, peekUntil > Date() { return }
         foldWork?.cancel()
         foldWork = nil
@@ -176,7 +258,9 @@ final class NotchWindowController {
     }
 
     func show() {
+        model.onTooltipHeightChange = { [weak self] in self?.updateInteractiveRects() }
         relocate()
+        panel?.onPointerEvent = { [weak self] in self?.cursorMoved() }
         startWatchingCursor()
         startWatchingFullScreen()
         startClock()
@@ -185,10 +269,22 @@ final class NotchWindowController {
             for: NSApplication.didChangeScreenParametersNotification
         )
         .sink { [weak self] _ in
-            MainActor.assumeIsolated { self?.relocate() }
+            MainActor.assumeIsolated {
+                self?.finishPositionEditing(commit: false)
+                self?.relocate()
+            }
         }
         .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
+            .sink { [weak self] _ in self?.finishPositionEditing(commit: false, restoreFocus: false) }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)
+            .sink { [weak self] notification in
+                guard let self, notification.object as? NSWindow === self.panel else { return }
+                self.finishPositionEditing(commit: false, restoreFocus: false)
+            }
+            .store(in: &cancellables)
         NSWorkspace.shared.notificationCenter.publisher(
             for: NSWorkspace.activeSpaceDidChangeNotification
         )
@@ -206,6 +302,51 @@ final class NotchWindowController {
         .store(in: &cancellables)
 
         model.$hoveredIndex
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateInteractiveRects() }
+            }
+            .store(in: &cancellables)
+
+        // 活动来源不止会话；在 willSet 之后统一读取本地模型、联动请求和供应商列表。
+        Publishers.MergeMany([
+            model.$snapshots.map { _ in () }.eraseToAnyPublisher(),
+            model.$sessions.map { _ in () }.eraseToAnyPublisher(),
+            model.$thinkingModels.map { _ in () }.eraseToAnyPublisher(),
+            model.$localActivities.map { _ in () }.eraseToAnyPublisher(),
+            model.$activitySourceIDs.map { _ in () }.eraseToAnyPublisher(),
+            model.$isExpanded.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            model.$hardwareNotch.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            model.$collapsedSideWidth.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            model.$collapsedHeightAdjustment.removeDuplicates().map { _ in () }.eraseToAnyPublisher()
+        ])
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.updateCollapsedActivity()
+                self?.updateInteractiveRects()
+            }
+            .store(in: &cancellables)
+
+        for name in [NSWorkspace.willSleepNotification, NSWorkspace.screensDidSleepNotification,
+                     NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
+            NSWorkspace.shared.notificationCenter.publisher(for: name)
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in
+                    self?.collapsedActivitySleeping = name == NSWorkspace.willSleepNotification
+                        || name == NSWorkspace.screensDidSleepNotification
+                    self?.updateCollapsedActivity()
+                }
+                .store(in: &cancellables)
+        }
+        NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] notification in
+                guard let self, notification.object as? NSWindow === self.panel else { return }
+                self.updateCollapsedActivity()
+            }
+            .store(in: &cancellables)
+
+        model.$activeResetAlert
             .sink { [weak self] _ in
                 MainActor.assumeIsolated { self?.updateInteractiveRects() }
             }
@@ -223,6 +364,14 @@ final class NotchWindowController {
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.relocate() }
+            .store(in: &cancellables)
+
+        model.$independentInnerRing.combineLatest(model.$codeSwitchQuotaRatiosEnabled)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.relocate()
+                self?.startClock()
+            }
             .store(in: &cancellables)
 
         // No `receive(on:)`: the appearance has to be on the window before the
@@ -258,7 +407,17 @@ final class NotchWindowController {
     }
 
     func stop() {
+        endCollapsedPreview(restore: false)
+        model.updateCollapsedRotation(at: Date(), visible: false)
+        model.collapsedPlayback.retainProviders([])
+        cancelPendingUnfold()
+        isEditingGeometry = false
+        pendingRelocate?.cancel()
+        pendingRelocate = nil
+        finishPositionEditing(commit: false)
         setPointing(false)
+        panel?.onPointerEvent = nil
+        hostingView?.pointingRects = []
         peekUntil = nil
         peekWork?.cancel()
         foldWork?.cancel()
@@ -285,24 +444,57 @@ final class NotchWindowController {
     /// been assigned, which is the single-controller case `.mainDisplay`
     /// scope leaves it in.
     func currentScreen() -> NSScreen? {
+        if let previewPosition { return NSScreen.notchScreen(for: previewPosition) }
         if let assigned = assignedScreen,
            NSScreen.screens.contains(where: { $0 === assigned }) {
             return assigned
         }
-        return NotchGeometry.preferredScreen(from: NSScreen.screens, preference: displayPreference)
+        return selectedScreen
     }
 
     func relocate(cellCount: Int? = nil) {
-        guard let screen = currentScreen() else { return }
-        model.adopt(screen: screen)
+        guard let screen = currentScreen() else { cancelPendingUnfold(); return }
+        model.adopt(screen: screen, joinsHardware: activePosition.joinsHardware)
         let size = model.panelSize(cellCount: cellCount ?? model.snapshots.count)
-        let frame = NotchGeometry.panelFrame(
-            for: screen, panelSize: size, edge: model.edge,
-            alongOffset: model.alongOffset, slack: model.slack,
-            trailingExtent: model.trailingExtent,
-            leadingExtent: model.leadingExtent,
-            heldBar: model.holdsOffTheCutout ? model.plainBarLength : nil
-        )
+        let leadingExtent = model.showsMoveHandle ? model.leadingExtent * model.sizeScale : 0
+        let trailingExtent = model.showsSettingsHandle ? model.trailingExtent * model.sizeScale : 0
+        let frame: CGRect
+        if previewPosition != nil || savedPosition != nil {
+            let layout = activePosition.layout(on: screen, panelSize: size,
+                shapeLength: model.shapeLength(cellCount: cellCount ?? model.snapshots.count) * model.sizeScale,
+                endClearance: trailingExtent, startClearance: leadingExtent)
+            frame = layout.frame
+            model.positionedLeading = layout.leading
+            let usable = screen.visibleFrame
+            let lower = model.edge.isVertical ? max(0, frame.maxY - usable.maxY) : max(0, usable.minX - frame.minX)
+            let upper = model.edge.isVertical ? min(frame.height, frame.maxY - usable.minY) : min(frame.width, usable.maxX - frame.minX)
+            model.tooltipAlongBounds = lower...max(lower, upper)
+        } else if model.tooltipHeightMode == .full, model.edge.isVertical {
+            let count = cellCount ?? model.snapshots.count
+            let standardSize = model.standardPanelSize(cellCount: count)
+            let standardSlack = (standardSize.height - model.shapeLength(cellCount: count) * model.sizeScale) / 2
+            let standardFrame = NotchGeometry.panelFrame(for: screen, panelSize: standardSize,
+                edge: model.edge, alongOffset: model.alongOffset, slack: standardSlack,
+                trailingExtent: trailingExtent, leadingExtent: leadingExtent)
+            let layout = TooltipSizing.sidePanelLayout(usable: screen.visibleFrame,
+                standardFrame: standardFrame, standardSlack: standardSlack, size: size,
+                shapeLength: model.shapeLength(cellCount: count) * model.sizeScale,
+                leadingExtent: leadingExtent, trailingExtent: trailingExtent)
+            frame = layout.frame
+            model.positionedLeading = layout.leading
+        } else {
+            frame = NotchGeometry.panelFrame(for: screen, panelSize: size, edge: model.edge,
+                alongOffset: model.alongOffset, slack: model.slack(cellCount: cellCount ?? model.snapshots.count),
+                trailingExtent: trailingExtent, leadingExtent: leadingExtent)
+            model.positionedLeading = nil
+            model.tooltipAlongBounds = nil
+        }
+        if model.tooltipHeightMode == .full {
+            let usable = screen.visibleFrame.insetBy(dx: TooltipSizing.screenMargin, dy: TooltipSizing.screenMargin)
+            let lower = model.edge.isVertical ? max(0, frame.maxY - usable.maxY) : max(0, usable.minX - frame.minX)
+            let upper = model.edge.isVertical ? min(frame.height, frame.maxY - usable.minY) : min(frame.width, usable.maxX - frame.minX)
+            model.tooltipAlongBounds = lower...max(lower, upper)
+        }
 
         if let panel {
             panel.setFrame(frame, display: true)
@@ -314,12 +506,16 @@ final class NotchWindowController {
             let hosting = NotchHostingView(rootView: NotchRootView(model: model))
             panel.contextMenuProvider = { [weak self] in self?.contextMenu() }
             panel.onClick = { [weak self] point in self?.handleClick(at: point) }
+            panel.onPointerEvent = { [weak self] in self?.cursorMoved() }
             panel.onDragStart = { [weak self] in self?.beginOptionDrag() }
+            panel.onControlMouseDown = { [weak self] in self?.handleControlClick(at: $0) ?? false }
+            panel.positionEventHandler = { [weak self] in self?.handlePositionEvent($0) ?? false }
             panel.onDrag = { [weak self] dx, dy in self?.dragged(dx: dx, dy: dy) }
             panel.onDragEnd = { [weak self] in
-                // Where it lands is saved by the landing — see `putDown` — not
-                // here: a drag let go near the hole is not where it stays.
-                self?.endOptionDrag()
+                guard let self else { return }
+                if let position = self.savedPosition { self.onPositionCommitted?(position) }
+                else { self.onReposition?(self.model.alongOffset) }
+                self.endOptionDrag()
             }
 
             // The hosting view goes *inside* a plain container rather than
@@ -363,6 +559,9 @@ final class NotchWindowController {
             Log.usage.debug("panel \(NSStringFromRect(panel.frame), privacy: .public) on screen \(NSStringFromRect(screen.frame), privacy: .public)")
         }
         updateInteractiveRects()
+        updatePositionGuides(on: screen, cellCount: cellCount ?? model.snapshots.count)
+        // 数据刷新也会重算布局；鼠标仍在触发区时保留原计时，移出才取消。
+        if unfoldWork != nil { cursorMoved() }
     }
 
     /// Feeds a raw pointer delta from an ⌥-drag into `model.alongOffset` and
@@ -377,26 +576,21 @@ final class NotchWindowController {
     /// edge's x — so no sign flip belongs here; adding one would make the
     /// pill run away from the cursor instead of following it.
     private func dragged(dx: CGFloat, dy: CGFloat) {
-        let delta = model.edge.isVertical ? dy : dx
-        guard model.holdsOffTheCutout, let cutout = heldCutout else {
-            model.alongOffset += delta
+        if let position = savedPosition, let screen = currentScreen(), let panel {
+            let along = model.slack + model.shapeLength * model.sizeScale / 2
+            let center = model.edge.isVertical
+                ? CGPoint(x: panel.frame.midX, y: panel.frame.maxY - along - dy)
+                : CGPoint(x: panel.frame.minX + along + dx, y: panel.frame.midY)
+            savedPosition = position.movingAlong(to: center, on: screen, previous: position)
             relocate()
             return
         }
-        // Where the pointer has really taken it, and where it is drawn for
-        // that: bent by the hole's pull near either wall — see
-        // `NotchGeometry.magnetised`. Kept apart so the pull can hold the notch
-        // back without losing track of the hand.
-        heldPointer += delta
-        model.alongOffset = NotchGeometry.magnetised(heldPointer, width: cutout.width,
-                                                     bar: model.plainBarLength)
+        model.alongOffset += model.edge.isVertical ? dy : dx
         relocate()
     }
 
-    /// Where the pointer has taken a held notch, before the hole's pull.
-    private var heldPointer: CGFloat = 0
-
     private func beginOptionDrag() {
+        cancelPendingUnfold()
         guard !isOptionDragging else { return }
         isOptionDragging = true
         clearHoverWork?.cancel()
@@ -404,7 +598,6 @@ final class NotchWindowController {
         foldWork?.cancel()
         foldWork = nil
         model.hoveredIndex = nil
-        pickUp()
         model.isHoveringSettings = false
         model.isHoveringMove = false
         setPointing(false)
@@ -414,125 +607,8 @@ final class NotchWindowController {
     private func endOptionDrag() {
         guard isOptionDragging else { return }
         isOptionDragging = false
-        putDown()
         cursorMoved()
     }
-
-    // MARK: - The notch in the hand
-
-    /// The second half of a landing, if it has not happened yet.
-    private var landing: DispatchWorkItem?
-
-    /// The hole on the screen the notch is on, if it is on the one edge that
-    /// has one.
-    private var heldCutout: HardwareNotch? {
-        guard model.edge == .top else { return nil }
-        return currentScreen()?.hardwareNotch
-    }
-
-    /// **Picked up, it lets go of the hole.**
-    ///
-    /// A joined notch is attached and cannot follow the pointer: dragging it
-    /// used to move only how deep it was buried, which nothing on screen shows,
-    /// so the drag went dead for fifty points and then jumped. In the hand it is
-    /// a lone bar measured the plain way — leading tip point for point with the
-    /// pointer — and it lets go of the hole on the fold's spring. The window is
-    /// the same before and after, which is the only reason that may be eased.
-    private func pickUp() {
-        landing?.cancel()
-        landing = nil
-        guard let cutout = heldCutout, !model.holdsOffTheCutout else { return }
-        let free = NotchGeometry.freeOffset(fromStanding: model.alongOffset,
-                                            width: cutout.width, bar: model.plainBarLength)
-        let wasJoined = model.mergesWithCutout
-        heldPointer = free
-        let lift = {
-            self.model.revealsTheOtherCopy = false
-            self.model.holdsOffTheCutout = true
-            self.model.alongOffset = free
-            self.relocate()
-        }
-        if wasJoined { withAnimation(NotchMotion.lift, lift) } else { lift() }
-    }
-
-    /// **Put down near the hole, it glides onto the nearer wall and joins it.**
-    ///
-    /// Two movements, one after the other, because they are two different
-    /// things and doing both at once was the glitch. First the bar travels to
-    /// the wall as the bar it is — the same copy, the same shape, only moving.
-    /// Then, with its end already inside the hole where nothing shows, it
-    /// takes the hole: the size and depth the hardware sets, and the other copy
-    /// drawn out of the far wall. Neither moves the window, because the window
-    /// is the same anywhere near the hole; that is what lets both ease.
-    ///
-    /// Put down out of reach, it stays exactly where it was put.
-    private func putDown() {
-        guard let cutout = heldCutout, model.holdsOffTheCutout else {
-            onReposition?(model.alongOffset)
-            return
-        }
-        let bar = model.plainBarLength
-        guard let target = NotchGeometry.cutoutLanding(alongOffset: model.alongOffset,
-                                                       width: cutout.width, bar: bar)
-        else {
-            // Out of reach: say where it is the way it is kept, and it stays.
-            model.holdsOffTheCutout = false
-            model.alongOffset = NotchGeometry.standingOffset(fromFree: model.alongOffset,
-                                                             width: cutout.width, bar: bar)
-            relocate()
-            updateInteractiveRects()
-            onReposition?(model.alongOffset)
-            return
-        }
-
-        // Let go with its end already inside the hole: one movement, now. The
-        // pause is only for a notch that still has to reach the hole — waiting
-        // it out anyway is the other copy turning up late for no reason.
-        guard !target.joinsAtOnce else {
-            withAnimation(NotchMotion.unfold) {
-                model.revealsTheOtherCopy = false
-                model.holdsOffTheCutout = false
-                model.alongOffset = target.standing
-                relocate()
-            }
-            updateInteractiveRects()
-            onReposition?(model.alongOffset)
-            return
-        }
-
-        // The other copy starts out of its wall *now*, on the same spring as
-        // this glide, so the pair arrive together rather than one after the
-        // other. It is safe to show before the join: it is only ever welded to
-        // its wall, and its joined end is inside the hole throughout.
-        withAnimation(NotchMotion.unfold) {
-            model.revealsTheOtherCopy = true
-            model.alongOffset = target.free
-            relocate()
-        }
-        let join = DispatchWorkItem { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                self.landing = nil
-                withAnimation(NotchMotion.unfold) {
-                    self.model.revealsTheOtherCopy = false
-                    self.model.holdsOffTheCutout = false
-                    self.model.alongOffset = target.standing
-                    self.relocate()
-                }
-                self.updateInteractiveRects()
-                self.onReposition?(self.model.alongOffset)
-            }
-        }
-        landing = join
-        // Most of the glide, not all of it: the spring's tail is a settle a few
-        // hundredths of a point wide, and waiting it out reads as a pause.
-        DispatchQueue.main.asyncAfter(deadline: .now() + Self.landingBeat, execute: join)
-        updateInteractiveRects()
-    }
-
-    /// How long the glide onto the wall is given before the notch takes the
-    /// hole.
-    static let landingBeat: TimeInterval = 0.32
 
     // MARK: - Hit regions
 
@@ -556,40 +632,64 @@ final class NotchWindowController {
     /// exactly the hardware notch when it is joined to one — see
     /// `NotchViewModel.wakeLength` for both halves of that.
     private var pillRect: CGRect {
-        // Joined, that is both copies and the hole between them: the hardware's
-        // own notch is part of the target, which is the whole point of the
-        // notch being drawn as part of it.
-        let joined = model.mergesWithCutout
-        let length = joined ? model.drawnAlongExtent : model.wakeLength
-        let lead = joined
-            ? (model.wings.first?.lead ?? model.slack)
-            : model.restingAlongLead
-                + (model.restingLength * model.sizeScale - model.wakeLength) / 2
-        return placement.rect(along: lead, across: 0, length: length, depth: model.wakeDepth)
+        // Whatever the resting shape is — the pill, or the display's own notch
+        // when it is joining one — the region that wakes it is that plus a
+        // generous band, because both are small targets on a screen edge.
+        // 吸附真实刘海时使用用户指定的底边距离，普通胶囊保留宽松热区。
+        return NotchGeometry.activationRect(
+            placement: placement,
+            slack: model.slack,
+            shapeLength: model.shapeLength * model.sizeScale,
+            restingLength: model.restingLength * model.sizeScale,
+            restingDepth: model.restingDepth * model.sizeScale,
+            hardwareNotch: model.hardwareNotch,
+            triggerHeight: model.notchTriggerHeight
+        )
+    }
+
+    private var collapsedSummaryRects: [CGRect] {
+        guard model.hasCollapsedSummary, let hardware = model.hardwareNotch else { return [] }
+        let width = model.resolvedCollapsedSideWidth
+        let center = model.slack + model.shapeLength * model.sizeScale / 2
+        var rects = [center - hardware.width / 2 - width, center + hardware.width / 2].map {
+            placement.rect(along: $0, across: 0, length: width, depth: model.resolvedCollapsedHeight)
+        }
+        // 正高度在摄像头下方增加了可见黑色区域，这部分也必须能唤醒显示栏。
+        if model.resolvedCollapsedHeight > hardware.height {
+            rects.append(placement.rect(along: center - hardware.width / 2, across: hardware.height,
+                length: hardware.width, depth: model.resolvedCollapsedHeight - hardware.height))
+        }
+        return rects
+    }
+
+    func apply(notchTriggerHeight: Int) {
+        cancelPendingUnfold()
+        model.notchTriggerHeight = NotchTriggerHeight.clamp(notchTriggerHeight)
+        cursorMoved()
     }
 
     /// The handle's bounding box, for deciding whether the panel takes events
     /// at all. Whether a point is actually *on* the handle is a finer question
     /// than a box can answer — see `isOverHandle`.
-    private var handleRect: CGRect {
-        let side = model.orbHotZone
-        let boxes = (model.orbHandlePoints + model.moveHandlePoints).map { point -> CGRect in
-            let centre = placement.point(along: model.handleWing.lead + point.x * model.sizeScale,
+    private var handleRects: [CGRect] {
+        let side = NotchLayout.orbHotZone * model.sizeScale
+        return (model.orbHandlePoints + model.moveHandlePoints).map { point -> CGRect in
+            let centre = placement.point(along: model.slack + point.x * model.sizeScale,
                                          across: point.y * model.sizeScale)
             return CGRect(x: centre.x - side / 2, y: centre.y - side / 2,
                           width: side, height: side)
         }
-        return boxes.dropFirst().reduce(boxes.first ?? .zero) { $0.union($1) }
     }
 
     /// Whether the pointer is on the handle itself rather than merely inside
     /// the box that contains it.
     private func isOverHandle(_ local: CGPoint) -> Bool {
+        guard model.showsSettingsHandle else { return false }
         // Back into the notch's own measurements, which is what `isOnOrbHandle`
         // is written in — the orb scales with the notch, so its hit test has to
         // be asked in the same space the shape was drawn in.
-        model.isOnOrbHandle(
-            along: (placement.along(of: local) - model.handleWing.lead) / model.sizeScale,
+        return model.isOnOrbHandle(
+            along: (placement.along(of: local) - model.slack) / model.sizeScale,
             across: placement.across(of: local) / model.sizeScale
         )
     }
@@ -597,8 +697,9 @@ final class NotchWindowController {
     /// Whether the pointer is on the move handle, asked in the same notch-own
     /// measurements `isOverHandle` uses.
     private func isOverMoveHandle(_ local: CGPoint) -> Bool {
-        model.isOnMoveHandle(
-            along: (placement.along(of: local) - model.handleWing.lead) / model.sizeScale,
+        guard model.showsMoveHandle else { return false }
+        return model.isOnMoveHandle(
+            along: (placement.along(of: local) - model.slack) / model.sizeScale,
             across: placement.across(of: local) / model.sizeScale
         )
     }
@@ -606,35 +707,25 @@ final class NotchWindowController {
     /// The only region that takes the mouse. Everything else in the panel is a
     /// hole — which matters far more folded than open, since the point of
     /// folding away is to stop being in the way.
-    private var liveRect: CGRect {
-        guard model.isExpanded else { return pillRect }
+    private var liveRects: [CGRect] {
+        guard !isPreviewingCollapsedGeometry else { return [] }
+        guard model.isExpanded else { return [pillRect] + collapsedSummaryRects }
         // The orb hangs below the shape, so the live region is both together.
-        return notchRect.union(handleRect)
+        // Keep separated targets separate: their enclosing rectangle includes empty desktop.
+        // 活动提示可能宽于展开面板；保留唤醒区域，防止静止指针反复开合。
+        return [notchRect] + collapsedSummaryRects + handleRects
+    }
+
+    private func isInLiveRegion(_ point: CGPoint) -> Bool {
+        liveRects.contains { $0.contains(point) }
     }
 
     /// The card, its tail, and the gap between the tail and the notch — so
     /// sliding the pointer off the notch and onto the card never leaves it.
-    private func tooltipRect(index: Int) -> CGRect? {
+    func tooltipRect(index: Int) -> CGRect? {
         guard model.snapshots.indices.contains(index) else { return nil }
         let snapshot = model.snapshots[index]
-        let cardHeight = NotchLayout.cardHeight(
-            windowCount: snapshot.windows.count,
-            groupCount: snapshot.windowGroupCount,
-            moneyWindowCount: snapshot.windows.filter { $0.money != nil }.count,
-            usageDetailGroupCount: snapshot.usageDetail?.visibleGroups.count ?? 0,
-            sessionCount: snapshot.localModel == nil ? (model.activity(for: snapshot.id)?.sessions.count ?? 0) : 0,
-            sessionCap: model.sessionCap,
-            statusMessage: snapshot.statusMessage,
-            blockMessage: snapshot.block?.summary(now: model.now),
-            hasTokenUsage: snapshot.tokenUsage != nil,
-            hasPlan: snapshot.plan != nil,
-            hasResetCredits: snapshot.hasAvailableResetCredits,
-            localModelName: snapshot.localModel?.name,
-            showsLocalPerformance: snapshot.showsLocalPerformance,
-                localLedgerRows: snapshot.localLedgerRowCount,
-            compactRowCount: snapshot.compactRowCount,
-            showsDeepSeekPricing: model.deepSeekPricingEnabled
-        )
+        let cardHeight = model.tooltipHeight(for: snapshot)
         // Across the stack the region is the card, its tail, and the gap the
         // pointer has to cross. Along it, the card's own extent.
         let cardAcross = model.edge.isVertical ? NotchLayout.cardWidth : cardHeight
@@ -664,7 +755,7 @@ final class NotchWindowController {
     }
 
     private func updateInteractiveRects() {
-        var rects = [liveRect]
+        var rects = liveRects
         if model.isExpanded, let event = model.activeResetAlert, let card = resetCardRect(event: event) {
             rects.append(card)
         }
@@ -672,11 +763,13 @@ final class NotchWindowController {
             rects.append(card)
         }
         hostingView?.interactiveRects = rects
+        hostingView?.pointingRects = model.isExpanded && !model.isEditingPosition && !isOptionDragging
+            && visibility != .hidden ? model.visibleIndices.map { cellRect(index: $0) } : []
         if let panel {
             // Runs for every mouse event on the screen. AppKit does not skip an
             // unchanged value: each assignment re-sends the window's event mask
             // and tags to WindowServer and flushes a layout pass.
-            let ignores = !rects.contains { $0.contains(localCursor(in: panel.frame)) }
+            let ignores = dragStart == nil && !rects.contains { $0.contains(localCursor(in: panel.frame)) }
             if panel.ignoresMouseEvents != ignores {
                 panel.ignoresMouseEvents = ignores
             }
@@ -728,8 +821,27 @@ final class NotchWindowController {
     }
 
     private func startWatchingCursor() {
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
+            guard let self, let panel = self.panel, self.model.isExpanded,
+                  !self.model.isEditingPosition,
+                  self.isInLiveRegion(self.localCursor(in: panel.frame)),
+                  self.model.visibleCount(self.model.snapshots.count) < self.model.snapshots.count else { return event }
+            let delta = abs(event.scrollingDeltaY) >= abs(event.scrollingDeltaX) ? event.scrollingDeltaY : event.scrollingDeltaX
+            if event.hasPreciseScrollingDeltas {
+                self.accumulatedScroll -= delta
+                if abs(self.accumulatedScroll) >= 24 {
+                    self.model.scroll(by: self.accumulatedScroll > 0 ? 1 : -1)
+                    self.accumulatedScroll = 0
+                }
+            } else if delta != 0 { self.model.scroll(by: delta < 0 ? 1 : -1) }
+            self.updateInteractiveRects()
+            return nil
+        }) { mouseMonitors.append(monitor) }
         let poll = Timer(timeInterval: 0.3, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.cursorMoved() }
+            MainActor.assumeIsolated {
+                self?.updateCollapsedActivity()
+                self?.cursorMoved()
+            }
         }
         RunLoop.main.add(poll, forMode: .common)
         cursorTimer = poll
@@ -750,14 +862,16 @@ final class NotchWindowController {
     }
 
     private func localCursor(in frame: CGRect) -> CGPoint {
-        let mouse = NSEvent.mouseLocation
+        let mouse = mouseLocation()
         return CGPoint(x: mouse.x - frame.minX, y: frame.maxY - mouse.y)
     }
 
     // Not private: tests drive the hover fold through it, the same way they
     // drive the event fold through handleActiveSpaceOrAppChange.
     func cursorMoved() {
-        guard let panel, !isOptionDragging else { return }
+        guard !isPreviewingCollapsedGeometry else { cancelPendingUnfold(); updateInteractiveRects(); return }
+        guard !model.isEditingPosition else { cancelPendingUnfold(); updateInteractiveRects(); return }
+        guard let panel, !isOptionDragging, visibility != .hidden else { cancelPendingUnfold(); return }
         let local = localCursor(in: panel.frame)
         let overTooltip = model.hoveredIndex
             .flatMap(tooltipRect(index:))
@@ -766,12 +880,31 @@ final class NotchWindowController {
         // handleActiveSpaceOrAppChange: left ungated, the hover fold out-votes
         // "Always show" under a full-screen app while the other path keeps
         // restoring it — the notch ends up folding on every poll.
-        setExpanded(liveRect.contains(local) || overTooltip,
+        let wantsExpansion = isInLiveRegion(local) || overTooltip
+        let waiting = wantsExpansion && !model.isExpanded && hoverDelay > 0 && !hoverDelayElapsed
+        if waiting {
+            if unfoldWork == nil {
+                let work = DispatchWorkItem { [weak self] in
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        self.unfoldWork = nil
+                        self.hoverDelayElapsed = true
+                        self.cursorMoved()
+                    }
+                }
+                unfoldWork = work
+                scheduleInteractionWork(hoverDelay, work)
+            }
+        } else {
+            cancelPendingUnfold()
+        }
+        setExpanded(wantsExpansion && !waiting,
                     ignoreAlwaysOn: foldsForFullScreen && isFullScreenActive())
 
+        let providerTarget = model.isExpanded ? cellIndex(at: local) : nil
         var target: Int?
-        if model.isExpanded, notchRect.contains(local) {
-            target = cellIndex(along: placement.along(of: local))
+        if let providerTarget {
+            target = providerTarget
         } else if model.isExpanded, let current = model.hoveredIndex,
                   let card = tooltipRect(index: current),
                   card.contains(local) {
@@ -787,7 +920,7 @@ final class NotchWindowController {
             model.isHoveringMove = overMove
         }
         setPointing(
-            Self.wantsPointingHand(isExpanded: model.isExpanded, cellIndex: target)
+            Self.wantsPointingHand(isExpanded: model.isExpanded, cellIndex: providerTarget)
                 || overHandle || overMove
         )
 
@@ -808,7 +941,7 @@ final class NotchWindowController {
                 }
             }
             clearHoverWork = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + hoverGrace, execute: work)
+            scheduleInteractionWork(hoverGrace, work)
         }
 
         updateInteractiveRects()
@@ -821,6 +954,7 @@ final class NotchWindowController {
     /// about to be scheduled on a notch that "Always show" would otherwise
     /// hold open — because answering it asks WindowServer.
     private func setExpanded(_ wanted: Bool, ignoreAlwaysOn: @autoclosure () -> Bool = false) {
+        guard !isPreviewingCollapsedGeometry else { return }
         if wanted {
             foldWork?.cancel()
             foldWork = nil
@@ -831,17 +965,18 @@ final class NotchWindowController {
 
         // A peek holds the notch open for its own duration; only after that
         // does the pointer get a say again.
+        if isEditingGeometry && visibility != .hidden { return }
         if let peekUntil, peekUntil > Date() { return }
         guard model.isExpanded, foldWork == nil, !model.isPinned else { return }
         // Pinned is settled above; what is left to decide is whether "Always
         // show" holds it, and only a frontmost full-screen app overrules that.
-        let ignoresAlwaysOn = model.isAlwaysOn && ignoreAlwaysOn()
-        guard ignoresAlwaysOn || !model.isAlwaysOn else { return }
+        let ignoresAlwaysOn = model.staysOpen && ignoreAlwaysOn()
+        guard ignoresAlwaysOn || !model.staysOpen else { return }
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.foldWork = nil
-                let stillHoldsOpen = self.model.isPinned || (self.model.isAlwaysOn && !ignoresAlwaysOn)
+                let stillHoldsOpen = ignoresAlwaysOn ? self.model.isPinned : self.model.staysOpen
                 guard !stillHoldsOpen else { return }
                 withAnimation(NotchMotion.unfold) {
                     self.model.isExpanded = false
@@ -852,7 +987,7 @@ final class NotchWindowController {
             }
         }
         foldWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + foldGrace, execute: work)
+        scheduleInteractionWork(foldGrace, work)
     }
 
     /// The rings are buttons, so they should say so.
@@ -864,7 +999,13 @@ final class NotchWindowController {
     /// the app underneath had chosen. Setting `.arrow` on the way out would
     /// stamp an arrow over someone else's text caret.
     private func setPointing(_ wanted: Bool) {
-        guard wanted != isPointing else { return }
+        guard wanted != isPointing else {
+            // 状态没有变化也可能被原生 cursorUpdate 或 SwiftUI 重建覆盖。
+            if wanted, NSCursor.current != NSCursor.pointingHand {
+                NSCursor.pointingHand.set()
+            }
+            return
+        }
         isPointing = wanted
         if wanted {
             NSCursor.pointingHand.push()
@@ -873,16 +1014,9 @@ final class NotchWindowController {
         }
     }
 
-    /// A click on a ring refetches that provider; a click anywhere else on the
-    /// open notch pins it. The ring is the more specific target, so it wins.
-    func handleClick(at locationInWindow: CGPoint) {
-        guard let panel else {
-            setExpanded(true)
-            return
-        }
-        // Use the event position even if the pointer has moved since the click.
+    private func handleControlClick(at locationInWindow: CGPoint) -> Bool {
+        guard !model.isEditingPosition, let panel else { return false }
         let local = CGPoint(x: locationInWindow.x, y: panel.frame.height - locationInWindow.y)
-
         // The handle sits inside the notch, so it has to be tested before the
         // cells — otherwise the cell band nearest the foot of the stack swallows
         // it and clicking the gear refetches a provider instead.
@@ -891,8 +1025,8 @@ final class NotchWindowController {
         // band is nearest would otherwise swallow the press.
         if model.isExpanded, isOverMoveHandle(local) {
             model.moveSpins += 1
-            beginMove()
-            return
+            beginMove(at: local)
+            return true
         }
         if model.isExpanded, isOverHandle(local) {
             // The same turn the SwiftUI tap gives it, so the gear responds
@@ -900,8 +1034,23 @@ final class NotchWindowController {
             // are two routes to one action.
             model.settingsSpins += 1
             onOpenSettings?()
+            return true
+        }
+        return false
+    }
+
+    /// A click on a ring refetches that provider; a click anywhere else on the
+    /// open notch pins it. The ring is the more specific target, so it wins.
+    func handleClick(at locationInWindow: CGPoint) {
+        guard !model.isEditingPosition else { return }
+        guard let panel else {
+            setExpanded(true)
             return
         }
+        // Use the event position even if the pointer has moved since the click.
+        let local = CGPoint(x: locationInWindow.x, y: panel.frame.height - locationInWindow.y)
+
+        if handleControlClick(at: locationInWindow) { return }
         // A peek is a question — "this one just finished, do you want it?" —
         // and the click that follows is the answer. It outranks pinning and
         // refetching for as long as the offer stands, and for no longer.
@@ -942,7 +1091,7 @@ final class NotchWindowController {
             return
         }
         if notchRect.contains(local),
-           let index = cellIndex(along: placement.along(of: local)),
+           let index = cellIndex(at: local),
            model.snapshots.indices.contains(index) {
             if let onRefreshProvider {
                 let snapshot = model.snapshots[index]
@@ -955,6 +1104,12 @@ final class NotchWindowController {
         // has no drawn state — so the notch simply stopped folding and nothing
         // on screen said why or how to undo it. Keep open is on the
         // right-click menu, where it is named and carries a checkmark.
+    }
+
+    func apply(tooltipHeightMode: TooltipHeightMode) {
+        guard model.tooltipHeightMode != tooltipHeightMode else { return }
+        model.tooltipHeightMode = tooltipHeightMode
+        relocate()
     }
 
     /// Move the notch to another screen edge.
@@ -979,9 +1134,12 @@ final class NotchWindowController {
     /// vanish with it, but the window only learns which of its pixels take the
     /// mouse when those regions are rebuilt; without this the spot where the
     /// handle was would keep catching clicks until something else moved.
+    /// Rebuild immediately so the hidden handle also stops intercepting clicks.
     func apply(showsMoveHandle: Bool) {
         guard model.showsMoveHandle != showsMoveHandle else { return }
         model.showsMoveHandle = showsMoveHandle
+        if !showsMoveHandle { model.isHoveringMove = false }
+        relocate()
         updateInteractiveRects()
     }
 
@@ -991,27 +1149,92 @@ final class NotchWindowController {
         relocate()
     }
 
-    /// The size to start at, before there is a panel to relayout.
-    ///
-    /// A display plugged in later builds its panel at the current size rather
-    /// than at medium and resizing a beat afterwards.
-    func prime(scale: CGFloat) {
-        model.requestedScale = scale
+    func apply(showsSettingsHandle: Bool) {
+        guard model.showsSettingsHandle != showsSettingsHandle else { return }
+        model.showsSettingsHandle = showsSettingsHandle
+        if !showsSettingsHandle { model.isHoveringSettings = false }
+        relocate()
     }
 
-    /// Whether each ring carries its percentage.
-    ///
-    /// Relaid out, not merely set: beside the hardware the reading is paid for
-    /// out of ring size, so turning it on changes the ring, the strip's length
-    /// and the width of the window around it. Set without relocating, the
-    /// window keeps its old size and the shape — which centres itself in it —
-    /// slides away from the settings arc and the tooltip, both placed from
-    /// `slack`. Every setting that moves `panelSize` has to come through here.
-    func apply(showsNotchReadings: Bool) {
-        guard model.showsNotchReadings != showsNotchReadings else { return }
-        model.showsNotchReadings = showsNotchReadings
-        relocate()
+    func apply(topAvoidanceAdjustment: CGFloat, ringEdgeAdjustment: CGFloat) {
+        guard model.topAvoidanceAdjustment != topAvoidanceAdjustment
+            || model.ringEdgeAdjustment != ringEdgeAdjustment else { return }
+        model.topAvoidanceAdjustment = topAvoidanceAdjustment
+        model.ringEdgeAdjustment = ringEdgeAdjustment
+        coalesceRelocate()
+    }
+
+    func apply(collapsedSideWidth: CGFloat) {
+        guard model.collapsedSideWidth != collapsedSideWidth else { return }
+        model.collapsedSideWidth = collapsedSideWidth
         updateInteractiveRects()
+    }
+
+    func apply(collapsedHeightAdjustment: CGFloat) {
+        guard model.collapsedHeightAdjustment != collapsedHeightAdjustment else { return }
+        model.collapsedHeightAdjustment = collapsedHeightAdjustment
+        updateInteractiveRects()
+    }
+
+    func apply(showsIdleNotch: Bool) {
+        guard model.showsIdleNotch != showsIdleNotch else { return }
+        model.showsIdleNotch = showsIdleNotch
+        if !showsIdleNotch, model.collapsedProviders.isEmpty { endCollapsedPreview() }
+        if !model.isExpanded { cancelPendingUnfold() }
+        updateCollapsedActivity()
+        updateInteractiveRects()
+    }
+
+    func previewCollapsedGeometry(editing: Bool? = nil) {
+        if editing == false { endCollapsedPreview(); return }
+        guard model.canShowCollapsedSummary, !model.isEditingPosition, visibility != .hidden else { return }
+        if let editing { isEditingCollapsedGeometry = editing }
+        collapsedPreviewWork?.cancel()
+        collapsedPreviewWork = nil
+        if !isPreviewingCollapsedGeometry {
+            model.isPreviewingCollapsedGeometry = true
+            cancelPendingUnfold()
+            foldWork?.cancel()
+            foldWork = nil
+            clearHoverWork?.cancel()
+            clearHoverWork = nil
+            peekWork?.cancel()
+            peekWork = nil
+            peekUntil = nil
+            if model.hoveredIndex != nil { model.hoveredIndex = nil }
+            if model.isExpanded { model.isExpanded = false }
+            setPointing(false)
+            updateInteractiveRects()
+        }
+        guard !isEditingCollapsedGeometry else { return }
+        // 键盘调节和重置也提供短暂预览；拖动期间则一直保持收起。
+        let work = DispatchWorkItem { [weak self] in self?.endCollapsedPreview() }
+        collapsedPreviewWork = work
+        scheduleInteractionWork(1.2, work)
+    }
+
+    private func endCollapsedPreview(restore: Bool = true) {
+        collapsedPreviewWork?.cancel()
+        collapsedPreviewWork = nil
+        isEditingCollapsedGeometry = false
+        guard isPreviewingCollapsedGeometry else { return }
+        model.isPreviewingCollapsedGeometry = false
+        guard restore, visibility != .hidden else { return }
+        model.isExpanded = model.isPinned || (model.isAlwaysOn && !(foldsForFullScreen && isFullScreenActive()))
+        cursorMoved()
+        updateInteractiveRects()
+    }
+
+    func previewGeometry(editing: Bool? = nil) {
+        endCollapsedPreview(restore: false)
+        if let editing { isEditingGeometry = editing }
+        guard peek(for: 1.2, focusing: nil) else { return }
+        if isEditingGeometry {
+            // 按住滑块但没有数值变化时，也要维持展开直到编辑结束。
+            peekUntil = .distantFuture
+            peekWork?.cancel()
+            peekWork = nil
+        }
     }
 
     func apply(scale: CGFloat) {
@@ -1053,6 +1276,8 @@ final class NotchWindowController {
 
     /// Resize the window on a budget, and always once the drag has stopped.
     private func coalesceRelocate() {
+        pendingRelocate?.cancel()
+        pendingRelocate = nil
         let now = Date()
         if now.timeIntervalSince(lastRelocate) >= Self.relocateInterval {
             lastRelocate = now
@@ -1061,9 +1286,9 @@ final class NotchWindowController {
         }
         // Too soon. Replace any pending catch-up with one scheduled from now,
         // so a drag that stops mid-interval still ends up correctly sized.
-        pendingRelocate?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            self.pendingRelocate = nil
             self.lastRelocate = Date()
             self.relocate()
             self.updateInteractiveRects()
@@ -1074,64 +1299,51 @@ final class NotchWindowController {
     }
 
     private var dropZones: DropZoneOverlay?
+    var positionGuideWindowForTesting: NSWindow? { dropZones?.windowForTesting }
+    var positionGuideTargetForTesting: NotchEdge? { dropZones?.targetForTesting }
 
-    /// Carries the notch: raises the drop zones, follows the pointer until the
-    /// button lifts, and hands the edge it landed on to `onMoveToEdge`.
-    ///
-    /// Driven from the pointer's own position rather than from drag deltas,
-    /// because what is being chosen is a *place on the screen*, not a distance
-    /// moved — and a press that never moves has to be able to end on the edge
-    /// it started from without having accumulated anything.
-    ///
-    /// Blocks on the panel's event stream until mouse-up, the same AppKit
-    /// pattern `NotchPanel.trackOptionDrag` uses.
-    private func beginMove() {
-        guard let panel, let screen = currentScreen() else { return }
+    private var guideScreen: NSScreen?
 
-        let overlay = DropZoneOverlay(screen: screen)
-        dropZones = overlay
-        model.isMoving = true
-        // Starts on the edge it is already on, so releasing without moving is
-        // a no-op rather than a jump to whichever edge the maths rounds to.
-        model.moveTarget = model.edge
-        overlay.show(target: model.edge,
-                     restingDepth: model.restingDepth * model.sizeScale,
-                     restingLength: model.shapeLength * model.sizeScale)
+    /// Both entry points share the same event stream, including Escape and mouse-up.
+    private func beginMove(at local: CGPoint) {
+        let grab = placement.along(of: local) - model.slack - model.shapeLength * model.sizeScale / 2
+        beginPositionEditing()
+        guard model.isEditingPosition else { return }
+        dragStart = mouseLocation()
+        dragGrabOffset = grab
+    }
 
-        defer {
-            model.isMoving = false
-            model.moveTarget = nil
-            overlay.hide()
-            dropZones = nil
+    private func updatePositionGuides(on screen: NSScreen, cellCount: Int) {
+        guard model.isEditingPosition else { return }
+        if guideScreen !== screen {
+            dropZones?.hide()
+            dropZones = DropZoneOverlay(screen: screen)
+            guideScreen = screen
         }
-
-        while let event = panel.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            let local = overlay.localPoint(from: NSEvent.mouseLocation)
-            let target = EdgeDropZones.edge(at: local, in: overlay.screenSize)
-
-            switch event.type {
-            case .leftMouseDragged:
-                if model.moveTarget != target {
-                    model.moveTarget = target
-                }
-                overlay.show(target: target,
-                             restingDepth: model.restingDepth * model.sizeScale,
-                             restingLength: model.shapeLength * model.sizeScale)
-            case .leftMouseUp:
-                if target != model.edge { onMoveToEdge?(target) }
-                return
-            default:
-                return
-            }
+        let frames = model.centeredGuideFrames(on: screen, cellCount: cellCount)
+        let actualCenter = panel.map {
+            CGPoint(x: $0.frame.minX + notchRect.midX - screen.frame.minX,
+                    y: screen.frame.maxY - $0.frame.maxY + notchRect.midY)
         }
+        let centered = frames[model.edge].map { guide in
+            guard let actualCenter else { return false }
+            return abs(model.edge.isVertical ? actualCenter.y - guide.midY : actualCenter.x - guide.midX) <= 1
+        } ?? false
+        dropZones?.show(target: activePosition.normalizedFraction == 0.5 && centered ? model.edge : nil,
+                        frames: frames,
+                        hardwareNotch: screen.hardwareNotch,
+                        scale: model.sizeScale, accent: model.accentColor)
     }
 
     private var lastRelocate = Date.distantPast
     private var pendingRelocate: DispatchWorkItem?
     func apply(edge: NotchEdge) {
+        endCollapsedPreview(restore: false)
+        finishPositionEditing(commit: false)
         guard model.edge != edge else { return }
         guard let panel else {   // before there is anything on screen to fade
             model.edge = edge
+            centerSavedPosition(on: edge)
             relocate()
             return
         }
@@ -1156,6 +1368,7 @@ final class NotchWindowController {
                 // Land folded, and at full strength: the opening *is* the
                 // animation, and fading in underneath it would be two at once.
                 self.model.edge = edge
+                self.centerSavedPosition(on: edge)
                 self.model.isExpanded = false
                 self.relocate()
                 self.updateInteractiveRects()
@@ -1198,7 +1411,17 @@ final class NotchWindowController {
     private static let arrivalBeat: TimeInterval = 0.05
     private var edgeChange = 0
 
+    private func centerSavedPosition(on edge: NotchEdge) {
+        guard let savedPosition else { return }
+        let centered = NotchPosition(edge: edge, displayID: savedPosition.displayID)
+        self.savedPosition = centered
+        onPositionCommitted?(centered)
+    }
+
     func apply(_ visibility: NotchVisibility) {
+        endCollapsedPreview(restore: false)
+        cancelPendingUnfold()
+        finishPositionEditing(commit: false)
         self.visibility = visibility
         // A standing choice outranks a peek that happens to be in flight.
         peekWork?.cancel()
@@ -1252,18 +1475,27 @@ final class NotchWindowController {
     ///
     /// `pid` is the agent's process, used only if the peek is clicked; nil
     /// leaves the click doing what it ordinarily does.
-    func peek(for duration: TimeInterval, focusing pid: pid_t?) {
+    @discardableResult
+    func peek(for duration: TimeInterval, focusing pid: pid_t?, providerID: String? = nil, startedAt: Date? = nil) -> Bool {
+        guard !isPreviewingCollapsedGeometry else { return false }
+        guard !model.isEditingPosition else { return false }
         // Hidden is a standing choice that the notch is not to be on screen.
         // Something finishing is not grounds to overrule it — the chime still
         // sounds, which is the part that works with nothing visible.
         guard visibility != .hidden, let panel else {
             Log.usage.debug("peek skipped: notch hidden")
-            return
+            return false
         }
         Log.usage.debug("peek for \(duration, privacy: .public)s, pid \(pid ?? -1, privacy: .public)")
 
-        if let pid {
-            pendingFocus = (pid: pid, until: Date().addingTimeInterval(duration + Self.focusGrace))
+        pendingFocus = nil
+        if let pid, let actual = HookSocket.process(pid)?.started,
+           startedAt == nil || abs(actual - startedAt!.timeIntervalSince1970) < 0.01 {
+            pendingFocus = (pid: pid, until: Date().addingTimeInterval(duration + Self.focusGrace), started: actual)
+        }
+        if let providerID, let index = model.snapshots.firstIndex(where: { $0.id == providerID }) {
+            if !model.visibleIndices.contains(index) { model.scrollStart = index }
+            model.hoveredIndex = index
         }
         peekUntil = Date().addingTimeInterval(duration)
 
@@ -1279,11 +1511,10 @@ final class NotchWindowController {
                 guard let self, let panel = self.panel else { return }
                 self.peekWork = nil
                 self.peekUntil = nil
-                let stillHoldsOpen = self.model.isPinned || (self.model.isAlwaysOn && !(self.foldsForFullScreen && self.isFullScreenActive()))
-                guard !stillHoldsOpen else { return }
+                guard !self.model.staysOpen, !self.isEditingGeometry else { return }
                 // Left open if the peek did its job and the pointer is already
                 // there; the ordinary hover fold takes it from here.
-                guard !self.liveRect.contains(self.localCursor(in: panel.frame)) else { return }
+                guard !self.isInLiveRegion(self.localCursor(in: panel.frame)) else { return }
                 withAnimation(NotchMotion.unfold) {
                     self.model.isExpanded = false
                     self.model.hoveredIndex = nil
@@ -1295,6 +1526,34 @@ final class NotchWindowController {
         }
         peekWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + duration, execute: work)
+        return true
+    }
+
+    /// Open the notch and show a usage reset notification modal card.
+    ///
+    /// Returns whether the card was actually shown: a hidden notch has nowhere
+    /// to put it, and the caller owes the user another way of hearing about it.
+    @discardableResult
+    func showResetAlert(_ event: UsageResetEvent, duration: TimeInterval = 5.0) -> Bool {
+        guard visibility != .hidden, let panel else {
+            Log.usage.debug("reset alert skipped: notch hidden")
+            return false
+        }
+        model.activeResetAlert = event
+        peek(for: duration, focusing: nil)
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + duration) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if self.model.activeResetAlert == event {
+                    withAnimation(.easeOut(duration: 0.18)) {
+                        self.model.activeResetAlert = nil
+                    }
+                    self.updateInteractiveRects()
+                }
+            }
+        }
+        return true
     }
 
     /// Open the notch and show a usage reset notification modal card.
@@ -1335,6 +1594,7 @@ final class NotchWindowController {
             return false
         }
         pendingFocus = nil
+        guard let actual = HookSocket.process(pending.pid)?.started, abs(actual - pending.started) < 0.01 else { return false }
         // The same exact-tab jump a session row gives, not just the app.
         Task { _ = await SessionFocus.focus(pid: pending.pid) }
         return true
@@ -1351,6 +1611,7 @@ final class NotchWindowController {
 
     /// Clicking the open notch pins it, so it stays put while you read it.
     func togglePinned() {
+        guard !model.isEditingPosition else { return }
         model.isPinned.toggle()
         if model.isPinned {
             foldWork?.cancel()
@@ -1360,27 +1621,184 @@ final class NotchWindowController {
         updateInteractiveRects()
     }
 
-    /// Which ring a point along the panel is on.
-    ///
-    /// The copy that carries the readings, and only that one: the mirror is the
-    /// container with nothing in it, so there is nothing on it to point at.
-    func cellIndex(along: CGFloat) -> Int? {
-        let wing = model.cellWing
-        guard model.alongWithin(along, of: wing) != nil else { return nil }
-        let pitch = model.cellPitch * model.sizeScale
-        for index in model.snapshots.indices {
-            let centre = model.ringAlong(index: index, in: wing)
-            if abs(along - centre) <= pitch / 2 { return index }
+    func cellRect(index: Int) -> CGRect {
+        let diameter = model.cellRingDiameter
+        let size = NotchLayout.cellSize(ringDiameter: diameter,
+                                       isLocal: model.snapshots[index].localModel != nil)
+        let labelExtent = size.height - diameter
+        let scale = model.sizeScale
+        // 标签始终位于圆环下方；侧边排列的 ringCenter 不是整个单元格的中心。
+        let centre = placement.point(
+            along: model.slack + (model.ringCenter(index: index)
+                + (model.edge.isVertical ? labelExtent / 2 : 0)) * scale,
+            across: (model.contentInset + model.ringEdgePadding + model.ringEdgeOffset
+                + model.baseBodyDepth / 2) * scale - SideNotchShape.bezelBleed)
+        var rect = CGRect(x: centre.x - size.width * scale / 2,
+                          y: centre.y - size.height * scale / 2,
+                          width: size.width * scale, height: size.height * scale)
+        // 普通外周环超出布局框，命中范围也要包含可见线条。
+        if !model.independentInnerRing, model.weeklyRing == .outside,
+           model.snapshots[index].secondaryWindow != nil {
+            let radius = (NotchLayout.weeklyOutsideRadius + NotchLayout.weeklyRingStroke / 2) * scale
+            let ringCentre = CGPoint(x: centre.x, y: centre.y - labelExtent * scale / 2)
+            rect = rect.union(CGRect(x: ringCentre.x - radius, y: ringCentre.y - radius,
+                                     width: 2 * radius, height: 2 * radius))
         }
-        return nil
+        return rect.intersection(notchRect)
+    }
+
+    func cellIndex(at point: CGPoint) -> Int? {
+        // SwiftUI 按供应商顺序绘制，后绘制的外周环在重叠处应优先接收鼠标。
+        model.visibleIndices.reversed().first { cellRect(index: $0).contains(point) }
+    }
+
+    // MARK: - Position editing
+
+    func beginPositionEditing() {
+        endCollapsedPreview(restore: false)
+        cancelPendingUnfold()
+        guard !model.isEditingPosition, let panel, let screen = selectedScreen else { return }
+        edgeChange += 1
+        panel.alphaValue = 1
+        foldWork?.cancel()
+        foldWork = nil
+        clearHoverWork?.cancel()
+        clearHoverWork = nil
+        peekWork?.cancel()
+        peekWork = nil
+        peekUntil = nil
+        pendingFocus = nil
+        setPointing(false)
+        editOriginalEdge = model.edge
+        editWasExpanded = model.isExpanded
+        previousKeyWindow = NSApp.keyWindow
+        previousApplication = NSWorkspace.shared.frontmostApplication
+        previewPosition = activePosition
+        previewPosition?.displayID = screen.notchDisplayID
+        if savedPosition == nil, !model.isFlushWithHardware {
+            let usable = screen.visibleFrame
+            let center = model.slack + model.shapeLength * model.sizeScale / 2
+            let fraction = model.edge.isVertical
+                ? (usable.maxY - panel.frame.maxY + center) / max(1, usable.height)
+                : (panel.frame.minX + center - usable.minX) / max(1, usable.width)
+            previewPosition?.fraction = Double(min(1, max(0, fraction)))
+        }
+        model.hoveredIndex = nil
+        model.isHoveringSettings = false
+        model.isEditingPosition = true
+        model.isMoving = true
+        model.isExpanded = true
+        panel.isEditingPosition = true
+        dragGrabOffset = 0
+        NSCursor.openHand.push()
+        panel.makeKey()
+        updateInteractiveRects()
+        updatePositionGuides(on: screen, cellCount: model.snapshots.count)
+    }
+
+    func finishPositionEditing(commit: Bool, restoreFocus: Bool = true) {
+        guard model.isEditingPosition else { return }
+        let committed = commit && didDrag ? previewPosition : nil
+        model.isEditingPosition = false
+        model.isMoving = false
+        dropZones?.hide()
+        dropZones = nil
+        guideScreen = nil
+        panel?.isEditingPosition = false
+        dragStart = nil
+        didDrag = false
+        previewPosition = nil
+        if let committed {
+            savedPosition = committed
+            model.edge = committed.edge
+        } else {
+            model.edge = editOriginalEdge
+        }
+        model.isExpanded = editWasExpanded || model.staysOpen
+        NSCursor.pop()
+        relocate()
+        if let committed { onPositionCommitted?(committed) }
+        if restoreFocus {
+            previousKeyWindow?.makeKey()
+            if let previousApplication, previousApplication.processIdentifier != ProcessInfo.processInfo.processIdentifier,
+               NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+                previousApplication.activate(options: [])
+            }
+        }
+        if panel?.isKeyWindow == true { panel?.resignKey() }
+        previousKeyWindow = nil
+        previousApplication = nil
+        if committed != nil { cursorMoved() }
+    }
+
+    private func handlePositionEvent(_ event: NSEvent) -> Bool {
+        guard model.isEditingPosition else { return false }
+        switch event.type {
+        case .keyDown:
+            if event.keyCode == 53 { finishPositionEditing(commit: false) }
+            return true
+        case .leftMouseDown:
+            guard let panel, isInLiveRegion(localCursor(in: panel.frame)) else { return false }
+            dragStart = mouseLocation()
+            dragGrabOffset = placement.along(of: localCursor(in: panel.frame)) - model.slack
+                - model.shapeLength * model.sizeScale / 2
+            didDrag = false
+            NSCursor.closedHand.set()
+            return true
+        case .leftMouseDragged:
+            guard let dragStart else { return true }
+            updatePositionDrag(to: mouseLocation(), from: dragStart)
+            return true
+        case .leftMouseUp:
+            guard dragStart != nil else { return true }
+            if didDrag { finishPositionEditing(commit: true) }
+            else {
+                dragStart = nil
+                NSCursor.openHand.set()
+                updateInteractiveRects()
+            }
+            return true
+        case .rightMouseDown, .otherMouseDown, .scrollWheel:
+            return true
+        default:
+            return false
+        }
+    }
+
+    func updatePositionDrag(to point: CGPoint, from start: CGPoint) {
+        guard model.isEditingPosition,
+              didDrag || hypot(point.x - start.x, point.y - start.y) >= 4,
+              let screen = NSScreen.notchScreen(at: point) else { return }
+        didDrag = true
+        NSCursor.closedHand.set()
+        let old = activePosition
+        var candidate = NotchPosition.snapped(to: point, on: screen,
+                                             displayID: screen.notchDisplayID, previous: old)
+        model.edge = candidate.edge
+        var center = point
+        if candidate.edge.isVertical { center.y += dragGrabOffset }
+        else { center.x -= dragGrabOffset }
+        // The pointer chooses the edge; the grab offset only chooses the position along it.
+        candidate = candidate.movingAlong(to: center, on: screen, previous: old)
+        previewPosition = candidate
+        relocate()
     }
 
     // MARK: - Odds and ends
 
     private func startClock() {
+        clockTimer?.invalidate()
         // Keeps "Resets in N min" from going stale while the tooltip is open.
-        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.model.now = Date() }
+        let timer = Timer(timeInterval: model.codeSwitchQuotaRatiosEnabled ? 1 : 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let now = Date()
+                let visibleBudget = self.model.isExpanded && self.model.codeSwitchQuotaRatiosEnabled
+                    && self.model.visibleIndices.contains { self.model.snapshots[$0].linked != nil }
+                if visibleBudget || now.timeIntervalSince(self.model.now) >= 30 {
+                    self.model.now = now
+                }
+            }
         }
         RunLoop.main.add(timer, forMode: .common)
         clockTimer = timer
@@ -1401,6 +1819,20 @@ final class NotchWindowController {
         keepOpen.target = menuActions
         keepOpen.isEnabled = true
         menu.addItem(keepOpen)
+        let editPosition = NSMenuItem(
+            title: L10n.t("Edit position"),
+            action: #selector(MenuActions.editPosition(_:)), keyEquivalent: ""
+        )
+        editPosition.target = menuActions
+        editPosition.isEnabled = !model.isEditingPosition
+        menu.addItem(editPosition)
+        let settings = NSMenuItem(
+            title: L10n.t("Settings"),
+            action: #selector(MenuActions.openSettings(_:)), keyEquivalent: ""
+        )
+        settings.target = menuActions
+        settings.isEnabled = true
+        menu.addItem(settings)
         menu.addItem(.separator())
 
         let refresh = NSMenuItem(
@@ -1435,7 +1867,13 @@ final class NotchWindowController {
     private lazy var menuActions = MenuActions(
         refresh: { [weak self] in self?.onRefresh?() },
         signIn: { [weak self] index in self?.signInItems[safe: index]?.action() },
-        togglePinned: { [weak self] in self?.togglePinned() }
+        togglePinned: { [weak self] in self?.togglePinned() },
+        editPosition: { [weak self] in
+            DispatchQueue.main.async { self?.beginPositionEditing() }
+        },
+        openSettings: { [weak self] in
+            DispatchQueue.main.async { self?.onOpenSettings?() }
+        }
     )
 }
 
@@ -1446,19 +1884,27 @@ final class MenuActions: NSObject {
     private let refresh: () -> Void
     private let signIn: (Int) -> Void
     private let pin: () -> Void
+    private let edit: () -> Void
+    private let settings: () -> Void
 
     init(
         refresh: @escaping () -> Void,
         signIn: @escaping (Int) -> Void,
-        togglePinned: @escaping () -> Void
+        togglePinned: @escaping () -> Void,
+        editPosition: @escaping () -> Void = {},
+        openSettings: @escaping () -> Void = {}
     ) {
         self.refresh = refresh
         self.signIn = signIn
         self.pin = togglePinned
+        self.edit = editPosition
+        self.settings = openSettings
     }
 
     @objc func refreshNow(_ sender: Any?) { refresh() }
     @objc func togglePinned(_ sender: Any?) { pin() }
+    @objc func editPosition(_ sender: Any?) { edit() }
+    @objc func openSettings(_ sender: Any?) { settings() }
 
     @objc func signIn(_ sender: Any?) {
         guard let item = sender as? NSMenuItem else { return }

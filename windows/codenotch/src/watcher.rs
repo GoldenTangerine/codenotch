@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · watcher
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: windows/codenotch/src/watcher.rs
+ */
 //! Transcript watcher: the fallback data source for the Claude Code **desktop app**.
 //! Background: on Windows the desktop app has a known bug (2026-05) where settings.json hooks do
 //! not fire, so the appends to ~/.claude/projects/**/*.jsonl are watched instead and the session

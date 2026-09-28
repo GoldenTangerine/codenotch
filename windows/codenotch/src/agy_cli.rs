@@ -1,3 +1,12 @@
+/**
+ @name: 项目构建与文档
+ @Descripttion: 维护 agy_cli.rs 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: windows/codenotch/src/agy_cli.rs
+ */
 //! Official Antigravity CLI adapter using native Windows ConPTY.
 //!
 //! Executes `agy --print /usage` without keeping the full Antigravity IDE running.

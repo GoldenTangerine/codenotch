@@ -1,3 +1,12 @@
+/**
+ @name: 供应商额度圆环
+ @Descripttion: 展示供应商图标、查询状态与主指标。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Features/ProviderRing.swift
+ */
 import AppKit
 import SwiftUI
 
@@ -22,6 +31,8 @@ struct ProviderRing: View {
     var activity: ActivitySummary?
     /// A fetch this cell asked for, in flight.
     var isRefreshing: Bool = false
+    var bot: BotPresentation?
+    var icon: ProviderIcon?
     var localPerformance: LocalModelPerformance?
     /// A local model's arc: how full its context was on the last request. Nil
     /// draws the whole ring, which is what a runtime that does not say gets.
@@ -31,43 +42,81 @@ struct ProviderRing: View {
     var weeklyFraction: Double?
     /// Where the user asked for it, if at all.
     var weeklyRing: WeeklyRing = .off
-    var bandOverride: UsageBand? = nil
+    var innerFraction: Double?
+    var expanded = false
+
+    private var isExpanded: Bool { expanded || innerFraction != nil }
+    private var hasSecondary: Bool {
+        weeklyRing != .off && weeklyFraction != nil && !isWorking
+    }
+    private var hasMultipleRings: Bool { hasSecondary || innerFraction != nil }
+    private var mainIsInnermost: Bool {
+        innerFraction == nil && !(hasSecondary && weeklyRing == .inside)
+    }
+    var mainTrackStroke: CGFloat {
+        guard hasMultipleRings else {
+            return isExpanded ? NotchLayout.weeklyRingStroke : NotchLayout.trackStroke
+        }
+        return mainIsInnermost ? NotchLayout.independentRingStroke : NotchLayout.weeklyRingStroke
+    }
+    var mainProgressStroke: CGFloat {
+        hasMultipleRings || isExpanded ? mainTrackStroke : NotchLayout.progressStroke
+    }
+    var secondaryStroke: CGFloat {
+        weeklyRing == .inside && innerFraction == nil
+            ? NotchLayout.independentRingStroke : NotchLayout.weeklyRingStroke
+    }
+    var mainInset: CGFloat {
+        guard isExpanded && ((weeklyRing == .outside && hasSecondary)
+            || (innerFraction != nil && !hasSecondary)) else { return 0 }
+        // 加粗中间层时向内让位，保证与外圈的线条边缘至少相隔 1pt。
+        let centerInset = max(NotchLayout.expandedSecondaryInsideInset,
+            hasSecondary ? NotchLayout.expandedSecondaryOutsideInset
+                + (secondaryStroke + mainTrackStroke) / 2 + 1 : 0)
+        return centerInset - mainTrackStroke / 2
+    }
+    var secondaryInset: CGFloat {
+        let original = isExpanded
+            ? (weeklyRing == .inside ? NotchLayout.expandedSecondaryInsideInset
+                : NotchLayout.expandedSecondaryOutsideInset)
+            : diameter / 2 - (weeklyRing.radius ?? 0)
+        guard weeklyRing == .inside else { return original }
+        // 内置次级圈加粗后同时避开图标和主圈，尺寸仍由原有布局决定。
+        let glyphClearance = diameter / 2 - NotchLayout.glyphSize / 2 - 1 - secondaryStroke / 2
+        let mainClearance = mainInset + mainTrackStroke + 1 + secondaryStroke / 2
+        return min(max(original, mainClearance), glyphClearance)
+    }
+
+    private var diameter: CGFloat {
+        NotchLayout.ringDiameter + (isExpanded ? NotchLayout.independentRingGrowth : 0)
+    }
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.codenotchReduceTransparency) private var reduceTransparency
     @Environment(\.usageWatchLimit) private var watchLimit
     @Environment(\.usageCriticalLimit) private var criticalLimit
-    @Environment(\.colorTransitionStyle) private var colorTransitionStyle
     @Environment(\.codenotchAccentColor) private var accentColor
     @Environment(\.weeklyRingDashed) private var weeklyRingDashed
-    @State private var spin: Double = 0
+
+    private var refreshReadingOpacity: Double {
+        isRefreshing ? (reduceTransparency ? 0.75 : 0.3) : 1
+    }
+
+    private var refreshColor: Color {
+        if localPerformance != nil || localContextFraction != nil {
+            return localPerformance?.band.color ?? Palette.textSecondary
+        }
+        return usedFraction == nil ? Palette.textSecondary : band.color(accent: accentColor)
+    }
 
     private var band: UsageBand {
         guard !isBlocked else { return .exhausted }
-        if let bandOverride { return bandOverride }
         return UsageBand.band(for: usedFraction ?? 0, watchLimit: watchLimit, criticalLimit: criticalLimit)
     }
     private var sweep: CGFloat { CGFloat(min(max(usedFraction ?? 0, 0), 1)) }
-    private var localSweep: CGFloat { Self.localSweep(for: localContextFraction) }
-    /// The floor is a drawing decision only — the number under the ring and in
-    /// the card stays true.
-    static func localSweep(for contextFraction: Double?) -> CGFloat {
-        guard let contextFraction else { return 1 }
-        return max(NotchLayout.localArcMinimumSweep, CGFloat(min(max(contextFraction, 0), 1)))
-    }
+    private var localSweep: CGFloat { CGFloat(min(max(localContextFraction ?? 1, 0), 1)) }
     private var primaryColor: Color {
         isStale ? Palette.textSecondary : band.color(accent: accentColor)
-    }
-
-    /// The ring's actual stroke colour: a continuous ramp when that style is chosen, falling
-    /// back to the discrete `band.color(accent:)` in hard-step mode and everywhere `band` itself
-    /// special-cases — blocked (no fraction is meaningful once a limit is spent) and an explicit
-    /// override from the caller (a deliberate discrete choice, not a reading to interpolate).
-    private var primaryRingColor: Color {
-        guard !isBlocked, bandOverride == nil, colorTransitionStyle == .ramp else {
-            return band.color(accent: accentColor)
-        }
-        return UsageBand.rampColor(for: usedFraction ?? 0, watchLimit: watchLimit, accent: accentColor)
     }
 
     private var weeklyBand: UsageBand {
@@ -86,7 +135,7 @@ struct ProviderRing: View {
     /// the more urgent fact, and the week is still a hover away. Outside there
     /// is no contest, so nothing is given up there.
     private var isWorking: Bool {
-        weeklyRing == .inside && activity != nil && activity?.state != .idle
+        !isExpanded && weeklyRing == .inside && activity != nil && activity?.state != .idle
     }
 
     var body: some View {
@@ -96,7 +145,8 @@ struct ProviderRing: View {
             // even when the percentage behind it has gone stale.
             ZStack {
                 Circle()
-                    .strokeBorder(Palette.ringTrack, lineWidth: NotchLayout.trackStroke)
+                    .inset(by: mainInset)
+                    .strokeBorder(Palette.ringTrack, lineWidth: mainTrackStroke)
 
                 if localPerformance != nil || localContextFraction != nil {
                     // Two facts on one ring: the arc is the context filling up,
@@ -107,28 +157,33 @@ struct ProviderRing: View {
                     // the quota colours would say something a local model has
                     // no quota to mean.
                     Circle()
-                        .inset(by: NotchLayout.progressStroke / 2)
+                        .inset(by: mainInset + mainTrackStroke / 2)
                         .trim(from: 0, to: localSweep)
                         .stroke(
                             localPerformance?.band.color ?? Palette.textSecondary,
-                            style: StrokeStyle(lineWidth: NotchLayout.progressStroke, lineCap: .round)
+                            style: StrokeStyle(lineWidth: mainProgressStroke, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
+                        .opacity(refreshReadingOpacity)
+                        .animation(.easeOut(duration: 0.2), value: isRefreshing)
                         .animation(NotchMotion.reading, value: localSweep)
                         .animation(NotchMotion.reading, value: localPerformance?.band)
                 } else if usedFraction != nil {
                     Circle()
-                        .inset(by: NotchLayout.trackStroke / 2)
+                        .inset(by: mainInset + mainTrackStroke / 2)
                         .trim(from: 0, to: sweep)
                         .stroke(
-                            primaryRingColor,
-                            style: StrokeStyle(lineWidth: NotchLayout.progressStroke, lineCap: .round)
+                            band.color(accent: accentColor),
+                            style: StrokeStyle(lineWidth: mainProgressStroke, lineCap: .round)
                         )
+                        // 以下保留旧版旋转读数的设计说明；现已由独立刷新短弧替代。
                         // Refreshing spins the reading itself rather than
                         // overlaying a separate spinner: the thing being
                         // refetched is the thing that should move, and a second
                         // arc on the same track only competes with it.
-                        .rotationEffect(.degrees(-90 + spin))
+                        .rotationEffect(.degrees(-90))
+                        .opacity(refreshReadingOpacity)
+                        .animation(.easeOut(duration: 0.2), value: isRefreshing)
                         // A ring that snaps to a new value reads as a glitch; one
                         // that sweeps reads as a measurement being taken.
                         .animation(NotchMotion.reading, value: sweep)
@@ -145,8 +200,8 @@ struct ProviderRing: View {
                 // the case this exists for, and painting them the same colour
                 // would hide it. Held slightly back in opacity so the headline
                 // stays the one the eye lands on first.
-                if let radius = weeklyRing.radius, weeklyFraction != nil, !isWorking {
-                    let inset = NotchLayout.ringDiameter / 2 - radius
+                if hasSecondary {
+                    let inset = secondaryInset
 
                     // A track of its own, for the same reason the headline has
                     // one: a week nobody has spent yet draws an arc of zero
@@ -156,7 +211,7 @@ struct ProviderRing: View {
                     Circle()
                         .inset(by: inset)
                         .stroke(Palette.ringTrack,
-                                style: StrokeStyle(lineWidth: NotchLayout.weeklyRingStroke,
+                                style: StrokeStyle(lineWidth: secondaryStroke,
                                                    dash: weeklyRingDashed ? [4, 2] : []))
                         .opacity(reduceTransparency ? 1 : 0.7)
 
@@ -164,36 +219,77 @@ struct ProviderRing: View {
                         .inset(by: inset)
                         .trim(from: 0, to: weeklySweep)
                         .stroke(
-                            weeklyRingColor,
-                            style: StrokeStyle(lineWidth: NotchLayout.weeklyRingStroke,
+                            weeklyBand.color(accent: accentColor),
+                            style: StrokeStyle(lineWidth: secondaryStroke,
                                                lineCap: weeklyRingDashed ? .butt : .round,
                                                dash: weeklyRingDashed ? [4, 2] : [])
                         )
-                        .opacity(reduceTransparency ? 1 : 0.8)
+                        .opacity((reduceTransparency ? 1 : 0.8) * refreshReadingOpacity)
+                        .animation(.easeOut(duration: 0.2), value: isRefreshing)
                         .rotationEffect(.degrees(-90))
                         .animation(NotchMotion.reading, value: weeklySweep)
                         .animation(NotchMotion.reading, value: weeklyBand)
                 }
 
-                ProviderGlyphView(glyph: glyph, customIconFilename: customIconFilename)
-                    .foregroundStyle(Palette.textPrimary)
-                    // A spent limit dims its glyph so the ring reads as "waiting".
-                    // Under reduce-transparency, boost opacity so it stays legible without low alpha.
-                    .opacity(band == .exhausted ? (reduceTransparency ? 0.7 : 0.35) : 1)
+                if let innerFraction {
+                    Circle()
+                        .inset(by: NotchLayout.independentRingInset)
+                        .stroke(Palette.ringTrack, lineWidth: NotchLayout.independentRingStroke)
+                    Circle()
+                        .inset(by: NotchLayout.independentRingInset)
+                        .trim(from: 0, to: CGFloat(min(max(innerFraction, 0), 1)))
+                        .stroke(UsageBand.band(for: innerFraction, watchLimit: watchLimit, criticalLimit: criticalLimit).color(accent: accentColor),
+                                style: StrokeStyle(lineWidth: NotchLayout.independentRingStroke, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .opacity(refreshReadingOpacity)
+                        .animation(.easeOut(duration: 0.2), value: isRefreshing)
+                        .animation(NotchMotion.reading, value: innerFraction)
+                }
+
+                if bot == nil {
+                    QueryIconView(icon: icon, fallback: glyph, isStale: isStale,
+                                  onDarkBackground: true, dimsStaleIcon: false)
+                        .foregroundStyle(Palette.textPrimary)
+                        // A spent limit dims its glyph so the ring reads as "waiting".
+                        // Under reduce-transparency, boost opacity so it stays legible without low alpha.
+                        .opacity(band == .exhausted ? (reduceTransparency ? 0.7 : 0.35) : 1)
+                }
             }
             .opacity(isStale ? (reduceTransparency ? 0.75 : 0.45) : 1)
+
+            if let bot {
+                BotMarkView(presentation: bot)
+                    .frame(width: NotchLayout.glyphSize * 1.4, height: NotchLayout.glyphSize * 1.4)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
+
+            if isRefreshing {
+                SpinningArc(color: refreshColor, arcFraction: 0.16, dashed: false,
+                            inset: mainInset + mainTrackStroke / 2, turns: !reduceMotion,
+                            lineWidth: mainProgressStroke, duration: 0.85, startAngle: .pi / 2)
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+            }
 
             if let activity, activity.state != .idle {
                 ActivityArc(summary: activity)
             }
+            if activity?.state == .waiting {
+                Image(systemName: "questionmark.circle.fill")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Palette.activityWaiting)
+                    .background(Circle().fill(Palette.notch))
+                    .offset(x: diameter / 2 - 4, y: -diameter / 2 + 4)
+                    .accessibilityLabel(Text("Needs your answer"))
+            }
         }
-        .frame(width: NotchLayout.ringDiameter, height: NotchLayout.ringDiameter)
+        .frame(width: diameter, height: diameter)
         // Pressed in while it works, and released when the answer lands. The
         // ring is the button, so the ring is what should feel pressed.
-        .scaleEffect(isRefreshing ? 0.93 : 1)
-        .animation(.spring(response: 0.3, dampingFraction: 0.62), value: isRefreshing)
-        .onChange(of: isRefreshing) { _, refreshing in
-            guard refreshing, !reduceMotion else { return }
+        .scaleEffect(isRefreshing && !reduceMotion ? 0.93 : 1)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.62), value: isRefreshing)
+            // 以下保留旧版有限旋转的说明；现在通过移除动画层结束刷新动画。
             // Exactly one turn, and it stops by itself.
             //
             // The obvious spelling is a `repeatForever` linear spin started on
@@ -206,10 +302,6 @@ struct ProviderRing: View {
             // A single finite turn has no cancellation problem at all: 360° is
             // the same angle as 0°, so it lands exactly where the reading
             // belongs. It eases out, so it settles rather than stopping dead.
-            withAnimation(.timingCurve(0.32, 0, 0.14, 1, duration: 0.95)) {
-                spin += 360
-            }
-        }
     }
 }
 
@@ -281,54 +373,69 @@ struct ProviderCell: View {
     let snapshot: ProviderSnapshot
     var activity: ActivitySummary?
     var isRefreshing: Bool = false
+    var bot: BotPresentation?
     var weeklyRing: WeeklyRing = .off
-    /// Whether the reading adds the weekly ring's percentage, as "30%/70%".
-    var showsWeeklyReading: Bool = false
-    /// Whether the percentage is drawn under the ring.
-    ///
-    /// Off where the cell sits in a menu-bar strip beside the hardware notch:
-    /// the strip is the menu bar's height, which one ring already fills, and a
-    /// second line would be drawn in the bezel. The reading is still a hover
-    /// away in the card.
-    var showsReading: Bool = true
+    var codeSwitchQuotaRatiosEnabled: Bool = false
+    var independentInnerRing: Bool = false
+    var cellRingDiameter: CGFloat = NotchLayout.ringDiameter
+    var now: Date = Date()
 
-    /// A dash, not "0%": nothing read is not the same as nothing used.
-    private var readingText: String {
-        guard snapshot.hasReading else { return "—" }
-        guard let weekly = weeklyReading else { return snapshot.headlineText }
-        return "\(snapshot.headlineText)/\(Percent.text(for: weekly))%"
+    private struct QuotaReading {
+        let snapshot: ProviderSnapshot
+        let ratios: CodeSwitchQuotaRings?
+        let inner: CodeSwitchQuotaRings.Reading?
+
+        var mainFraction: Double? { ratios?.main.fraction ?? snapshot.ringFraction }
+        var secondaryFraction: Double? { snapshot.secondaryWindow?.usedFraction }
     }
 
-    /// What the weekly ring draws, when it and its reading are on. The pair
-    /// mirrors the two rings, so with the weekly limit as the main ring or the
-    /// daily pace ring the second number is the session, as the thin ring is.
-    ///
-    /// Only after a percentage: a count or a cost with a percentage after it
-    /// would read as one quantity, and it is not.
-    private var weeklyReading: Double? {
-        guard showsWeeklyReading, weeklyRing != .off, snapshot.localModel == nil,
-              snapshot.usedFraction != nil, snapshot.headline?.prefersUsedText != true
-        else { return nil }
-        return snapshot.weeklyFraction
+    private var quotaReading: QuotaReading {
+        let ratios = CodeSwitchQuotaRings.reading(for: snapshot, enabled: codeSwitchQuotaRatiosEnabled, now: now)
+        return QuotaReading(
+            snapshot: independentInnerRing ? IndependentQuotaRing.originalQuotas(in: snapshot) : snapshot,
+            ratios: independentInnerRing ? nil : ratios,
+            inner: independentInnerRing ? IndependentQuotaRing.reading(for: snapshot, ratios: ratios) : nil)
+    }
+
+    var innerReading: CodeSwitchQuotaRings.Reading? { quotaReading.inner }
+    var displayedMainFraction: Double? { quotaReading.mainFraction }
+    var displayedSecondaryFraction: Double? { quotaReading.secondaryFraction }
+
+    /// A dash, not "0%": nothing read is not the same as nothing used.
+    private func makeReadingText(_ reading: QuotaReading) -> String {
+        if snapshot.hasReading, let fraction = reading.inner?.fraction ?? reading.ratios?.main.fraction {
+            return Percent.text(for: fraction) + "%"
+        }
+        return snapshot.hasReading ? reading.snapshot.headlineText : "—"
     }
 
     var body: some View {
+        let reading = quotaReading
+        let cellDiameter = max(cellRingDiameter, NotchLayout.ringDiameter
+            + (independentInnerRing ? NotchLayout.independentRingGrowth : 0))
+        let isLocal = snapshot.localModel != nil
+        let cellSize = NotchLayout.cellSize(ringDiameter: cellDiameter, isLocal: isLocal)
+        let readingText = makeReadingText(reading)
+        let ringText = makeRingText(reading)
         VStack(spacing: NotchLayout.ringLabelGap) {
             ProviderRing(
-                usedFraction: snapshot.localModel == nil && snapshot.hasReading ? snapshot.ringFraction : nil,
+                usedFraction: snapshot.localModel == nil && snapshot.hasReading
+                    ? reading.mainFraction : nil,
                 glyph: snapshot.glyph,
                 customIconFilename: snapshot.customIconFilename,
                 isStale: snapshot.status.isStale || !snapshot.hasReading,
                 isBlocked: snapshot.block != nil,
                 activity: activity,
-                isRefreshing: isRefreshing,
+                isRefreshing: isRefreshing, bot: bot, icon: snapshot.icon,
                 localPerformance: snapshot.localPerformance,
                 localContextFraction: snapshot.localContextFraction,
-                weeklyFraction: snapshot.hasReading ? snapshot.weeklyFraction : nil,
+                weeklyFraction: snapshot.hasReading
+                    ? reading.secondaryFraction : nil,
                 weeklyRing: weeklyRing,
-                bandOverride: snapshot.bandOverride
+                innerFraction: reading.inner?.fraction,
+                expanded: independentInnerRing
             )
-            if showsReading {
+            .frame(width: cellDiameter, height: cellDiameter)
             Text(readingText)
                 .font(snapshot.hasReading && weeklyReading != nil ? Typography.percentPair : Typography.percent)
                 .foregroundStyle(snapshot.showsLocalPerformance && snapshot.localPerformance == nil
@@ -336,24 +443,63 @@ struct ProviderCell: View {
                 // Keep local speeds inside the ring's column so longer units
                 // cannot consume the notch's existing side margins.
                 .lineLimit(1)
-                .minimumScaleFactor(snapshot.localModel == nil ? 1 : 0.5)
-                .fixedSize(horizontal: snapshot.localModel == nil, vertical: false)
-                .frame(width: snapshot.localModel == nil ? nil : NotchLayout.ringDiameter,
+                .minimumScaleFactor(snapshot.localModel == nil ? 0.65 : 0.5)
+                .fixedSize(horizontal: false, vertical: false)
+                .frame(width: NotchLayout.cellLabelWidth(isLocal: isLocal),
                        height: NotchLayout.percentLineHeight)
                 .contentTransition(.numericText())
                 .animation(NotchMotion.reading, value: readingText)
             }
         }
-        .frame(height: NotchLayout.cellExtent)
+        .frame(width: cellSize.width, height: cellSize.height)
+        .help(ringText ?? snapshot.headline?.summary ?? snapshot.statusMessage ?? snapshot.displayName)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityText)
+        .accessibilityLabel(makeAccessibilityText(ringText: ringText, readingText: readingText))
     }
 
     /// Everything the cell says, as one sentence for VoiceOver and the tests.
     var accessibilityText: String {
+        let reading = quotaReading
+        return makeAccessibilityText(ringText: makeRingText(reading), readingText: makeReadingText(reading))
+    }
+
+    private func makeAccessibilityText(ringText: String?, readingText: String) -> String {
         snapshot.localModel.map {
             "\($0.brand.map { "\($0.displayName), " } ?? "")\($0.name), \(snapshot.displayName) local, \(snapshot.showsLocalPerformance ? (snapshot.localPerformance.map { "Last generation speed \($0.speedText), \($0.band.label)" } ?? "Speed not measured") : "Loaded"), \($0.detail)\(localActivityText)\(localLedgerText)"
-        } ?? "\(snapshot.displayName), \(readingText)"
+        } ?? "\(snapshot.displayName), \(ringText ?? readingText)"
+    }
+
+    var quotaRingText: String? {
+        makeRingText(quotaReading)
+    }
+
+    private func makeRingText(_ reading: QuotaReading) -> String? {
+        if independentInnerRing {
+            let original = reading.snapshot
+            var parts = original.headline.map { ["\(L10n.t("Main ring")): \($0.label), \($0.summary)"] } ?? []
+            if weeklyRing != .off, let secondary = original.secondaryWindow {
+                parts.append("\(L10n.t("Secondary quota ring")): \(secondary.label), \(secondary.summary)")
+            }
+            if let innerReading = reading.inner {
+                parts.append("\(L10n.t("Independent inner ring")): \(innerReading.summary)")
+            }
+            return snapshot.hasReading ? parts.joined(separator: "; ") : nil
+        }
+        if let ratios = reading.ratios, snapshot.hasReading {
+            let main = "\(L10n.t("Main ring")): \(ratios.main.summary)"
+            guard weeklyRing != .off,
+                  let secondary = ratios.secondary,
+                  !(weeklyRing == .inside && activity != nil && activity?.state != .idle) else { return main }
+            let position = weeklyRing == .inside ? L10n.t("Inner ring") : L10n.t("Outer ring")
+            return "\(main); \(position): \(secondary.summary)"
+        }
+        guard weeklyRing != .off, snapshot.hasReading,
+              let secondary = snapshot.secondaryWindow else { return nil }
+        if weeklyRing == .inside, let activity, activity.state != .idle { return nil }
+        let main = snapshot.headline.map { "\(L10n.t("Main ring")): \($0.label), \($0.summary)" }
+        let position = weeklyRing == .inside ? L10n.t("Inner ring") : L10n.t("Outer ring")
+        return [main, "\(position): \(secondary.label), \(secondary.summary)"]
+            .compactMap { $0 }.joined(separator: "; ")
     }
 
     /// What the model is doing, the way the tooltip's header says it.
@@ -390,12 +536,20 @@ private struct SpinningArc: NSViewRepresentable {
     let dashed: Bool
     let inset: CGFloat
     let turns: Bool
+    var lineWidth: CGFloat = NotchLayout.activityStroke
+    var duration: CFTimeInterval = SpinningArcView.turnDuration
+    var startAngle: CGFloat = 0
 
     func makeNSView(context: Context) -> SpinningArcView { SpinningArcView() }
 
     func updateNSView(_ view: SpinningArcView, context: Context) {
         view.configure(color: NSColor(color), arcFraction: arcFraction,
-                       dashed: dashed, inset: inset, turns: turns)
+                       dashed: dashed, inset: inset, turns: turns,
+                       lineWidth: lineWidth, duration: duration, startAngle: startAngle)
+    }
+
+    static func dismantleNSView(_ view: SpinningArcView, coordinator: ()) {
+        view.arc.removeAnimation(forKey: SpinningArcView.animationKey)
     }
 }
 
@@ -407,6 +561,8 @@ final class SpinningArcView: NSView {
     private var color: NSColor = .white
     private var inset: CGFloat = 0
     private var turns = true
+    private var duration: CFTimeInterval = SpinningArcView.turnDuration
+    private var startAngle: CGFloat = 0
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -423,12 +579,20 @@ final class SpinningArcView: NSView {
     /// Decoration only: clicks belong to the ring and the notch beneath it.
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func configure(color: NSColor, arcFraction: CGFloat, dashed: Bool, inset: CGFloat, turns: Bool) {
+    func configure(color: NSColor, arcFraction: CGFloat, dashed: Bool, inset: CGFloat, turns: Bool,
+                   lineWidth: CGFloat = NotchLayout.activityStroke,
+                   duration: CFTimeInterval = SpinningArcView.turnDuration, startAngle: CGFloat = 0) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         self.color = color
         self.inset = inset
         self.turns = turns
+        if self.duration != duration {
+            arc.removeAnimation(forKey: Self.animationKey)
+        }
+        self.duration = duration
+        self.startAngle = startAngle
+        arc.lineWidth = lineWidth
         arc.strokeEnd = arcFraction
         arc.lineDashPattern = dashed
             ? [0.01, NSNumber(value: Double(NotchLayout.activityStroke * 2.2))]
@@ -471,7 +635,7 @@ final class SpinningArcView: NSView {
         let radius = max(0, min(bounds.width, bounds.height) / 2 - inset)
         let path = CGMutablePath()
         path.addArc(center: CGPoint(x: bounds.midX, y: bounds.midY), radius: radius,
-                    startAngle: 0, endAngle: -2 * .pi, clockwise: true)
+                    startAngle: startAngle, endAngle: startAngle - 2 * .pi, clockwise: true)
         arc.path = path
     }
 
@@ -486,7 +650,8 @@ final class SpinningArcView: NSView {
         let turn = CABasicAnimation(keyPath: "transform.rotation.z")
         turn.fromValue = 0
         turn.toValue = -2 * Double.pi
-        turn.duration = Self.turnDuration
+        turn.duration = duration
+        turn.timingFunction = CAMediaTimingFunction(name: .linear)
         turn.repeatCount = .infinity
         turn.isRemovedOnCompletion = false
         arc.add(turn, forKey: Self.animationKey)

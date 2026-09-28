@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 CatalogCoverageTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/CatalogCoverageTests.swift
+ */
 import XCTest
 
 /// The catalog's source language is English. A missing translation in any
@@ -57,112 +66,6 @@ final class CatalogCoverageTests: XCTestCase {
                 catalog.strings[key]?.localizations?["uk"]?.stringUnit?.value,
                 value,
                 "missing Ukrainian translation for \(key)"
-            )
-        }
-    }
-
-    func testSimplifiedChineseCoreCopyIsTranslated() throws {
-        let catalog = try loadCatalog().json
-        let expected = [
-            "just now": "刚刚",
-            "Resets in %lld min": "%lld 分钟后重置",
-            "%lld%% Used · %lld%% left": "%lld%% 已用 · %lld%% 剩余",
-            "Always show": "始终显示",
-            "Settings…": "设置…",
-            "Sign in to %@": "登录 %@",
-            "%lld%% of its %@ limit used.": "已用其 %2$@ 额度的 %1$lld%%。",
-            "Ready on %@:%d": "已在 %@:%d 就绪",
-            "Expires in %@": "%@ 后过期"
-        ]
-
-        for (key, value) in expected {
-            XCTAssertEqual(
-                catalog.strings[key]?.localizations?["zh-Hans"]?.stringUnit?.value,
-                value,
-                "missing Simplified Chinese translation for \(key)"
-            )
-        }
-    }
-
-    func testTraditionalChineseCoreCopyIsTranslated() throws {
-        let catalog = try loadCatalog().json
-        let expected = [
-            "just now": "剛剛",
-            "Resets in %lld min": "%lld 分鐘後重置",
-            "%lld%% Used · %lld%% left": "%lld%% 已用 · %lld%% 剩餘",
-            "Always show": "始終顯示",
-            "Settings…": "設定…",
-            "Sign in to %@": "登入 %@",
-            "%lld%% of its %@ limit used.": "已用其 %2$@ 額度的 %1$lld%%。"
-        ]
-
-        for (key, value) in expected {
-            XCTAssertEqual(
-                catalog.strings[key]?.localizations?["zh-Hant"]?.stringUnit?.value,
-                value,
-                "missing Traditional Chinese translation for \(key)"
-            )
-        }
-    }
-
-    func testKoreanCoreCopyIsTranslated() throws {
-        let catalog = try loadCatalog().json
-        let expected = [
-            "just now": "방금",
-            "Resets in %lld min": "%lld분 후 재설정",
-            "%lld%% Used · %lld%% left": "%lld%% 사용 · %lld%% 남음",
-            "Always show": "항상 표시",
-            "Settings…": "설정…",
-            "Watch limit": "주의 표시 기준",
-            "Critical limit": "위험 표시 기준"
-        ]
-        for (key, value) in expected {
-            XCTAssertEqual(
-                catalog.strings[key]?.localizations?["ko"]?.stringUnit?.value,
-                value,
-                "missing Korean translation for \(key)"
-            )
-        }
-    }
-
-    func testUzbekCoreCopyIsTranslated() throws {
-        let catalog = try loadCatalog().json
-        let expected = [
-            "just now": "hozirgina",
-            "Resets in %lld min": "%lld daqiqadan soʻng yangilanadi",
-            "%lld%% Used · %lld%% left": "%lld%% ishlatilgan · %lld%% qoldi",
-            "Always show": "Doimo",
-            "Settings…": "Sozlamalar…",
-            "Sign in to %@": "%@ ga kirish",
-            "%lld%% of its %@ limit used.": "%2$@ limitining %1$lld%% ishlatilgan."
-        ]
-
-        for (key, value) in expected {
-            XCTAssertEqual(
-                catalog.strings[key]?.localizations?["uz"]?.stringUnit?.value,
-                value,
-                "missing Uzbek translation for \(key)"
-            )
-        }
-    }
-
-    func testTurkishCoreCopyIsTranslated() throws {
-        let catalog = try loadCatalog().json
-        let expected = [
-            "just now": "az önce",
-            "Resets in %lld min": "%lld dk içinde sıfırlanır",
-            "%lld%% Used · %lld%% left": "%%%lld kullanıldı · %%%lld kaldı",
-            "Always show": "Her zaman",
-            "Settings…": "Ayarlar…",
-            "Sign in to %@": "Giriş yap: %@",
-            "%lld%% of its %@ limit used.": "%2$@ limitinin %%%1$lld kadarı kullanıldı."
-        ]
-
-        for (key, value) in expected {
-            XCTAssertEqual(
-                catalog.strings[key]?.localizations?["tr"]?.stringUnit?.value,
-                value,
-                "missing Turkish translation for \(key)"
             )
         }
     }

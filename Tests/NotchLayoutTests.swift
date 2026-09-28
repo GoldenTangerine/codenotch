@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 NotchLayoutTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/NotchLayoutTests.swift
+ */
 import AppKit
 import XCTest
 @testable import Codenotch
@@ -405,6 +414,7 @@ final class SettingsOrbTests: XCTestCase {
     func testCameraNotchHandlesMirrorEachOther() {
         let model = NotchViewModel()
         model.edge = .top
+        model.hardwareNotch = HardwareNotch(width: 220, height: 37)
 
         XCTAssertEqual(model.moveAlong + model.orbAlong, model.shapeLength, accuracy: 0.001,
                        "The buttons must sit equally far from the two ends")

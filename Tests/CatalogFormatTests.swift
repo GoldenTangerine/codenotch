@@ -1,3 +1,12 @@
+/**
+@name: 上游功能同步
+@Descripttion: 提供上游新增功能或对应回归验证。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-17 16:29:47
+@LastEditTime: 2026-09-17 16:29:47
+@FilePath: Tests/CatalogFormatTests.swift
+*/
 import Foundation
 import XCTest
 @testable import Codenotch
@@ -124,34 +133,6 @@ final class CatalogFormatTests: XCTestCase {
     /// The crash itself, end to end, in the language that had it.
     func testTheEightyPercentAlertBodyFormatsInSimplifiedChinese() {
         let body = L10n.t("\(99)% of its \("weekly") limit used.", locale: Locale(identifier: "zh-Hans"))
-        XCTAssertTrue(body.contains("99"), body)
-        XCTAssertTrue(body.contains("weekly"), body)
-    }
-
-    func testTheEightyPercentAlertBodyFormatsInTraditionalChinese() {
-        let body = L10n.t("\(99)% of its \("weekly") limit used.", locale: Locale(identifier: "zh-Hant"))
-        XCTAssertTrue(body.contains("99"), body)
-        XCTAssertTrue(body.contains("weekly"), body)
-    }
-    func testTheEightyPercentAlertBodyFormatsInKorean() {
-        let body = L10n.t("\(99)% of its \("weekly") limit used.", locale: Locale(identifier: "ko"))
-        XCTAssertTrue(body.contains("99"), body)
-        XCTAssertTrue(body.contains("weekly"), body)
-    }
-
-
-    /// Uzbek puts the limit's name before the number, so its translation is
-    /// the numbered kind — `%2$@` then `%1$lld`. If the positions were ever
-    /// dropped, `String(format:)` would read 99 as an object and crash.
-    func testTheEightyPercentAlertBodyFormatsInUzbek() {
-        let body = L10n.t("\(99)% of its \("weekly") limit used.", locale: Locale(identifier: "uz"))
-        XCTAssertTrue(body.contains("99"), body)
-        XCTAssertTrue(body.contains("weekly"), body)
-    }
-
-    /// Turkish also names the limit before the number — `%2$@` then `%1$lld`.
-    func testTheEightyPercentAlertBodyFormatsInTurkish() {
-        let body = L10n.t("\(99)% of its \("weekly") limit used.", locale: Locale(identifier: "tr"))
         XCTAssertTrue(body.contains("99"), body)
         XCTAssertTrue(body.contains("weekly"), body)
     }

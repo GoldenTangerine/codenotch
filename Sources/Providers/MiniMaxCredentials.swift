@@ -1,3 +1,12 @@
+/**
+ @name: MiniMax 凭据
+ @Descripttion: 管理 MiniMax Coding Plan 的密钥、会话 Cookie 与区域配置。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 17:40:57
+ @LastEditTime: 2026-09-14 17:40:57
+ @FilePath: Sources/Providers/MiniMaxCredentials.swift
+ */
 import Foundation
 
 /// Which MiniMax console a key or cookie belongs to.
@@ -6,7 +15,7 @@ import Foundation
 /// (or an international session cookie sent to www.minimaxi.com) answers as an
 /// auth failure, which would read as a signed-out plan that is merely pointed
 /// at the other country.
-enum MiniMaxRegion: String, Codable, CaseIterable {
+enum MiniMaxRegion: String, Codable, CaseIterable, Hashable {
     /// api.minimax.io / platform.minimax.io
     case international
     /// api.minimaxi.com / platform.minimaxi.com
@@ -34,6 +43,13 @@ enum MiniMaxRegion: String, Codable, CaseIterable {
             return URL(string: "https://www.minimax.io/v1/api/openplatform/coding_plan/remains")!
         case .china:
             return URL(string: "https://www.minimaxi.com/v1/api/openplatform/coding_plan/remains")!
+        }
+    }
+
+    var websiteOrigin: URL {
+        switch self {
+        case .international: return URL(string: "https://www.minimax.io")!
+        case .china:         return URL(string: "https://www.minimaxi.com")!
         }
     }
 
@@ -112,12 +128,15 @@ enum MiniMaxCredentials {
     /// `MINIMAX_API_KEY` over the keychain: macOS env lookup is case-sensitive,
     /// so the mixed-case name MiniMax documents must be checked as itself or
     /// a generic pay-as-you-go key in front of it would report the wrong product.
+    /// A saved Coding Plan key takes precedence over the generic environment
+    /// fallback; a pay-as-you-go key must never hide a usable saved key.
     static func loadAPIKey(environment: [String: String] = ProcessInfo.processInfo.environment,
                            keychain: () -> String? = cachedAPIKey) -> String? {
-        for key in [apiKeyEnvironment, apiKeyEnvironmentAlias, apiKeyEnvironmentFallback] {
-            if let value = nonEmpty(environment[key]) { return value }
+        for key in [apiKeyEnvironment, apiKeyEnvironmentAlias] {
+            if let value = MiniMaxProvider.codingPlanToken(from: environment[key]) { return value }
         }
-        return keychain()
+        if let stored = MiniMaxProvider.codingPlanToken(from: keychain()) { return stored }
+        return MiniMaxProvider.codingPlanToken(from: environment[apiKeyEnvironmentFallback])
     }
 
     /// Whether a key is available, judged without a data read: the
@@ -129,10 +148,13 @@ enum MiniMaxCredentials {
             || KeychainItem.modifiedAt(service: apiKeyService, account: keychainAccount) != nil
     }
 
-    static func storeAPIKey(_ key: String) {
-        guard let trimmed = nonEmpty(key) else { return }
+    @discardableResult
+    static func storeAPIKey(_ key: String, keychain: (String) -> Bool = {
+        KeychainItem.store(service: apiKeyService, account: keychainAccount, value: $0)
+    }) -> Bool {
+        guard let trimmed = MiniMaxProvider.codingPlanToken(from: key) else { return false }
         apiKeyCache.forget()
-        _ = KeychainItem.store(service: apiKeyService, account: keychainAccount, value: trimmed)
+        return keychain(trimmed)
     }
 
     static func deleteAPIKey() {
@@ -150,10 +172,13 @@ enum MiniMaxCredentials {
         return keychain().flatMap(normalizedCookieHeader(from:))
     }
 
-    static func storeCookieHeader(_ raw: String) {
-        guard let header = normalizedCookieHeader(from: raw) else { return }
+    @discardableResult
+    static func storeCookieHeader(_ raw: String, keychain: (String) -> Bool = {
+        KeychainItem.store(service: cookieService, account: keychainAccount, value: $0)
+    }) -> Bool {
+        guard let header = normalizedCookieHeader(from: raw) else { return false }
         cookieCache.forget()
-        _ = KeychainItem.store(service: cookieService, account: keychainAccount, value: header)
+        return keychain(header)
     }
 
     static func deleteCookieHeader() {
@@ -171,11 +196,11 @@ enum MiniMaxCredentials {
         let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        if let cookie = cookieFromCurlFlags(trimmed) { return cookie }
+        if let cookie = cookieFromCurlFlags(trimmed) { return validCookieHeader(cookie) }
         let headerLine = cookieFromBareHeaderLine(trimmed)
-        if headerLine.found { return headerLine.value }
+        if headerLine.found { return validCookieHeader(headerLine.value) }
         if looksLikeCurl(trimmed) { return nil }
-        return trimmed
+        return validCookieHeader(trimmed)
     }
 
     /// Identity for the settings row when a key or cookie is actually there.
@@ -200,6 +225,15 @@ enum MiniMaxCredentials {
     }
 
     // MARK: - Private
+
+    private static func validCookieHeader(_ value: String?) -> String? {
+        guard let value, !value.contains(where: \.isNewline),
+              let first = value.split(separator: ";", maxSplits: 1).first,
+              let equals = first.firstIndex(of: "="),
+              !first[..<equals].trimmingCharacters(in: .whitespaces).isEmpty
+        else { return nil }
+        return value
+    }
 
     private static func isCookiePresent(environment: [String: String]) -> Bool {
         loadCookieHeader(environment: environment, keychain: { nil }) != nil

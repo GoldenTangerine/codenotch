@@ -1,3 +1,12 @@
+/**
+ @name: 会话通知转换
+ @Descripttion: 从状态变化和明确的 hooks 事件生成去重通知。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 12:03:00
+ @LastEditTime: 2026-09-09 12:03:00
+ @FilePath: Sources/Sessions/SessionCompletionWatcher.swift
+ */
 import Foundation
 
 /// Notices the moment an agent stops working.
@@ -13,10 +22,19 @@ import Foundation
 struct SessionCompletionWatcher {
     /// Why a session is being announced.
     enum Reason: Equatable {
+        case started
         /// Ran to the end of its turn.
         case finished
         /// Stopped to ask something, and is waiting on an answer.
         case blocked
+
+        var priority: Int {
+            switch self {
+            case .blocked: return 2
+            case .finished: return 1
+            case .started: return 0
+            }
+        }
     }
 
     struct Event: Equatable {
@@ -24,6 +42,46 @@ struct SessionCompletionWatcher {
         let reason: Reason
         /// Which provider's ring it belongs to, so the notch can point at it.
         let providerID: String
+
+        func isCurrent(in sessions: [String: [AgentSession]]) -> Bool {
+            sessions.values.contains { live in
+                live.contains { current in
+                    guard current.id == session.id, current.state == session.state else { return false }
+                    // A later turn can also be busy by delivery time; only the
+                    // hook notice that is still current may open its ring.
+                    return session.hookSessionKey == nil || current.noticeID == session.noticeID
+                }
+            }
+        }
+    }
+
+    struct WaitingProtection {
+        let event: Event
+        let until: Date
+
+        init?(event: Event, presented: Bool, duration: TimeInterval, now: Date = Date()) {
+            guard event.reason == .blocked, presented else { return nil }
+            self.event = event
+            self.until = now.addingTimeInterval(duration)
+        }
+
+        func isActive(in sessions: [String: [AgentSession]], now: Date) -> Bool {
+            now < until && event.isCurrent(in: sessions)
+        }
+    }
+
+    static func nextAnnouncement(
+        _ events: [Event], sessions: [String: [AgentSession]],
+        protecting waiting: WaitingProtection? = nil, now: Date = Date(), enabled: (Reason) -> Bool
+    ) -> Event? {
+        let protectsWaiting = waiting?.isActive(in: sessions, now: now) == true
+        return events.sorted {
+            if $0.reason != $1.reason { return $0.reason.priority > $1.reason.priority }
+            return $0.session.since > $1.session.since
+        }.first { event in
+            !(protectsWaiting && event.reason == .started)
+                && enabled(event.reason) && event.isCurrent(in: sessions)
+        }
     }
 
     /// The last state seen for every session, keyed by provider and session id.
@@ -35,14 +93,29 @@ struct SessionCompletionWatcher {
     /// on every start — including a restart in the middle of the night after a
     /// Sparkle update. The first pass only records.
     private var hasSeeded = false
+    private var announced: [String: String] = [:]
 
     /// Feed the monitors' current view; get back what just changed.
     mutating func absorb(_ sessions: [String: [AgentSession]]) -> [Event] {
         var current: [String: AgentSession.State] = [:]
         var events: [Event] = []
+        var liveHooks: Set<String> = []
 
         for (providerID, live) in sessions {
             for session in live {
+                if session.hookSessionKey != nil {
+                    liveHooks.insert(session.id)
+                    // Retain Claude's native identity while hooks own the
+                    // display, so recovery can still detect a missed stop.
+                    if session.id.hasPrefix("hook:claude:"), let pid = session.processID {
+                        current["\(providerID)\u{1}claude.\(pid)"] = session.state
+                    }
+                    if let token = session.noticeID, let reason = session.notice, announced[session.id] != token {
+                        announced[session.id] = token
+                        events.append(Event(session: session, reason: reason, providerID: providerID))
+                    }
+                    continue
+                }
                 let key = "\(providerID)\u{1}\(session.id)"
                 current[key] = session.state
                 guard hasSeeded, let was = previous[key] else { continue }
@@ -56,6 +129,7 @@ struct SessionCompletionWatcher {
         // because quitting Claude Code mid-turn is an ordinary thing to do —
         // and a chime for a window that is already gone points at nothing.
         previous = current
+        announced = announced.filter { liveHooks.contains($0.key) }
         hasSeeded = true
         // Newest first, so the one that just landed is the one a single click
         // reaches.

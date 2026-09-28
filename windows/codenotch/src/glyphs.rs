@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · glyphs
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: windows/codenotch/src/glyphs.rs
+ */
 //! Provider glyphs.
 //!
 //! Rule: **no vendor logo is drawn by hand here**; only existing artwork is used, in this order:
@@ -8,7 +17,9 @@
 //!
 //! None of those → the page falls back to a letter.
 //! SVGs are inlined into the DOM as text (`fill="currentColor"` follows the CSS white/dimmed state);
-//! PNGs and app icons go through <img>. Ids match the page and upstream: claude / codex / cursor / grok / gemini / opencode.
+//! 旧版说明保留；本次扩展后的行为见下方实现。
+//! PNGs and app icons go through <img>. Ids match the page and upstream: claude / codex / cursor / gemini.
+//! PNGs and app icons go through <img>. Ids match the page and upstream: claude / codex / cursor / grok / gemini.
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -26,10 +37,10 @@ pub struct Glyph {
     pub source: String,
 }
 
-pub const IDS: [&str; 6] = ["claude", "codex", "cursor", "grok", "gemini", "opencode"];
+pub const IDS: [&str; 5] = ["claude", "codex", "cursor", "grok", "gemini"];
 
 /// Built-in artwork (@lobehub/icons-static-svg, MIT): the OpenAI mark for codex (matching upstream's glyph choice), the Antigravity mark for gemini
-const BUILTIN: [(&str, &str); 6] = [
+const BUILTIN: [(&str, &str); 5] = [
     ("claude", include_str!("../glyphs/claude.svg")),
     ("codex", include_str!("../glyphs/codex.svg")),
     ("cursor", include_str!("../glyphs/cursor.svg")),
@@ -309,7 +320,7 @@ pub fn collect() -> HashMap<String, Glyph> {
 /// For doctor
 pub fn probe() -> String {
     let m = collect();
-    let mut lines = vec![format!("glyph directory: {} (drop claude/codex/cursor/grok/gemini/opencode .svg or .png files here)", user_dir().display())];
+    let mut lines = vec![format!("glyph directory: {} (drop claude/codex/cursor/grok/gemini .svg or .png files here)", user_dir().display())];
     for id in IDS {
         lines.push(match m.get(id) {
             Some(g) => format!("  {id}: {} ← {}", g.kind, g.source),

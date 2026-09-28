@@ -1,3 +1,12 @@
+/**
+ @name: Claude 用量查询
+ @Descripttion: 优先使用 Claude CLI 并回退到 OAuth 用量查询。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:05:58
+ @LastEditTime: 2026-09-08 22:05:58
+ @FilePath: Sources/Providers/ClaudeOAuthProvider.swift
+ */
 import Foundation
 import os
 
@@ -210,20 +219,8 @@ actor ClaudeOAuthProvider: UsageProvider {
            let windows = await cliWindows() {
             return snapshot(windows: windows, plan: lastCLIPlan, resetCredits: resets)
         }
-        var result = try await fetchFromKeychain()
-        if result.resetCredits == nil { result.resetCredits = resets }
-        return result
+        return try await fetchFromKeychain()
     }
-
-    /// The CLI's estimate is "based on local sessions on this machine", all
-    /// of them, so it is only the truth about one login when there is one.
-    nonisolated static func cliEstimateApplies(slug: String?, loginCount: Int) -> Bool {
-        slug == nil && loginCount <= 1
-    }
-
-    /// Not under test: the suite runs on whatever Mac hosts it, and its CLI
-    /// stubs must be reached whatever that Mac's logins are.
-    private static let loginCount: Int = Runtime.isUnderTest ? 1 : ClaudeProfile.discover().count
 
     private func fetchFromKeychain() async throws -> ProviderSnapshot {
         if Self.shouldHoldOff(until: retryNoEarlierThan, slack: backoffSlack),
@@ -332,12 +329,32 @@ actor ClaudeOAuthProvider: UsageProvider {
             return nil
         }
 
-
-        // The caller rejects expired usage windows separately: the unused
-        // reset grant can still be current when a five-hour window has ended.
+        guard reading.isFresh(at: now, within: desktopFreshness) else {
+            lastDesktopMiss = now
+            Log.usage.debug("\(self.id, privacy: .public): claude desktop snapshot is too old to show as live")
+            return nil
+        }
+        // Inside the freshness window but describing a period that has already
+        // ended. Desktop can hold such an entry for half an hour, which is long
+        // enough to hide a reset entirely.
+        guard !Self.hasExpiredWindow(reading.windows, at: now) else {
+            lastDesktopMiss = now
+            Log.usage.debug("\(self.id, privacy: .public): claude desktop snapshot describes a window that has already reset")
+            return nil
+        }
         lastDesktopMiss = nil
         Log.usage.debug("\(self.id, privacy: .public): read \(reading.windows.count) windows from the claude desktop cache entry \(reading.entry.lastPathComponent, privacy: .public)")
         return reading
+    }
+
+    /// Whether any window in a reading names a reset time that has already
+    /// passed — which makes the whole reading a description of a period that is
+    /// over, however recently it was written.
+    static func hasExpiredWindow(_ windows: [LimitWindow], at now: Date) -> Bool {
+        windows.contains { window in
+            guard let resetsAt = window.resetsAt else { return false }
+            return resetsAt <= now
+        }
     }
 
     /// Whether any window in a reading names a reset time that has already
@@ -442,8 +459,7 @@ actor ClaudeOAuthProvider: UsageProvider {
                 L10n.t("Claude answered, but listed no usage limits for this account. Some Enterprise and team plans don't report them.")
             )
         }
-        return snapshot(windows: windows, plan: credentials?.subscriptionType,
-                        resetCredits: payload.cedarEmber?.credits(at: Date()))
+        return snapshot(windows: windows, plan: credentials?.subscriptionType)
     }
 
     private func currentToken() throws -> String {

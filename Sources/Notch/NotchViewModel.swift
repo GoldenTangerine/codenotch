@@ -1,9 +1,133 @@
+/**
+ @name: 显示栏视图模型
+ @Descripttion: 维护显示状态及显示栏和详情卡布局数据。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Notch/NotchViewModel.swift
+ */
 import SwiftUI
 import Combine
 
 @MainActor
 final class NotchViewModel: ObservableObject {
-    @Published var snapshots: [ProviderSnapshot] = []
+    @Published var botAppearances: [String: BotAppearance] = [:] {
+        didSet { pruneCollapsedPlayback() }
+    }
+    static let idleBotID = "codenotch:collapsed-idle-bot"
+    @Published var idleBotAppearance = BotAppearance() {
+        didSet { pruneCollapsedPlayback() }
+    }
+
+    private func pruneCollapsedPlayback() {
+        var retained = Set(botAppearances.filter { $0.value.enabled }.keys)
+        if idleBotAppearance.enabled, !snapshots.isEmpty { retained.insert(Self.idleBotID) }
+        collapsedPlayback.retainProviders(retained)
+    }
+
+    func collapsedBotPresentation(for provider: CollapsedProvider) -> BotPresentation? {
+        if collapsedProviders.isEmpty, idleBotAppearance.enabled {
+            guard BotMarkLibrary.available != nil else { return nil }
+            return BotPresentation(id: Self.idleBotID, brand: ProviderGlyph.third.rawValue,
+                                   appearance: idleBotAppearance, active: true,
+                                   gazeBias: 7, pointerRegion: botPointerRegion(),
+                                   lastActivity: botLastActivity, globallyBusy: botGloballyBusy)
+        }
+        return botPresentation(for: provider.snapshot, activityOverride: provider.activity, active: true)
+    }
+    @Published var botEvents: [String: BotAnimationEvent] = [:]
+    @Published var botLastActivity: Date?
+    @Published var botGloballyBusy = false
+    private struct BotPointerLayout: Equatable {
+        let edge: NotchEdge
+        let rect: CGRect
+        let scale: CGFloat
+        let joining: HardwareNotch?
+    }
+    private var botPointerLayout: BotPointerLayout?
+    private var botPointerPath: CGPath?
+
+    private func botPointerRegion() -> CGPath {
+        let rect = NotchPlacement(edge: edge, panelSize: panelSize).rect(
+            along: slack, across: 0, length: shapeLength * sizeScale, depth: notchDepth * sizeScale)
+        let layout = BotPointerLayout(edge: edge, rect: rect, scale: sizeScale, joining: joinedNotch)
+        if layout == botPointerLayout, let botPointerPath { return botPointerPath }
+        let path = SideNotchShape(edge: edge, joining: joinedNotch).renderedPath(in: rect, scale: sizeScale).cgPath
+        botPointerLayout = layout
+        botPointerPath = path
+        return path
+    }
+
+    func botPresentation(for snapshot: ProviderSnapshot, activityOverride: ActivitySummary? = nil,
+                         active: Bool? = nil, appearanceOverride: BotAppearance? = nil) -> BotPresentation? {
+        let appearance = appearanceOverride ?? botAppearances[snapshot.providerID] ?? BotAppearance()
+        guard appearance.enabled, BotMarkLibrary.available != nil else { return nil }
+        let activity = (activityOverride ?? activity(for: snapshot))?.state
+        let quota = IndependentQuotaRing.originalQuotas(in: snapshot)
+        let spent = snapshot.block != nil || (quota.usedFraction ?? 0) >= 1
+            || snapshot.linked?.provider.effectiveQuotaState == "exhausted"
+        return BotPresentation(
+            id: snapshot.providerID, brand: snapshot.icon?.value ?? snapshot.glyph.rawValue,
+            appearance: appearance,
+            mood: BotPresentation.mood(activity: activity, refreshing: isRefreshing(snapshot),
+                                      spent: spent, hasReading: snapshot.hasReading),
+            waiting: activity == .waiting, active: active ?? isExpanded,
+            gazeBias: 7,
+            gaze: edge == .left ? .right : edge == .right ? .left : .ahead,
+            pointerRegion: botPointerRegion(),
+            event: botEvents[snapshot.id] ?? botEvents[snapshot.providerID],
+            lastActivity: botLastActivity, globallyBusy: botGloballyBusy)
+    }
+
+    // 两端入口统一移入右键菜单，绘制和热区必须同时关闭。
+    // 保留默认隐藏，用户可独立恢复设置入口。
+    @Published var showsSettingsHandle = false
+    @Published var snapshots: [ProviderSnapshot] = [] { didSet { invalidateCollapsedProviders() } }
+    @Published var tooltipHeightMode: TooltipHeightMode = .standard
+    @Published var fullTooltipHeightLimit: CGFloat = NotchLayout.defaultMaxCardHeight
+    @Published private(set) var tooltipHeights: [String: CGFloat] = [:]
+    var onTooltipHeightChange: (() -> Void)?
+
+    func recordTooltipHeight(_ height: CGFloat, for snapshot: ProviderSnapshot, activity: ActivitySummary?) {
+        guard tooltipHeightMode == .full, hoveredSnapshot == snapshot,
+              self.activity(for: snapshot.id) == activity, height.isFinite, height > 0 else { return }
+        let rounded = height.rounded(.up)
+        guard tooltipHeights[snapshot.id] != rounded else { return }
+        tooltipHeights[snapshot.id] = rounded
+        onTooltipHeightChange?()
+    }
+
+    func tooltipHeight(for snapshot: ProviderSnapshot) -> CGFloat {
+        if tooltipHeightMode == .full, let measured = tooltipHeights[snapshot.id] {
+            return TooltipSizing.height(natural: measured, limit: fullTooltipHeightLimit)
+        }
+        let standard = NotchLayout.cardHeight(
+            windowCount: snapshot.windows.count,
+            groupCount: snapshot.windowGroupCount,
+            moneyWindowCount: snapshot.windows.filter { $0.money != nil }.count,
+            usageDetailGroupCount: snapshot.usageDetail?.visibleGroups.count ?? 0,
+            sessionCount: activity(for: snapshot.id)?.sessions.count ?? 0,
+            sessionCap: sessionCap, statusMessage: snapshot.statusMessage,
+            blockMessage: snapshot.block?.summary(now: now), linked: snapshot.linked != nil,
+            hasTokenUsage: snapshot.tokenUsage != nil, hasPlan: snapshot.plan != nil,
+            hasResetCredits: snapshot.resetCredits != nil, localModelName: snapshot.localModel?.name,
+            showsLocalPerformance: snapshot.showsLocalPerformance,
+            localLedgerRows: snapshot.localLedgerRowCount, compactRowCount: snapshot.compactRowCount,
+            showsDeepSeekPricing: deepSeekPricingEnabled)
+        guard tooltipHeightMode == .full else { return standard }
+        return TooltipSizing.height(natural: standard, limit: fullTooltipHeightLimit)
+    }
+
+    func replaceSnapshots(_ next: [ProviderSnapshot]) {
+        let hoveredID = hoveredSnapshot?.id
+        snapshots = next
+        let ids = Set(next.map(\.id))
+        let retained = tooltipHeights.filter { ids.contains($0.key) }
+        if retained.count != tooltipHeights.count { tooltipHeights = retained }
+        hoveredIndex = hoveredID.flatMap { id in next.firstIndex { $0.id == id } }
+        scrollStart = visibleStart
+    }
     /// Per runtime, so Ollama's relay switching off clears its own readings
     /// and nobody else's.
     private var performances: [String: [String: LocalModelPerformance]] = [:]
@@ -20,11 +144,8 @@ final class NotchViewModel: ObservableObject {
     }
 
     func updateSnapshots(_ providerSnapshots: [ProviderSnapshot]) {
-        let hoveredID = hoveredSnapshot?.id
         let next = ProviderOrder.cells(from: providerSnapshots, keeping: snapshots).map(decorated)
-        let nextHoveredIndex = hoveredID.flatMap { id in next.firstIndex { $0.id == id } }
-        if hoveredIndex != nextHoveredIndex { hoveredIndex = nextHoveredIndex }
-        snapshots = next
+        replaceSnapshots(next)
     }
 
     func updatePerformances(_ measurements: [String: LocalModelPerformance],
@@ -58,17 +179,39 @@ final class NotchViewModel: ObservableObject {
         snapshot.providerID == ollamaSource ? OllamaThinkingStream.modelKey(model.name) : snapshot.id
     }
 
-    @Published var thinkingModels: [String: Date] = [:]
+    @Published var thinkingModels: [String: Date] = [:] { didSet { invalidateCollapsedProviders() } }
     /// What each local model instance is doing, keyed by cell id. Ollama's
     /// thinking relay reports through `thinkingModels`; LM Studio's state
     /// poll reports here, phase and queue included.
-    @Published var localActivities: [String: LocalModelActivity] = [:]
+    @Published var localActivities: [String: LocalModelActivity] = [:] { didSet { invalidateCollapsedProviders() } }
 
     /// Live agent sessions, keyed by the provider they belong to. They surface
     /// inside that provider's own ring rather than as a cell of their own — one
     /// ring per provider, so nothing in the notch looks like a ring without
     /// being one.
-    @Published var sessions: [String: [AgentSession]] = [:]
+    @Published var sessions: [String: [AgentSession]] = [:] { didSet { invalidateCollapsedProviders() } }
+    @Published var activitySourceIDs: [String: String]? { didSet { invalidateCollapsedProviders() } }
+    @Published var scrollStart = 0
+
+    func visibleCount(_ count: Int) -> Int {
+        let available = (edge.isVertical ? screenUsableSize.height : screenUsableSize.width) / sizeScale
+        guard available > 0 else { return count }
+        let slack = NotchLayout.slack(for: edge, maxCardHeight: NotchLayout.maxCardHeight(sessionCap: 0))
+        let room = available - 2 * slack - 2 * flare
+            - NotchLayout.padStart(for: edge) - NotchLayout.padEnd(for: edge)
+        let capacity = max(1, Int((room + preferredCellSpacing) / (cellAlong + preferredCellSpacing)))
+        return min(count, capacity)
+    }
+
+    var visibleStart: Int { min(max(0, scrollStart), max(0, snapshots.count - visibleCount(snapshots.count))) }
+    var visibleIndices: Range<Int> { visibleStart..<(visibleStart + visibleCount(snapshots.count)) }
+
+    func scroll(by amount: Int) {
+        let next = min(max(0, visibleStart + amount), max(0, snapshots.count - visibleCount(snapshots.count)))
+        guard next != visibleStart else { return }
+        hoveredIndex = nil
+        scrollStart = next
+    }
 
     /// Which cell the cursor is over, if any. Driven from the window controller
     /// rather than SwiftUI's `.onHover`: the panel ignores mouse events until
@@ -111,7 +254,8 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var refreshingCells: Set<String> = []
 
     func isRefreshing(_ snapshot: ProviderSnapshot) -> Bool {
-        snapshot.localModel == nil
+        if snapshot.linked?.provider.loading == true { return true }
+        return snapshot.localModel == nil
             ? refreshing.contains(snapshot.providerID)
             : refreshingCells.contains(snapshot.id)
     }
@@ -136,8 +280,7 @@ final class NotchViewModel: ObservableObject {
     /// Bumped each time the move handle is pressed, on the same counter
     /// pattern `settingsSpins` uses and for the same reason.
     @Published var moveSpins = 0
-    /// The notch is in hand: the move handle has been held past its threshold
-    /// and the drop zones are up, waiting for a release.
+    /// Position editing is active from either entry point; keep the move handle armed.
     @Published var isMoving = false
     /// Which edge a release would land on. Nil before the pointer has moved
     /// far enough for a target to be meaningful.
@@ -160,6 +303,9 @@ final class NotchViewModel: ObservableObject {
     /// Which screen edge the notch is welded to. Everything geometric reads
     /// this through `placement` rather than assuming an axis.
     @Published var edge: NotchEdge = .right
+    @Published var isEditingPosition = false
+    @Published var positionedLeading: CGFloat?
+    @Published var tooltipAlongBounds: ClosedRange<CGFloat>?
     /// A user-chosen nudge along that edge, in screen points from the centred
     /// default — set live while ⌥-dragging the pill, and by
     /// `NotchGeometry.panelFrame` from there. Reset to whatever was stored for
@@ -198,15 +344,132 @@ final class NotchViewModel: ObservableObject {
     /// Mirrored here for the same reason `accentColor` is: the notch is a
     /// separate window, and it has to redraw the moment Settings changes this.
     @Published var weeklyRing: WeeklyRing = .off
+    @Published var independentInnerRing = false
+    @Published var codeSwitchQuotaRatiosEnabled = false
+
+    var ringGrowth: CGFloat {
+        independentInnerRing ? NotchLayout.independentRingGrowth : 0
+    }
+    var cellRingDiameter: CGFloat { NotchLayout.ringDiameter + ringGrowth }
+    var baseBodyDepth: CGFloat { NotchLayout.bodyDepth(for: edge, ringGrowth: ringGrowth) }
+    @Published var topAvoidanceAdjustment: CGFloat = 0
+    @Published var ringEdgeAdjustment: CGFloat = 0
+    @Published var collapsedSideWidth: CGFloat = 64
+    @Published var collapsedHeightAdjustment: CGFloat = 0
+    @Published var showsIdleNotch = true
+    @Published var isPreviewingCollapsedGeometry = false
+    @Published private(set) var collapsedProviderID: String?
+    private var collapsedRotationStarted: Date?
+    let collapsedPlayback = BotPlaybackStore()
+    private var cachedCollapsedProviders: [CollapsedProvider]?
+    private(set) var collapsedAggregationCount = 0
+
+    private func invalidateCollapsedProviders() {
+        cachedCollapsedProviders = nil
+        if snapshots.isEmpty { collapsedPlayback.retainProviders([]) }
+    }
+
+    struct CollapsedProvider {
+        let snapshot: ProviderSnapshot
+        var activity: ActivitySummary
+    }
+
+    var collapsedProviders: [CollapsedProvider] {
+        if let cachedCollapsedProviders { return cachedCollapsedProviders }
+        collapsedAggregationCount += 1
+        var result: [CollapsedProvider] = []
+        var indices: [String: Int] = [:]
+        for snapshot in snapshots {
+            guard let activity = activity(for: snapshot),
+                  activity.state == .working || activity.state == .waiting else { continue }
+            if let index = indices[snapshot.providerID] {
+                if activity.state == .waiting { result[index].activity = activity }
+            } else {
+                indices[snapshot.providerID] = result.count
+                result.append(CollapsedProvider(snapshot: snapshot, activity: activity))
+            }
+        }
+        cachedCollapsedProviders = result
+        // 首个供应商随时可能回到空闲展示，保留其进度；其余只保留活动供应商。
+        var retained = Set(indices.keys)
+        if let first = snapshots.first { retained.insert(first.providerID) }
+        if idleBotAppearance.enabled, !snapshots.isEmpty { retained.insert(Self.idleBotID) }
+        collapsedPlayback.retainProviders(retained)
+        return result
+    }
+
+    var canShowCollapsedSummary: Bool {
+        edge == .top && hardwareNotch != nil && !snapshots.isEmpty
+    }
+
+    var hasCollapsedSummary: Bool {
+        canShowCollapsedSummary
+            && (isPreviewingCollapsedGeometry || showsIdleNotch || !collapsedProviders.isEmpty)
+    }
+
+    var showsCollapsedSummary: Bool { !isExpanded && hasCollapsedSummary }
+
+    var collapsedProvider: CollapsedProvider? {
+        let providers = collapsedProviders
+        return providers.first { $0.snapshot.providerID == collapsedProviderID } ?? providers.first
+            ?? snapshots.first.map { CollapsedProvider(snapshot: $0, activity: ActivitySummary(state: .idle)) }
+    }
+
+    // 复用窗口的低频轮询；隐藏或展开时清除截止时间，恢复后重新计满三秒。
+    func updateCollapsedRotation(at date: Date, visible: Bool) {
+        let providers = collapsedProviders
+        if !providers.contains(where: { $0.snapshot.providerID == collapsedProviderID }) {
+            let next = (providers.first?.snapshot ?? snapshots.first)?.providerID
+            if collapsedProviderID != next { collapsedProviderID = next }
+            collapsedRotationStarted = nil
+        }
+        guard visible, showsCollapsedSummary, providers.count > 1 else {
+            collapsedRotationStarted = nil
+            return
+        }
+        guard let started = collapsedRotationStarted else {
+            collapsedRotationStarted = date
+            return
+        }
+        guard date.timeIntervalSince(started) >= 3 else { return }
+        let index = providers.firstIndex { $0.snapshot.providerID == collapsedProviderID } ?? 0
+        collapsedProviderID = providers[(index + 1) % providers.count].snapshot.providerID
+        collapsedRotationStarted = date
+    }
+
+    var resolvedCollapsedSideWidth: CGFloat {
+        guard edge == .top, let hardwareNotch else { return 0 }
+        let requested = CGFloat(Preferences.normalizedCollapsedSideWidth(Double(collapsedSideWidth)))
+        guard screenSize.width > 0 else { return requested }
+        return min(requested, max(0, (screenSize.width - hardwareNotch.width) / 2))
+    }
+
+    var resolvedCollapsedHeight: CGFloat {
+        guard let hardwareNotch else { return 0 }
+        let adjustment = CGFloat(Preferences.geometryValue(Double(collapsedHeightAdjustment),
+                                                            in: Preferences.collapsedHeightRange))
+        return max(16, hardwareNotch.height + adjustment)
+    }
+
+    var collapsedMarkSize: CGFloat {
+        max(0, min(24, resolvedCollapsedHeight - 8, resolvedCollapsedSideWidth - 16))
+    }
+
+    // 三分之一处靠近实体刘海；最窄设置仍为图标和摄像头保留四点间隔。
+    var collapsedMarkInset: CGFloat {
+        min(resolvedCollapsedSideWidth / 2,
+            max(resolvedCollapsedSideWidth / 3, collapsedMarkSize / 2 + 4))
+    }
+    var ringEdgePadding: CGFloat { max(0, ringEdgeAdjustment) / sizeScale }
+    var ringEdgeOffset: CGFloat { min(0, ringEdgeAdjustment) / sizeScale }
+    var bodyDepth: CGFloat { baseBodyDepth + ringEdgePadding }
+    var cellAlong: CGFloat { NotchLayout.cellAlong(for: edge, ringGrowth: ringGrowth) }
     @Published var weeklyRingDashed: Bool = false
-    @Published var weeklyReading: Bool = false
     @Published var watchLimit: Double = 0.50
     @Published var criticalLimit: Double = 0.70
-    /// Mirrored from Settings like `surfaceStyle`, just below.
-    @Published var colorTransitionStyle: ColorTransitionStyle = .hardStep
     /// Whether the move handle is on the notch at all. Mirrored from Settings
     /// like `weeklyRing`.
-    @Published var showsMoveHandle = true
+    @Published var showsMoveHandle = false
     /// Mirrors the persisted Appearance choice so the separate notch window
     /// redraws immediately when Settings changes it.
     @Published var surfaceStyle: NotchSurfaceStyle = .glass
@@ -215,9 +478,12 @@ final class NotchViewModel: ObservableObject {
     /// The rule used by the DeepSeek card, mirrored from Preferences so a
     /// settings change is reflected in every notch immediately.
     @Published var deepSeekPricingSchedule = DeepSeekPricing.Schedule.current
-    /// Whether each ring carries its percentage beside the hardware notch.
-    /// Mirrors the Appearance setting; see `showsCellReading`.
-    @Published var showsNotchReadings = false
+    /// The display's own notch, when this edge has to share the bezel with one.
+    ///
+    /// Set by the window controller from the screen the panel is on, because
+    /// that is the only thing that knows which screen that is.
+    @Published var hardwareNotch: HardwareNotch?
+    @Published var notchTriggerHeight = NotchTriggerHeight.defaultValue
 
     /// How much screen there is to spend on the panel.
     ///
@@ -225,51 +491,10 @@ final class NotchViewModel: ObservableObject {
     /// list before the panel holding it would run off the display. Zero until
     /// the controller says otherwise, which reads as "no screen known yet".
     @Published var screenSize: CGSize = .zero
+    @Published var screenUsableSize: CGSize = .zero
 
     /// Visible slice of the panel along its edge, in local stack coordinates.
     @Published var visibleAlongRange: ClosedRange<CGFloat>?
-
-    /// **Whether the notch is in the hand**: being ⌥-dragged, or on its way to
-    /// where it was let go. Held, it is never joined to the hole — a joined
-    /// notch is attached and cannot follow the pointer — and it is measured the
-    /// plain way, its leading tip point for point with the pointer. See
-    /// `NotchGeometry.cutoutFreelyNear`.
-    @Published var holdsOffTheCutout = false
-
-    /// The notch's length as a lone bar at the size that was asked for — what
-    /// it is while it is in the hand, joined or not a moment before.
-    var plainBarLength: CGFloat {
-        NotchLayout.shapeLength(cellCount: snapshots.count, edge: edge, flare: flare,
-                                spacing: cellSpacing(cellCount: snapshots.count))
-            * requestedScale
-    }
-
-    /// How close the display's own hole is, or nil when there is none in reach.
-    /// Set by `adopt(screen:)` and read by everything that has to know the
-    /// notch is joined to something at its leading end.
-    @Published var cutout: CutoutProximity?
-
-    /// Where a ring's centre falls along the panel, on a given copy of the bar.
-    func ringAlong(index: Int, in wing: Wing) -> CGFloat {
-        wing.lead + ringCenter(index: index) * sizeScale
-    }
-
-    /// And how far along a copy a point in the panel is, in the notch's own
-    /// measurements — nil when the point is not on that copy at all.
-    func alongWithin(_ along: CGFloat, of wing: Wing) -> CGFloat? {
-        guard along >= wing.lead - 0.001, along <= wing.lead + wing.length + 0.001
-        else { return nil }
-        return (along - wing.lead) / max(sizeScale, 0.0001)
-    }
-
-    func tooltipAlong(index: Int, length: CGFloat) -> CGFloat {
-        let centre = ringAlong(index: index, in: cellWing)
-        guard let range = visibleAlongRange else { return centre }
-        let lower = range.lowerBound + length / 2
-        let upper = range.upperBound - length / 2
-        guard lower <= upper else { return (range.lowerBound + range.upperBound) / 2 }
-        return min(max(centre, lower), upper)
-    }
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -284,511 +509,37 @@ final class NotchViewModel: ObservableObject {
     }
 
     /// Take the notch geometry of whichever screen the panel is on.
-    ///
-    /// The display's own cutout arrives as two numbers and no more — see
-    /// `CutoutProximity`. There is no second layout here: the notch is one
-    /// shape on all four edges, and what the hole gets a say in is where the
-    /// top edge's panel starts (`NotchGeometry.panelFrame`) and how the leading
-    /// end of that one shape joins it. A top edge that laid itself out around
-    /// the hardware was a second design to keep working, and every measurement
-    /// in it had to be kept in step with a shape it did not share.
-    func adopt(screen: ScreenDescribing) {
+    func adopt(screen: ScreenDescribing, joinsHardware: Bool = true) {
+        let merging = edge == .top && joinsHardware ? screen.hardwareNotch : nil
+        if hardwareNotch != merging { hardwareNotch = merging }
         // `frame`, not `visibleFrame`: the panel is centred on the full screen
         // and may sit under the menu bar, so the menu bar is not room lost.
         // Whether anything of this has been on screen yet.
         let settled = screenSize != .zero
         let size = screen.frameValue.size
         if screenSize != size { screenSize = size }
-        let near = NotchGeometry.cutoutProximity(
-            for: screen, edge: edge, alongOffset: alongOffset,
-            heldBar: holdsOffTheCutout ? plainBarLength : nil)
-        let side = edge == .top && screen.hardwareNotch != nil
-            && NotchGeometry.cutoutStanding(alongOffset: alongOffset).atTrailingEnd
-        if leavesTheCutoutAtItsTrailingEnd != side { leavesTheCutoutAtItsTrailingEnd = side }
-        guard cutout != near else { return }
-
-        // **The one change worth animating is taking the hole or letting go of
-        // it**, and nothing else here is that.
-        //
-        // This runs on every tick of an ⌥-drag, because how deep the notch is
-        // buried changes with every delta of the pointer. Animated, each of
-        // those tiny changes started a 0.62s spring, so the bar chased the
-        // cursor on a long spring for the whole drag instead of tracking it —
-        // which is most of what "still glitchy" was.
-        //
-        // And only while the window is standing still. It holds its size and
-        // place across the join, but not across the notch drifting out of
-        // reach of the hole entirely — and a frame is set in one step, so
-        // easing anything while it moves is easing across the distance it
-        // moved. Between two states the window is the same in, the depth, the
-        // size and both ends ease together, which is the movement this is for.
-        let joins = (cutout?.joined ?? false) != (near?.joined ?? false)
-        let stillWindow = cutout != nil && near != nil
-        guard settled, joins, stillWindow else {
-            cutout = near
-            return
-        }
-        withAnimation(NotchMotion.unfold) { cutout = near }
+        let usable = screen.visibleFrameValue.size
+        if screenUsableSize != usable { screenUsableSize = usable }
+        let limit = TooltipSizing.heightLimit(on: screen, edge: edge, contentInset: contentInset,
+                                             bodyDepth: bodyDepth, scale: sizeScale)
+        if fullTooltipHeightLimit != limit { fullTooltipHeightLimit = limit }
     }
 
     /// **Whether the notch is drawn as one shape with the display's own hole.**
     ///
-    /// Not the same as having one nearby: `cutout` is reported for a way either
-    /// side of the join, because the window is sized and placed the same on both
-    /// sides of that answer and only what is drawn inside it changes.
-    var mergesWithCutout: Bool { cutout?.joined == true }
-
-    /// Which side of the hole the notch is on, whether or not it is joined to
-    /// it right now.
-    ///
-    /// Joined, the pair is symmetric and there is no side; this is for the lone
-    /// bar that comes out of the hole and goes back into it, which has to flow
-    /// out of the wall it is actually leaving. Popping out to the right while
-    /// drawing itself from the left is the one thing that reads as a flip.
-    @Published var leavesTheCutoutAtItsTrailingEnd = false
-
-    /// **What the contents need across the bar**, in the design's measurements.
-    ///
-    /// The open depth whether or not the notch is open: folding must not reflow
-    /// the stack on its way out, and the shape is what conceals it.
-    ///
-    /// Merged into the display's own notch this is what the *cells* need rather
-    /// than what the frame budgets, because the frame's figure reserves room for
-    /// a reading whether or not one is drawn — and here every point of depth is
-    /// spent at a scale the hardware fixes, so reserving depth for something
-    /// that is switched off comes straight off the ring.
-    var contentDepth: CGFloat {
-        guard mergesWithCutout else { return NotchLayout.bodyDepth(for: edge) }
-        return 2 * NotchLayout.ringMargin(for: edge)
-            + (showsCellReading ? NotchLayout.cellExtent : NotchLayout.ringDiameter)
-    }
-
-    /// **The scale at which the notch is exactly the Mac's own notch.**
-    ///
-    /// Merged, the hardware sets the size and the setting does not come into it.
-    /// The depth has to be the cutout's — one shape cannot be two thicknesses —
-    /// and a notch whose depth is fixed while everything else follows the slider
-    /// is not smaller or bigger, it is *distorted*: rings capped at the depth
-    /// but spaced by the setting, padding for a bar three times as deep. So the
-    /// whole shape is drawn at the one scale that lands its depth on the hole's,
-    /// and every proportion in it is the design's.
-    ///
-    /// The bezel bleed is in it because the shape is pushed that far past the top
-    /// of the screen: the row that has to land on the hole's bottom edge is that
-    /// much further down the shape.
-    var mergedScale: CGFloat? {
-        guard let cutout, cutout.joined, contentDepth > 0 else { return nil }
-        return (cutout.depth + NotchRootView.bezelBleed) / contentDepth
-    }
-
-    /// How much of the shape's leading end is buried in the hole, in the
-    /// shape's own space.
-    ///
-    /// Length spent in there is length nobody sees, so the bar is drawn that
-    /// much longer and everything measured along it starts that much further
-    /// in — which is why this is the one number `shapeLength`, `ringCenter` and
-    /// `cellsLeadIn` all add. Nothing when the two have been nudged apart: the
-    /// bridge reaches back for the hole then, and the tip it reaches from is
-    /// the visible start of the bar.
-    var cutoutBleed: CGFloat {
-        guard mergesWithCutout else { return 0 }
-        return max(0, cutout?.overlap ?? 0) / max(sizeScale, 0.0001)
-    }
-
-    /// **What each end of the bar spends on its own ending**, before the body
-    /// with the rings in it begins.
-    ///
-    /// A flare at both ends, as every edge has always had — plus, at the end
-    /// that meets the hole, whatever of the bar is buried inside it, which is
-    /// length nobody can see and so length the rings must not be measured from.
-    var leadAllowance: CGFloat { flare + (carriedOnTheLeft ? 0 : cutoutBleed) }
-
-    var endAllowance: CGFloat { flare + (carriedOnTheLeft ? cutoutBleed : 0) }
-
-    /// **One drawn copy of the notch**, and where along the panel it starts.
-    struct Wing: Identifiable, Equatable {
-        /// **0 is always the copy that carries the readings; 1 is the other.**
-        ///
-        /// Never shared, and never reused for something else. Whatever a copy
-        /// is — which side of the hole, whether it carries anything — it keeps
-        /// for as long as it has that identity, so SwiftUI only ever animates a
-        /// copy *moving* and never one copy turning into a different one. The
-        /// carrying copy has one identity from the moment it is picked up to
-        /// the moment it is put down, so a drag and its landing are one bar
-        /// moving; the other copy arrives out of the hole and leaves into it.
-        var id: Int
-        /// Panel points, from the panel's own leading edge.
-        var lead: CGFloat
-        /// Whether this copy is on the left of the hole, which is the copy whose
-        /// joined end is its trailing one. Drawn by `SideNotchShape` as its own
-        /// shape, reflected in the path — never flipped by the view.
-        var onTheLeft: Bool
-        /// Whether this copy carries the readings. Only one does; the other is
-        /// the container and nothing else.
-        var carriesCells: Bool
-        /// **How long this copy is drawn**, in panel points — and for the copy
-        /// that carries nothing, how far the notch has widened.
-        ///
-        /// A length rather than a scale, which is what makes it the notch
-        /// getting wider instead of a copy being stretched. Scaled, the copy was
-        /// a squashed picture of itself; lengthened, it is drawn at every size it
-        /// passes through, its corner the corner it will have, growing out of
-        /// the wall it is welded to. And a number rather than a transition, so
-        /// it changes with everything else about the notch and eases on the same
-        /// spring from the same moment.
-        var length: CGFloat
-        /// How deep it is drawn, in the notch's own design measurements.
-        var depth: CGFloat
-    }
-
-    /// **The room the panel keeps along the edge, beside the display's hole.**
-    ///
-    /// Deliberately the same whether the notch is joined to the hole or not, and
-    /// that is the whole of why it is written from the *unjoined* bar at the
-    /// size that was asked for: neither of those changes when the notch takes
-    /// the hole. A joined bar is a little longer, for what is buried, and drawn
-    /// a little smaller, because the hardware sets the size — the headroom
-    /// covers the difference, and the window never has to move.
-    ///
-    /// A window frame is set in one step and cannot be animated. Anything
-    /// inside it that eases while it moves is easing across the distance it
-    /// moved, and joining moved it a third of the screen.
-    func cutoutSpan(cellCount: Int) -> CGFloat {
-        guard let cutout else { return shapeLength(cellCount: cellCount) * sizeScale }
-        let plain = NotchLayout.shapeLength(cellCount: cellCount, edge: edge, flare: flare,
-                                            spacing: cellSpacing(cellCount: cellCount))
-        return cutout.width - 2 * NotchGeometry.cutoutOverlap
-            + 2 * (plain * requestedScale + 2 * NotchGeometry.cutoutDeepest)
-    }
-
-    /// **Every drawn copy of the notch.**
-    ///
-    /// One, until it joins the display's own notch — then two, mirrored about
-    /// the hole, because a bar hanging off one side of the cutout is not what
-    /// the machine looks like. The pair reads as the hardware's own notch with
-    /// the app either side of it rather than as something stuck to one edge of
-    /// it, and it costs seeing each reading twice.
-    var wings: [Wing] {
-        let drawn = notchLength * sizeScale
-        guard let cutout else {
-            return [Wing(id: 0, lead: slack + (shapeLength * sizeScale - drawn) / 2,
-                         onTheLeft: false, carriesCells: true,
-                         length: drawn, depth: notchDepth)]
-        }
-        // Measured out from the hole's own centre, which is the panel's centre
-        // too — see `NotchGeometry.panelFrame`. Each copy is welded to a wall
-        // of the hole and draws back toward it as it shortens, so a copy on the
-        // right starts at its wall and one on the left ends at its own.
-        let middle = (cutoutSpan(cellCount: snapshots.count) + 2 * slack) / 2
-        let half = cutout.width / 2
-        func lead(onTheLeft: Bool, overlap: CGFloat, length: CGFloat) -> CGFloat {
-            onTheLeft ? overlap - half - length + middle : half - overlap + middle
-        }
-
-        // The copy that carries the readings. Held, it is measured from the
-        // right-hand wall point for point with the pointer, whichever side of
-        // the hole it has been dragged to.
-        let carryingLeft = mergesWithCutout ? cutout.atTrailingEnd
-                                            : (holdsOffTheCutout ? false : cutout.atTrailingEnd)
-        let carrying = Wing(id: 0,
-                            lead: lead(onTheLeft: carryingLeft, overlap: cutout.overlap,
-                                       length: drawn),
-                            onTheLeft: carryingLeft, carriesCells: true,
-                            length: drawn, depth: notchDepth)
-
-        // **And the notch widening on the other side** — always exactly the
-        // hole's depth, ending in the same curve as the side with the readings,
-        // and only as long as the join says: nothing at all until the notch is
-        // let go against the hole. It stays on the side opposite the one the carrying copy is
-        // *on*, which keeps it from ever having to cross the hole to get there.
-        let otherLeft = !carryingSide
-        let otherOverlap = mergesWithCutout ? cutout.overlap : NotchGeometry.cutoutOverlap
-        let widened = mergesWithCutout || revealsTheOtherCopy ? drawn : 0
-        let other = Wing(id: 1,
-                         lead: lead(onTheLeft: otherLeft, overlap: otherOverlap, length: widened),
-                         onTheLeft: otherLeft, carriesCells: false,
-                         length: widened,
-                         depth: (cutout.depth + NotchRootView.bezelBleed) / max(sizeScale, 0.0001))
-        return otherLeft ? [other, carrying] : [carrying, other]
-    }
-
-    /// Which side of the hole the copy that carries the readings is *on* —
-    /// joined, the side it was put down on; in the hand, the side most of it is
-    /// over, which is the side it will be put down on.
-    private var carryingSide: Bool {
-        guard let cutout else { return false }
-        if mergesWithCutout || !holdsOffTheCutout { return cutout.atTrailingEnd }
-        // Held: its leading tip is `overlap` inside the right wall, so its
-        // middle is half a bar on from there.
-        let bar = shapeLength * sizeScale
-        return cutout.width / 2 - cutout.overlap + bar / 2 < 0
-    }
-
-    /// **The one curve goo takes between the hole and a dragged notch.**
-    ///
-    /// Flat along the hole's foot to the wall, then easing down to the bar's
-    /// own foot on the smoother step — flat at both ends, so there is no crease
-    /// against the hole and none against the bar — over the distance from the
-    /// wall to a flare-and-a-corner past the bar's near end. Everything that
-    /// shapes the notch near the hole while it is in the hand follows this: the
-    /// bar's own dip where it reaches into the hole, and the strand across a
-    /// gap. There used to be a mask cutting the bar as well, and wherever its
-    /// cut crossed the bar's own curved end it left a point.
-    var gooReach: CGFloat { (flare + drawnCornerRadius) * sizeScale }
-
-    /// Whether each end of the bar in the hand is inside the hole's width.
-    private var carryingEndsInTheHole: (near: Bool, far: Bool)? {
-        guard let cutout else { return nil }
-        let bar = cellWing
-        let middle = (cutoutSpan(cellCount: snapshots.count) + 2 * slack) / 2
-        let left = middle - cutout.width / 2, right = middle + cutout.width / 2
-        let near = bar.lead, far = bar.lead + bar.length
-        return (near > left && near < right, far > left && far < right)
-    }
-
-    /// **Where the bar in the hand dips to pass through the hole** — see
-    /// `SideNotchShape.Dip`. In the bar's own measure, from its leading tip, and
-    /// only while any of it is over the hole; eased out past a wall only where
-    /// the bar reaches across that wall.
-    var carryingDip: SideNotchShape.Dip? {
-        guard holdsOffTheCutout, isExpanded, let cutout else { return nil }
-        let bar = cellWing
-        let middle = (cutoutSpan(cellCount: snapshots.count) + 2 * slack) / 2
-        let half = cutout.width / 2
-        let left = middle - half, right = middle + half
-        let near = bar.lead, far = bar.lead + bar.length
-        guard far > left, near < right else { return nil }
-        let scale = max(sizeScale, 0.0001)
-        return SideNotchShape.Dip(from: (left - near) / scale,
-                                  to: (right - near) / scale,
-                                  depth: (cutout.depth + NotchRootView.bezelBleed) / scale,
-                                  reach: gooReach / scale,
-                                  easesBefore: near < left && far > left,
-                                  easesAfter: near < right && far > right)
-    }
-
-    /// **The strand of black between a dragged notch and the hole.**
-    ///
-    /// Goo pulled off a surface does not part from it: it stretches, thins in
-    /// the middle, and lets go, and at no moment does it meet either surface at
-    /// an angle. So the strand's underside always leaves the hole *along the
-    /// hole's own outline* — its foot, then its rounded corner, then its wall —
-    /// and arrives on the bar along the bar's own outline — its foot, its
-    /// corner, its side, its flare — each time heading the way that outline is
-    /// heading, so where one stops and the other starts there is nothing to
-    /// see. Pulled away, the two points it leaves from climb those outlines, its
-    /// middle thins up into the bezel, and each half draws back into the thing
-    /// it came from until nothing is left.
-    ///
-    /// It used to be one curve scaled toward the bezel as it went. Scaled, its
-    /// end at the hole was shallower than the hole's foot: it cut across the
-    /// Mac's rounded corner, or met the hole's wall square, and it ran into the
-    /// bar's side the same way — the points, and the corner that looked like
-    /// it had lost its radius. Worked out from where the bar is, so it follows
-    /// the hand with nothing to catch up on.
-    struct Neck: Equatable {
-        /// Along the panel: the hole's wall nearest the bar, and the bar's end
-        /// facing it. `side` is 1 when the bar is right of the wall, −1 left.
-        var wall: CGFloat
-        var tip: CGFloat
-        var side: CGFloat
-        /// Down from the top of the screen: the hole's foot, and the radius of
-        /// its corner.
-        var holeDepth: CGFloat
-        var holeCorner: CGFloat
-        /// The bar's foot, and its end: the flare's reach and the corner's.
-        var barDepth: CGFloat
-        var barFlare: CGFloat
-        var barCorner: CGFloat
-        /// How far it has been pulled apart, 0 where the two touch to 1 where
-        /// it lets go.
-        var apart: CGFloat
-    }
-
-    var neck: Neck? {
-        guard holdsOffTheCutout, isExpanded, let cutout else { return nil }
-        let carrying = cellWing
-        let middle = (cutoutSpan(cellCount: snapshots.count) + 2 * slack) / 2
-        let half = cutout.width / 2
-        // The wall nearest the bar, the bar's end that faces it, and its other.
-        let onTheRight = carrying.lead + carrying.length / 2 >= middle
-        let wall = onTheRight ? middle + half : middle - half
-        let tip = onTheRight ? carrying.lead : carrying.lead + carrying.length
-        let far = onTheRight ? carrying.lead + carrying.length : carrying.lead
-        // A bar gone all the way into the hole has nothing out on this side.
-        guard onTheRight ? far > wall : far < wall else { return nil }
-        let gap = onTheRight ? tip - wall : wall - tip
-        let stretch = NotchGeometry.cutoutStretch
-        guard gap < stretch else { return nil }
-        // The bar's end as `SideNotchShape` draws it, with no more room than
-        // the bar has for it.
-        let depth = max(cutout.depth, carrying.depth * sizeScale - NotchRootView.bezelBleed)
-        let flare = min(self.flare * sizeScale, depth)
-        let corner = max(0, min(drawnCornerRadius * sizeScale, depth - flare,
-                                (carrying.length - 2 * flare) / 2))
-        return Neck(wall: wall, tip: tip, side: onTheRight ? 1 : -1,
-                    holeDepth: cutout.depth,
-                    // Measured: a circular arc of 31.2px on a 90px-deep cutout.
-                    holeCorner: cutout.depth * 31.2 / 90,
-                    barDepth: depth, barFlare: flare, barCorner: corner,
-                    apart: max(0, gap) / stretch)
-    }
-
-    /// **Whether the other copy is coming out of the hole ahead of the join.**
-    ///
-    /// Set the moment a dragged notch is let go near the hole, so the other copy
-    /// starts flowing out of its wall *while* the carrying copy glides to its
-    /// own, rather than after it has arrived. The join then finds it already on
-    /// its way and simply carries on.
-    @Published var revealsTheOtherCopy = false
-
-    /// Where the first drawn copy starts along the panel.
-    var notchAlongLead: CGFloat { wings.first?.lead ?? slack }
-
-    /// The copy that carries the readings. Rings, hover bands, tooltips and
-    /// handles all belong to it; the other is the container and nothing else.
-    var cellWing: Wing {
-        wings.first { $0.carriesCells }
-            ?? Wing(id: 0, lead: slack, onTheLeft: false, carriesCells: true,
-                    length: notchLength * sizeScale, depth: notchDepth)
-    }
-
-    /// The copy the settings handle and the move handle hang off — one set of
-    /// handles, not two, however many copies of the bar there are.
-    var handleWing: Wing { cellWing }
-
-    /// Whether the copy that carries everything is the one on the left of the
-    /// hole, which turns its ends round: its joined end is its trailing one.
-    ///
-    /// Read from the cutout, which is where `wings` reads it too — and never
-    /// from `wings`, which needs the bar's length to place the copies, whose
-    /// length needs this. Asked the other way round it is a loop with no floor.
-    var carriedOnTheLeft: Bool { mergesWithCutout && cutout?.atTrailingEnd == true }
-
-    /// Where the folded notch starts along the panel, whatever state it is in
-    /// right now — the hit region that wakes it has to know where it will be.
-    var restingAlongLead: CGFloat {
-        guard cutout == nil else {
-            return wings.first { $0.length > 0 }?.lead ?? slack
-        }
-        return slack + (shapeLength - restingLength) * sizeScale / 2
-    }
-
-    /// How far the drawn notch reaches along the panel, from the first copy's
-    /// start to the last one's end. The pair and the hole between them.
-    var drawnAlongExtent: CGFloat {
-        let shown = wings.filter { $0.length > 0 }
-        guard let first = shown.first, let last = shown.last else {
-            return notchLength * sizeScale
-        }
-        return last.lead + last.length - first.lead
-    }
-
-    /// How much of the hardware's own height a ring may use, as a fraction of
-    /// the design ring.
-    ///
-    /// The strips either side are the menu bar's height — 38pt on the current
-    /// hardware — where a design ring is 44pt and a whole cell, with its
-    /// percentage below it, is about 67pt. So the ring shrinks to fit between
-    /// the bezel and the hole's bottom edge, and the percentage goes: there is
-    /// no second line to put it on.
-    /// Where the first cell starts inside the shape.
-    ///
-    /// The one source for it. `ringCenter` and the view's own leading padding
-    /// used to compute this separately, and in the split layout they disagreed
-    /// by 14.5pt — so the shape was positioned by one number and the rings
-    /// drawn at another, which put them back under the cutout however carefully
-    /// the shape was placed.
-    var cellsLeadIn: CGFloat {
-        leadAllowance + NotchLayout.padStart(for: edge)
-    }
-
-
-    /// **The notch's shape, configured.** Build it here and nowhere else.
-    ///
-    /// Five separate bugs in this redesign were the same bug: something worked
-    /// out its own version of what the shape should be, and the tests agreed
-    /// with it because they built their own too — so a green suite described a
-    /// shape that was never on screen. A `SideNotchShape()` with four
-    /// properties left at their defaults is a different object from the one
-    /// the view draws, and there is no way to see that at the call site.
-    var notchShape: SideNotchShape { notchShape(for: cellWing) }
-
-    /// The shape one copy is drawn as.
-    ///
-    /// **The join is drawn only while the notch is joined.** It was drawn
-    /// whenever the hole was merely *near*, and the joined end is a square tip
-    /// and a flat run at the hole's own depth — invisible inside the hole, the
-    /// only reason it may be square, and a hard cut edge hanging on the
-    /// wallpaper anywhere else. Near but not joined, the notch is a notch.
-    func notchShape(for wing: Wing) -> SideNotchShape {
-        var shape = SideNotchShape(edge: edge)
-        shape.cornerRadius = drawnCornerRadius
-        // Every edge, not only the hardware one. `bezelBleed` pushes the shape
-        // past the screen's edge on all four — see `NotchRootView` — so on all
-        // four the flare used to begin off-screen and arrive already part way
-        // through its turn, cut off by the border rather than meeting it. It
-        // showed up first beside the cutout because that sweep is shallow, but
-        // a 33pt flare spends a third of its length in those two points.
-        shape.bezelHidden = NotchRootView.bezelBleed / max(sizeScale, 0.0001)
-        guard let cutout else { return shape }
-        shape.reflected = wing.onTheLeft
-
-        // **The copy that carries the readings eases into the join.** Its end
-        // at the hole closes up from flare to square as a number, on the same
-        // spring as its depth and its size, rather than being swapped for the
-        // joined end in one frame — see `SideNotchShape.leadingJoin`. Square at
-        // the hole's own depth, with the tip inside the hole, *is* the joined
-        // end, so there is nothing else to draw.
-        // **Both sides end with the notch's own curve** — the flare into the
-        // bezel and the corner below it, the end this shape has everywhere.
-        // Joined, the side with the readings keeps it, and the other side has
-        // exactly the same one, so the pair balances about the hole.
-        if wing.carriesCells {
-            shape.leadingJoin = cutout.joined ? 1 : 0
-            shape.dip = carryingDip
-            // In the hand, an end that has gone into the hole closes square at
-            // the hole's depth, like a joined end does. Left curved, it covered
-            // only the top of the hole's rounded corner and a wedge of wallpaper
-            // showed in the rest, sliding with the pointer. It changes over
-            // inside the hole, where neither shape of it can be seen.
-            if holdsOffTheCutout, let (nearIn, farIn) = carryingEndsInTheHole {
-                shape.leadingJoin = nearIn ? 1 : 0
-                shape.trailingJoin = farIn ? 1 : 0
-            }
-            return shape
-        }
-
-        // The other side: joined at its wall, and at its far end the same curve
-        // as the side with the readings — put on as it comes out of the hole.
-        shape.leadingJoin = 1
-        let scale = max(sizeScale, 0.0001)
-        shape.emergesFrom = .init(
-            buried: (mergesWithCutout ? cutout.overlap : NotchGeometry.cutoutOverlap) / scale,
-            // Measured: a circular arc of 31.2px on a 90px-deep cutout.
-            corner: cutout.depth * 31.2 / 90 / scale)
-        return shape
-    }
-
-    /// **Whether each ring carries its percentage in the strip.**
-    ///
-    /// At the cutout's own depth one ring fills the bar, and a second line
-    /// would be drawn into the bezel — so beside the hardware there is none,
-    /// and the reading is a hover away in the card. Raise the size setting far
-    /// enough and the bar deepens with it; once the reading would come out at
-    /// a legible height it is drawn.
-    ///
-    /// Measured against what the reading *would* be, not against the ring, so
-    /// **Whether a cell carries its percentage**, on any edge.
-    ///
-    /// One setting, everywhere. Beside the hardware it costs something: a ring
-    /// and its reading need 79pt of depth between them where the cutout gives
-    /// 38, so the reading is paid for out of the ring — which drops from 44pt
-    /// to around 30 at the top of the size range, and smaller below it. That
-    /// is a trade to offer rather than to make, and there is no floor under it:
-    /// asked for, it is drawn, however small the strip leaves it.
-    var showsCellReading: Bool {
-        showsNotchReadings
+    /// Zero everywhere except a top notch merging with the display's own. There
+    /// the shape runs up past the menu bar to meet the hardware, and that top
+    /// band is a **hole in the screen** — anything drawn in it is not dimmed or
+    /// clipped, it is simply not there. So the readings start below it.
+    /// Exactly the hardware's height, and nothing on top of it: the readings
+    /// then sit the frame's own `ringMargin` below the hardware's bottom edge,
+    /// which is the same distance a ring sits from the bezel on every other
+    /// placement. Adding a gap as well pads them twice and leaves them adrift
+    /// of the notch they are supposed to belong to.
+    var contentInset: CGFloat {
+        // 避让值使用屏幕点数；逆向抵消视图缩放，避免小尺寸下内容进入实体刘海。
+        guard edge == .top else { return 0 }
+        return max(0, (hardwareNotch?.height ?? 0) + topAvoidanceAdjustment) / sizeScale
     }
 
     /// How much of each end of the bar the flare actually takes.
@@ -818,6 +569,31 @@ final class NotchViewModel: ObservableObject {
         orbHugsCorner
             ? NotchLayout.orbConvexArcRadius(corner: drawnCornerRadius, scale: orbScale)
             : NotchLayout.orbArcRadius
+    }
+
+    /// Extra length at each end of the body so the notch has something to open
+    /// out *into*.
+    ///
+    /// A single ring makes a body about 117pt across; this Mac's notch is 220.
+    /// Left alone the hardware would be wider than the bar it is supposed to
+    /// grow into, which reads as a mistake. Matching it exactly is not enough
+    /// either — a bar the same width as the notch is a straight column, and the
+    /// notch appears not to have opened at all. So the floor is the notch plus
+    /// a fillet's worth of opening at each side, and a corner's worth beyond
+    /// that for the bar's own rounding to live in.
+    var endSpread: CGFloat { endSpread(cellCount: snapshots.count) }
+
+    func endSpread(cellCount: Int) -> CGFloat {
+        guard let hardwareNotch else { return 0 }
+        // Expressed against the whole shape, not just its body: with no flares
+        // the drawn width *is* the shape's length, and that is what has to
+        // clear the hardware.
+        let drawn = NotchLayout.shapeLength(
+            cellCount: visibleCount(cellCount), edge: edge, flare: flare,
+            spacing: cellSpacing(cellCount: cellCount), ringGrowth: ringGrowth
+        )
+        let wanted = hardwareNotch.width + 2 * NotchLayout.cornerRadius
+        return max(0, (wanted - drawn) / 2)
     }
 
     /// Where the settings orb sits.
@@ -869,8 +645,7 @@ final class NotchViewModel: ObservableObject {
     /// orb sits past `shapeLength`, so the pair stay symmetric about the notch
     /// at every size and on every edge.
     var moveAlong: CGFloat {
-        guard !carriedOnTheLeft else { return shapeLength - cutoutBleed }
-        return cutoutBleed + shapeLength - orbAlong
+        shapeLength - orbAlong
     }
 
     /// The mirror of `trailingExtent` at the near end — the room the move
@@ -899,7 +674,9 @@ final class NotchViewModel: ObservableObject {
     }
 
     var orbInset: CGFloat {
-        NotchLayout.orbInsetFromEdge
+        guard orbHugsCorner else { return contentInset + NotchLayout.orbInsetFromEdge }
+        return contentInset + bodyDepth
+            - drawnCornerRadius + NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
     }
 
     /// The arc's radius and offset **as the orb's own view needs them**.
@@ -951,11 +728,12 @@ final class NotchViewModel: ObservableObject {
     /// reaching for, and — where it has parted company with it — the arc you
     /// can actually see.
     var orbHandlePoints: [CGPoint] {
+        guard showsSettingsHandle else { return [] }
         let button = CGPoint(x: orbAlong, y: orbInset)
         guard orbHugsCorner else { return [button] }
 
-        let arcCentre = CGPoint(x: orbAlong + orbArcOffset.width,
-                                y: orbInset + orbArcOffset.height)
+        let offset = NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
+        let arcCentre = CGPoint(x: orbAlong - offset, y: orbInset - offset)
         let reach = hypot(button.x - arcCentre.x, button.y - arcCentre.y)
         guard reach > 0 else { return [button] }
         // The middle of the quadrant, which is out from its centre in the same
@@ -991,8 +769,8 @@ final class NotchViewModel: ObservableObject {
         let button = CGPoint(x: moveAlong, y: orbInset)
         guard orbHugsCorner else { return [button] }
 
-        let arcCentre = CGPoint(x: moveAlong + moveArcOffset.width,
-                                y: orbInset + moveArcOffset.height)
+        let offset = NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
+        let arcCentre = CGPoint(x: moveAlong + offset, y: orbInset - offset)
         let reach = hypot(button.x - arcCentre.x, button.y - arcCentre.y)
         guard reach > 0 else { return [button] }
         let arcMid = CGPoint(
@@ -1023,33 +801,32 @@ final class NotchViewModel: ObservableObject {
     /// drawn at that size, so this is the seam between the two spaces rather
     /// than a measurement either of them owns.
     var notchDrawnDepth: CGFloat {
-        NotchLayout.bodyDepth(for: edge) * sizeScale
+        (contentInset + bodyDepth) * sizeScale
     }
 
     /// The straight part of the shape, flares excluded.
     var bodyLength: CGFloat {
         NotchLayout.bodyLength(
-            cellCount: snapshots.count, edge: edge, spacing: cellSpacing
-        )
+            cellCount: visibleCount(snapshots.count), edge: edge, spacing: cellSpacing, ringGrowth: ringGrowth
+        ) + 2 * endSpread
     }
 
     /// Distance along the stack to cell `index`'s ring centre, widening
     /// included so the readings stay in the middle of the bar.
     func ringCenter(index: Int) -> CGFloat {
-        NotchLayout.ringCenter(index: index, edge: edge, flare: leadAllowance,
-                               spacing: cellSpacing)
+        NotchLayout.ringCenter(index: index - visibleStart, edge: edge, flare: flare,
+                              spacing: cellSpacing, ringGrowth: ringGrowth) + endSpread
     }
 
     var cellSpacing: CGFloat { cellSpacing(cellCount: snapshots.count) }
-    /// Centre-to-centre distance between cells, which is also the width of the
-    /// band `cellIndex(along:)` treats as belonging to one.
-    var cellPitch: CGFloat {
-        NotchLayout.cellAlong(for: edge) + cellSpacing
-    }
+    var cellPitch: CGFloat { cellAlong + cellSpacing }
+
+    // 圆环增大的占位从供应商间的留白扣除，保持开关前后的排列密度。
+    private var preferredCellSpacing: CGFloat { max(0, NotchLayout.cellSpacing - ringGrowth) }
 
     private func cellSpacing(cellCount: Int) -> CGFloat {
         guard edge.isVertical, screenSize.height > 0, cellCount > 1 else {
-            return NotchLayout.cellSpacing
+            return preferredCellSpacing
         }
         // Extra model cells spend the gaps first. Reserve the cards actually
         // present; assuming four quota windows for every local model overflows laptops.
@@ -1058,14 +835,24 @@ final class NotchViewModel: ObservableObject {
                 : contentCardHeight(sessionCap: 0),
             notchScale: sizeScale)
         let packed = NotchLayout.shapeLength(cellCount: cellCount, edge: edge,
-                                             flare: flare, spacing: 0)
-        return min(NotchLayout.cellSpacing,
+                                             flare: flare, spacing: 0, ringGrowth: ringGrowth)
+        return min(preferredCellSpacing,
                    max(0, ((screenSize.height - 2 * slack) / sizeScale - packed) / CGFloat(cellCount - 1)))
     }
 
     /// A provider with no activity source gets none, rather than borrowing
     /// somebody else's.
     func activity(for snapshot: ProviderSnapshot) -> ActivitySummary? {
+        // 设置列表也会显示未进入悬浮窗的联动供应商，直接使用该行的最新活动数据。
+        if let linked = snapshot.linked {
+            let live = sessions[snapshot.providerID] ?? []
+            let summary = ActivitySummary(sessions: live)
+            if summary?.state == .working || summary?.state == .waiting { return summary }
+            if linked.provider.activeRequests > 0 && (!live.isEmpty || linked.provider.status == "active") {
+                return ActivitySummary(state: .working)
+            }
+            return summary
+        }
         guard let model = snapshot.localModel else { return activity(for: snapshot.providerID) }
         if let local = localActivities[snapshot.id] {
             return ActivitySummary(sessions: [AgentSession(id: snapshot.id, name: local.label,
@@ -1078,7 +865,17 @@ final class NotchViewModel: ObservableObject {
     }
 
     func activity(for providerID: String) -> ActivitySummary? {
-        ActivitySummary(sessions: sessions[providerID] ?? [])
+        if let snapshot = snapshots.first(where: { $0.id == providerID }), snapshot.linked != nil {
+            return activity(for: snapshot)
+        }
+        if let live = sessions[providerID], !live.isEmpty {
+            return ActivitySummary(sessions: live)
+        }
+        if let activitySourceIDs {
+            guard let source = activitySourceIDs[providerID] else { return nil }
+            return ActivitySummary(sessions: sessions[source] ?? [])
+        }
+        return ActivitySummary(sessions: sessions[providerID] ?? [])
     }
 
     var hoveredSnapshot: ProviderSnapshot? {
@@ -1094,12 +891,37 @@ final class NotchViewModel: ObservableObject {
     var placement: NotchPlacement { NotchPlacement(edge: edge, panelSize: panelSize) }
 
     /// Room at each end of the stack, for this edge.
-    var slack: CGFloat { slack(cellCount: snapshots.count) }
+    var slack: CGFloat { positionedLeading ?? slack(cellCount: snapshots.count) }
+
+    func tooltipAlong(index: Int, length: CGFloat) -> CGFloat {
+        let wanted = slack + ringCenter(index: index) * sizeScale
+        guard let bounds = tooltipAlongBounds ?? visibleAlongRange else { return wanted }
+        let lower = bounds.lowerBound + length / 2
+        let upper = bounds.upperBound - length / 2
+        return min(max(lower, upper), max(lower, wanted))
+    }
+
+    func tooltipAlongLength(for snapshot: ProviderSnapshot) -> CGFloat {
+        edge.isVertical ? tooltipHeight(for: snapshot) : NotchLayout.cardWidth
+    }
+
+    func tooltipTailOffset(index: Int, snapshot: ProviderSnapshot) -> CGFloat {
+        let length = tooltipAlongLength(for: snapshot)
+        let offset = slack + ringCenter(index: index) * sizeScale - tooltipAlong(index: index, length: length)
+        let limit = max(0, length / 2 - NotchLayout.cardCorner - NotchLayout.tailHeight / 2)
+        return min(limit, max(-limit, offset))
+    }
 
     func slack(cellCount: Int) -> CGFloat {
-        NotchLayout.slack(for: edge,
+        let standard = NotchLayout.slack(for: edge,
                           maxCardHeight: maxCardHeight(cellCount: cellCount),
                           notchScale: sizeScale)
+        guard edge == .top, let hardwareNotch else { return standard }
+        // 按滑块上限预留透明空间，拖动宽度时无需反复调整窗口尺寸和锚点。
+        let side = min(CGFloat(Preferences.collapsedSideWidthRange.upperBound),
+                       screenSize.width > 0 ? max(0, (screenSize.width - hardwareNotch.width) / 2) : .infinity)
+        let restingWidth = hardwareNotch.width + 2 * side
+        return max(standard, (restingWidth - shapeLength(cellCount: cellCount) * sizeScale) / 2 + 8)
     }
 
     /// How many sessions a tooltip may list here before it has to summarise
@@ -1149,6 +971,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     func maxCardHeight(cellCount: Int) -> CGFloat {
+        if tooltipHeightMode == .full { return fullTooltipHeightLimit }
         let cap = sessionCap(cellCount: cellCount)
         return snapshots.isEmpty
             ? NotchLayout.maxCardHeight(sessionCap: cap, hasTokenUsage: hasTokenUsage, hasPlan: hasPlan,
@@ -1170,12 +993,13 @@ final class NotchViewModel: ObservableObject {
     /// budgeted for, and run off the bottom of a small display.
     private func cardBudget(cellCount: Int) -> CGFloat {
         if edge.isVertical {
-            return screenSize.height / sizeScale
+            return (screenUsableSize.height > 0 ? screenUsableSize.height : screenSize.height) / sizeScale
                 - shapeLength(cellCount: cellCount)
                 - 2 * NotchLayout.cardCorner
         }
         return screenSize.height / sizeScale
-            - NotchLayout.bodyDepth(for: edge)
+            - contentInset
+            - bodyDepth
             - NotchLayout.tailLength
             - NotchLayout.tailGap
     }
@@ -1189,20 +1013,20 @@ final class NotchViewModel: ObservableObject {
     /// And across it. Merged into the hole this is the hole's own depth in both
     /// states — see `mergedScale`.
     var notchDepth: CGFloat {
-        if mergesWithCutout { return contentDepth }
-        return isExpanded ? NotchLayout.bodyDepth(for: edge) : NotchLayout.pillWidth
+        if isExpanded { return contentInset + bodyDepth }
+        return restingDepth
     }
 
     /// What the notch folds away to, whether or not it is open right now —
     /// the hit region has to know that while the notch is still open.
-    ///
-    /// The same pill on every edge, plus whatever of it is buried in the
-    /// display's hole, so that the part of it anybody can see is the same pill
-    /// too. Folded against the hole it is not a separate tab stuck to the
-    /// bezel: the bridge holds, and what shows is the hardware's own notch
-    /// carrying a shallow ledge out of one side.
-    var restingLength: CGFloat { NotchLayout.pillHeight + cutoutBleed }
-    var restingDepth: CGFloat { mergesWithCutout ? contentDepth : NotchLayout.pillWidth }
+    var restingLength: CGFloat {
+        guard let hardwareNotch else { return NotchLayout.pillHeight }
+        return (hardwareNotch.width + (hasCollapsedSummary ? 2 * resolvedCollapsedSideWidth : 0)) / sizeScale
+    }
+    var restingDepth: CGFloat {
+        hardwareNotch.map { (hasCollapsedSummary ? resolvedCollapsedHeight : $0.height) / sizeScale }
+            ?? NotchLayout.pillWidth
+    }
 
     /// What wakes the folded notch, in panel points: the resting shape and a
     /// band around it, or the resting shape alone.
@@ -1232,9 +1056,68 @@ final class NotchViewModel: ObservableObject {
     /// model back. Taking the count as an argument is the only way to be sure
     /// the panel is sized for the list that caused the change.
     func shapeLength(cellCount: Int) -> CGFloat {
-        NotchLayout.bodyLength(cellCount: cellCount, edge: edge,
-                               spacing: cellSpacing(cellCount: cellCount))
-            + leadAllowance + endAllowance
+        NotchLayout.shapeLength(cellCount: visibleCount(cellCount),
+                                edge: edge, flare: flare,
+                                spacing: cellSpacing(cellCount: cellCount), ringGrowth: ringGrowth)
+            + 2 * endSpread(cellCount: cellCount)
+    }
+
+    private struct GuideLayoutKey: Equatable {
+        let frame: CGRect
+        let usable: CGRect
+        let hardware: HardwareNotch?
+        let scale: CGFloat
+        let ringGrowth: CGFloat
+        let topAdjustment: CGFloat
+        let ringAdjustment: CGFloat
+        let count: Int
+        let snapshots: [ProviderSnapshot]
+        let now: Date
+        let tooltipMode: TooltipHeightMode
+        let moveHandle: Bool
+        let settingsHandle: Bool
+    }
+    private var guideLayoutKey: GuideLayoutKey?
+    private var guideFrames: [NotchEdge: CGRect] = [:]
+
+    /// Preview each centered landing with its own hardware and edge geometry.
+    func centeredGuideFrames(on screen: ScreenDescribing, cellCount: Int) -> [NotchEdge: CGRect] {
+        let key = GuideLayoutKey(frame: screen.frameValue, usable: screen.visibleFrameValue,
+            hardware: screen.hardwareNotch, scale: sizeScale, ringGrowth: ringGrowth,
+            topAdjustment: topAvoidanceAdjustment, ringAdjustment: ringEdgeAdjustment, count: cellCount, snapshots: snapshots,
+            now: now, tooltipMode: tooltipHeightMode, moveHandle: showsMoveHandle, settingsHandle: showsSettingsHandle)
+        if guideLayoutKey == key { return guideFrames }
+        let preview = NotchViewModel()
+        preview.now = now
+        preview.sizeScale = sizeScale
+        preview.topAvoidanceAdjustment = topAvoidanceAdjustment
+        preview.ringEdgeAdjustment = ringEdgeAdjustment
+        preview.snapshots = snapshots
+        preview.independentInnerRing = independentInnerRing
+        preview.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
+        preview.tooltipHeightMode = tooltipHeightMode
+        preview.showsMoveHandle = showsMoveHandle
+        preview.showsSettingsHandle = showsSettingsHandle
+        var frames: [NotchEdge: CGRect] = [:]
+        for edge in NotchEdge.allCases {
+            preview.edge = edge
+            preview.adopt(screen: screen)
+            let length = preview.shapeLength(cellCount: cellCount) * sizeScale
+            let depth = preview.notchDrawnDepth
+            let start = showsMoveHandle ? preview.leadingExtent * sizeScale : 0
+            let end = showsSettingsHandle ? preview.trailingExtent * sizeScale : 0
+            let size = NotchPlacement.panelSize(edge: edge, length: length + start + end, depth: depth)
+            let layout = NotchPosition(edge: edge).layout(on: screen, panelSize: size,
+                shapeLength: length, endClearance: end, startClearance: start)
+            let local = NotchPlacement(edge: edge, panelSize: layout.frame.size)
+                .rect(along: layout.leading, across: 0, length: length, depth: depth)
+            frames[edge] = CGRect(x: layout.frame.minX + local.minX - screen.frameValue.minX,
+                y: screen.frameValue.maxY - layout.frame.maxY + local.minY,
+                width: local.width, height: local.height)
+        }
+        guideLayoutKey = key
+        guideFrames = frames
+        return frames
     }
 
     /// The panel as it lands on screen, size choice included.
@@ -1248,13 +1131,28 @@ final class NotchViewModel: ObservableObject {
     /// whole panel instead left the card cropped at the small end, where the
     /// panel had shrunk around a card that had not.
     func panelSize(cellCount: Int) -> CGSize {
+        if tooltipHeightMode == .full, edge.isVertical, screenUsableSize.height > 0 {
+            return CGSize(width: (contentInset + bodyDepth) * sizeScale
+                          + NotchLayout.tooltipDepth(for: edge), height: screenUsableSize.height)
+        }
         let card = maxCardHeight(cellCount: cellCount)
         return NotchPlacement.panelSize(
             edge: edge,
-            length: cutoutSpan(cellCount: cellCount)
-                + 2 * NotchLayout.slack(for: edge, maxCardHeight: card, notchScale: sizeScale),
-            depth: NotchLayout.bodyDepth(for: edge) * sizeScale
+            length: shapeLength(cellCount: cellCount) * sizeScale
+                + 2 * slack(cellCount: cellCount),
+            depth: (contentInset + bodyDepth) * sizeScale
                 + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card)
         )
+    }
+
+    func standardPanelSize(cellCount: Int) -> CGSize {
+        let cap = sessionCap(cellCount: cellCount)
+        let card = snapshots.isEmpty ? NotchLayout.maxCardHeight(sessionCap: cap)
+            : contentCardHeight(sessionCap: cap)
+        return NotchPlacement.panelSize(edge: edge,
+            length: shapeLength(cellCount: cellCount) * sizeScale
+                + 2 * NotchLayout.slack(for: edge, maxCardHeight: card, notchScale: sizeScale),
+            depth: (contentInset + bodyDepth) * sizeScale
+                + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card))
     }
 }

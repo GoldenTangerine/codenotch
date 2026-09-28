@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 TooltipRenderTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/TooltipRenderTests.swift
+ */
 import XCTest
 import SwiftUI
 @testable import Codenotch
@@ -9,105 +18,84 @@ import SwiftUI
 /// `TOOLTIP_RENDER_PATH` and the frame is written there.
 @MainActor
 final class TooltipRenderTests: XCTestCase {
-    func testAmpDetailsRenderBesideTheHoveredRing() throws {
-        let reading = try AmpUsage.parse(AmpFixture.tier)
-        let model = NotchViewModel()
-        model.edge = .right
-        model.snapshots = [ProviderSnapshot(
-            id: "amp", displayName: "Amp", glyph: .amp, fidelity: reading.fidelity,
-            status: .ok, windows: reading.windows, headlineID: reading.headlineID, plan: reading.plan
-        )]
-        model.isExpanded = true
-        model.hoveredIndex = 0
-        for style in [NotchSurfaceStyle.solid, .glass] {
-            model.surfaceStyle = style
-            let renderer = ImageRenderer(content: NotchRootView(model: model)
-                .frame(width: model.panelSize.width, height: model.panelSize.height)
+    func testStandaloneTooltipsResolveTheirOwnSecondaryInk() throws {
+        let provider = CodeSwitchProvider(providerId: "contrast", providerName: "Supplier", icon: "openai",
+            activeRequests: 0, status: "enabled", loading: true, updatedAt: 0, quotas: [], stats: nil)
+        let linked = provider.snapshot(platform: CodeSwitchPlatform(platform: "codex", name: "Codex",
+            icon: "openai", error: false, providers: [provider]))
+        let ordinary = ProviderSnapshot(id: "claude", displayName: "Claude", glyph: .claude,
+            fidelity: .official, status: .error("Secondary status message"), windows: [])
+
+        for snapshot in [ordinary, linked] {
+            func render(_ style: NotchSurfaceStyle, reduced: Bool = false) throws -> NSBitmapImageRep {
+                try contrastBitmap(TooltipCard(snapshot: snapshot, now: Date(timeIntervalSince1970: 1_800_000_000))
+                    .environment(\.notchSurfaceStyle, style)
+                    .environment(\.codenotchReduceTransparency, reduced)
+                    // A stale parent value must not override the card's own surface policy.
+                    .environment(\.tooltipSecondaryInk, Palette.textSecondary))
+            }
+            let solid = try render(.solid)
+            let glass = try render(.glass)
+            XCTAssertEqual(solid.pixelsWide, glass.pixelsWide)
+            XCTAssertEqual(solid.pixelsHigh, glass.pixelsHigh)
+            XCTAssertGreaterThan(try grayPixels(in: glass, level: 194),
+                                 try grayPixels(in: solid, level: 194) + 20,
+                                 "\(snapshot.id): secondary copy did not brighten without NotchRootView")
+            for preserved in [try render(.darkGlass), try render(.glass, reduced: true)] {
+                XCTAssertGreaterThan(try grayPixels(in: glass, level: 194),
+                                     try grayPixels(in: preserved, level: 194) + 20)
+            }
+        }
+    }
+
+    func testDailyBudgetLabelsConsumeTheTooltipInk() throws {
+        let source = CodeSwitchQuota(key: "weekly", label: nil, used: 80, total: 200, unlimited: false,
+            nextReset: nil, active: true, valueMode: "currency", unit: "USD", extra: nil,
+            invalidMessage: nil, displayKind: "progress")
+        let budget = CodeSwitchDailyBudget.Reading(source: source, todayUsed: 10, available: 24,
+            usedFraction: 0.3, sinceObservation: true)
+        func render(_ ink: Color) throws -> NSBitmapImageRep {
+            try contrastBitmap(CodeSwitchDailyBudgetRow(budget: budget)
+                .frame(width: NotchLayout.cardTextWidth)
+                .environment(\.tooltipSecondaryInk, ink))
+        }
+        let original = try render(Palette.textSecondary)
+        let readable = try render(Palette.readableTooltipTextSecondary)
+        XCTAssertGreaterThan(try grayPixels(in: readable, level: 194),
+                             try grayPixels(in: original, level: 194) + 20)
+    }
+
+    private func contrastBitmap<V: View>(_ view: V) throws -> NSBitmapImageRep {
+        try XCTSkipIf(NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
+                      "Glass text contrast requires system Reduce Transparency to be off")
+        var bitmap: NSBitmapImageRep?
+        // Pin AppKit too: Palette contains dynamic NSColors, not just SwiftUI colors.
+        NSAppearance(named: .darkAqua)?.performAsCurrentDrawingAppearance {
+            let renderer = ImageRenderer(content: view
                 .environment(\.colorScheme, .dark)
-                .environment(\.codenotchHeadlessGlass, true))
-            let image = try XCTUnwrap(renderer.cgImage)
-            let pixels = NSBitmapImageRep(cgImage: image)
-            var ink = 0
-            for x in stride(from: 0, to: Int(NotchLayout.cardWidth), by: 2) {
-                for y in stride(from: 0, to: pixels.pixelsHigh, by: 2) {
-                    if (pixels.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.5 { ink += 1 }
-                }
-            }
-            XCTAssertGreaterThan(ink, 100, "\(style): no card content beside the hovered ring")
-        }
-    }
-
-    func testAmpSubscriptionAndFreeCardsRenderWithTheirGlyph() throws {
-        XCTAssertNotNil(NSImage(named: ProviderGlyph.amp.assetName))
-        for (name, data) in [("subscription", AmpFixture.tier), ("free", AmpFixture.free)] {
-            let reading = try AmpUsage.parse(data)
-            let snapshot = ProviderSnapshot(
-                id: "amp", displayName: "Amp", glyph: .amp, fidelity: reading.fidelity,
-                status: .ok, windows: reading.windows, headlineID: reading.headlineID, plan: reading.plan
-            )
-            let view = HStack(spacing: 20) {
-                VStack {
-                    ProviderRing(usedFraction: snapshot.usedFraction, glyph: .amp)
-                    Text(snapshot.headlineText).foregroundStyle(.white)
-                }
-                TooltipCard(snapshot: snapshot, now: Date(), direction: .trailing)
-            }
-            .padding(20)
-            .background(Color.black)
-            .environment(\.colorScheme, .dark)
-            .environment(\.notchSurfaceStyle, .solid)
-            .environment(\.codenotchAccentColor, .blue)
-            .environment(\.codenotchHeadlessGlass, true)
-
-            let renderer = ImageRenderer(content: view)
+                .environment(\.codenotchReduceTransparency, false)
+                .environment(\.codenotchHeadlessGlass, true)
+                .padding(20)
+                .background(Color.black))
             renderer.scale = 3
-            let image = try XCTUnwrap(renderer.nsImage)
-            XCTAssertGreaterThan(image.size.width, NotchLayout.cardWidth)
-            XCTAssertGreaterThan(image.size.height, 100)
-            let tiff = try XCTUnwrap(image.tiffRepresentation)
-            let png = try XCTUnwrap(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
-            let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
-            attachment.name = "amp-\(name)"
-            attachment.lifetime = .keepAlways
-            add(attachment)
+            bitmap = renderer.cgImage.map { NSBitmapImageRep(cgImage: $0) }
         }
+        return try XCTUnwrap(bitmap)
     }
 
-    /// The card with a fixture at 80% of a $1,500 cap — the render behind
-    /// docs/providers/apify.png, attached rather than compared: the point is
-    /// that the money row and the reset draw beside the mark, not their pixels.
-    func testApifyCardRendersWithItsGlyph() throws {
-        XCTAssertNotNil(NSImage(named: ProviderGlyph.apify.assetName))
-        let windows = try ApifyUsage.windows(from: Data(ApifyFixture.limits.utf8))
-        let snapshot = ProviderSnapshot(
-            id: "apify", displayName: "Apify", glyph: .apify, fidelity: .official,
-            status: .ok, windows: windows, headlineID: ApifyUsage.headlineID, plan: "Scale"
-        )
-        let view = HStack(spacing: 20) {
-            VStack {
-                ProviderRing(usedFraction: snapshot.usedFraction, glyph: .apify)
-                Text(snapshot.headlineText).foregroundStyle(.white)
+    private func grayPixels(in bitmap: NSBitmapImageRep, level: Double) throws -> Int {
+        var count = 0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                let color = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB))
+                if abs(color.redComponent * 255 - level) < 2,
+                   abs(color.greenComponent * 255 - level) < 2,
+                   abs(color.blueComponent * 255 - level) < 2 {
+                    count += 1
+                }
             }
-            TooltipCard(snapshot: snapshot, now: Date(timeIntervalSince1970: 1_790_000_000), direction: .trailing)
         }
-        .padding(20)
-        .background(Color.black)
-        .environment(\.colorScheme, .dark)
-        .environment(\.notchSurfaceStyle, .solid)
-        .environment(\.codenotchAccentColor, .blue)
-        .environment(\.codenotchHeadlessGlass, true)
-
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 3
-        let image = try XCTUnwrap(renderer.nsImage)
-        XCTAssertGreaterThan(image.size.width, NotchLayout.cardWidth)
-        XCTAssertGreaterThan(image.size.height, 100)
-        let tiff = try XCTUnwrap(image.tiffRepresentation)
-        let png = try XCTUnwrap(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
-        let attachment = XCTAttachment(data: png, uniformTypeIdentifier: "public.png")
-        attachment.name = "apify-monthly"
-        attachment.lifetime = .keepAlways
-        add(attachment)
+        return count
     }
 
     private func session(_ name: String, _ state: AgentSession.State,

@@ -1,3 +1,12 @@
+/**
+ @name: Cursor 用量解析
+ @Descripttion: 解析 Cursor 自动用量、API 用量和企业额度。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:05:58
+ @LastEditTime: 2026-09-08 22:05:58
+ @FilePath: Sources/Providers/CursorUsage.swift
+ */
 import Foundation
 
 /// Parses Cursor's `GET /api/usage-summary`, recorded from a live free account:
@@ -70,6 +79,15 @@ enum CursorUsage {
 
         var windows: [LimitWindow] = []
 
+        // The headline, and the one the dashboard shows.
+        //
+        // Zero is a reading, not an absence. A free plan reports
+        // `totalPercentUsed: 0` beside `limit: 0`, and it is tempting to read
+        // that as "no allowance to be a percentage of" — but Cursor itself
+        // ships the answer in the same response:
+        // "You've used 0% of your included total usage". If Cursor calls it 0%,
+        // so does this. Suppressing it hid a correct reading from an account
+        // that had genuinely just been switched.
         // Zero is a reading, not an absence — a fresh month is 0% on this bar.
         if let models = percent(plan["autoPercentUsed"]) {
             windows.append(LimitWindow(id: "auto", label: modelsLabel,

@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 CodexUsage.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/CodexUsage.swift
+ */
 import Foundation
 
 /// Account-wide Codex activity returned by the Codex profile endpoint.
@@ -82,6 +91,40 @@ struct CodexTokenUsage: Codable, Equatable, Sendable {
         return String(format: "%04d-%02d-%02d",
                       components.year ?? 0, components.month ?? 0, components.day ?? 0)
     }
+}
+
+/// Unused rate-limit resets on the Codex account.
+///
+/// The ChatGPT backend lists credits that can still reset a rate limit, under
+/// the same credential as `/wham/usage`.
+struct CodexResetCredits: Equatable, Sendable {
+    struct Credit: Equatable, Sendable, Identifiable {
+        let id: String
+        let status: String
+        let expiresAt: Date?
+
+        init(id: String, status: String, expiresAt: Date? = nil) {
+            self.id = id
+            self.status = status
+            self.expiresAt = expiresAt
+        }
+    }
+
+    let availableCount: Int
+    let credits: [Credit]
+
+    init(availableCount: Int, credits: [Credit] = []) {
+        self.availableCount = availableCount
+        self.credits = credits
+    }
+
+    /// Credits still available, soonest expiry first.
+    var available: [Credit] {
+        credits.filter { $0.status == "available" }
+            .sorted { ($0.expiresAt ?? .distantFuture) < ($1.expiresAt ?? .distantFuture) }
+    }
+
+    var nextExpiry: Date? { available.compactMap(\.expiresAt).min() }
 }
 
 /// The account's main rate-limit windows belong in the usage rings. Spark

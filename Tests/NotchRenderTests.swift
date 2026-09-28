@@ -1,5 +1,15 @@
+/**
+ @name: 显示栏渲染测试
+ @Descripttion: 验证显示栏绘制、编辑配色和窗口交互行为。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-10 10:05:32
+ @LastEditTime: 2026-09-10 10:05:32
+ @FilePath: Tests/NotchRenderTests.swift
+ */
 import SwiftUI
 import XCTest
+import Combine
 @testable import Codenotch
 
 /// The layout maths can be right in every unit and still put nothing on the
@@ -7,6 +17,47 @@ import XCTest
 /// which is the one thing the arithmetic tests cannot tell you.
 @MainActor
 final class NotchRenderTests: XCTestCase {
+    func testPositionGuidesRemainVisibleOnOppositeThemeWallpapers() throws {
+        let size = CGSize(width: 640, height: 360)
+        for scheme in [ColorScheme.light, .dark] {
+            for whiteBackground in [false, true] {
+                for scale: CGFloat in [0.75, 1.5] {
+                    let length = 140 * scale
+                    let depth = 44 * scale
+                    let frames: [NotchEdge: CGRect] = [
+                        .left: CGRect(x: 0, y: (size.height - length) / 2, width: depth, height: length),
+                        .right: CGRect(x: size.width - depth, y: (size.height - length) / 2, width: depth, height: length),
+                        .top: CGRect(x: (size.width - length) / 2, y: 0, width: length, height: depth),
+                        .bottom: CGRect(x: (size.width - length) / 2, y: size.height - depth, width: length, height: depth)
+                    ]
+                    let renderer = ImageRenderer(content: EdgeDropZones(target: .bottom, size: size,
+                        frames: frames, hardwareNotch: nil, scale: scale, accentColor: .cyan)
+                        .background(whiteBackground ? Color.white : Color.black)
+                        .environment(\.colorScheme, scheme))
+                    renderer.scale = 1
+                    let bitmap = NSBitmapImageRep(cgImage: try XCTUnwrap(renderer.cgImage))
+                    for edge in NotchEdge.allCases {
+                        let frame = try XCTUnwrap(frames[edge])
+                        var contrastPixels = 0
+                        var accentPixels = 0
+                        for x in Int(frame.minX.rounded(.up))..<Int(frame.maxX.rounded(.down)) {
+                            for y in Int(frame.minY.rounded(.up))..<Int(frame.maxY.rounded(.down)) {
+                                let color = try XCTUnwrap(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+                                let low = min(color.redComponent, color.greenComponent, color.blueComponent)
+                                let high = max(color.redComponent, color.greenComponent, color.blueComponent)
+                                if whiteBackground ? low < 0.6 : high > 0.4 { contrastPixels += 1 }
+                                if high - low > 0.3 { accentPixels += 1 }
+                            }
+                        }
+                        XCTAssertGreaterThan(contrastPixels, 10, "Guide must contrast with the wallpaper: \(edge)")
+                        if edge == .bottom { XCTAssertGreaterThan(accentPixels, 10) }
+                        else { XCTAssertEqual(accentPixels, 0) }
+                    }
+                }
+            }
+        }
+    }
+
     private func model(edge: NotchEdge, cells: Int = 4) -> NotchViewModel {
         let model = NotchViewModel()
         model.edge = edge
@@ -84,6 +135,79 @@ final class NotchRenderTests: XCTestCase {
         }
     }
 
+    func testCustomPlacementPaintsAtTheHitRegionOnEveryEdge() throws {
+        for edge in NotchEdge.allCases {
+            for scale: CGFloat in [0.75, 1.25] {
+                let model = model(edge: edge)
+                model.sizeScale = scale
+                let place = NotchPlacement(edge: edge, panelSize: model.panelSize)
+                let length = model.shapeLength * scale
+                for leading in [CGFloat(0), place.panelLength - length] {
+                    model.positionedLeading = leading
+                    let rep = try XCTUnwrap(render(model))
+                    let painted = (0..<Int(place.panelLength)).filter { along in
+                        let point = place.point(along: CGFloat(along),
+                                                across: model.notchDepth * scale / 2)
+                        return (rep.colorAt(x: Int(point.x), y: Int(point.y))?.alphaComponent ?? 0) > 0.5
+                    }
+                    let first = CGFloat(try XCTUnwrap(painted.first))
+                    let last = CGFloat(try XCTUnwrap(painted.last))
+                    // 弧形端部会缩进；校验轮廓中心跟随热区且绘制不越界。
+                    XCTAssertEqual((first + last) / 2, leading + length / 2, accuracy: 2,
+                                   "\(edge), scale \(scale): painted centre must follow the hit region")
+                    XCTAssertGreaterThanOrEqual(first, leading - 1)
+                    XCTAssertLessThanOrEqual(last, leading + length + 1)
+                }
+            }
+        }
+    }
+
+    func testExpandedBarDoesNotPaintControlsOutsideItsBody() throws {
+        for edge in NotchEdge.allCases {
+            let model = model(edge: edge)
+            let rep = try XCTUnwrap(render(model))
+            let place = NotchPlacement(edge: edge, panelSize: model.panelSize)
+            for x in 0..<rep.pixelsWide {
+                for y in 0..<rep.pixelsHigh {
+                    let point = CGPoint(x: x, y: y)
+                    guard place.across(of: point) > model.notchDepth * model.sizeScale + 2 else { continue }
+                    XCTAssertLessThan(rep.colorAt(x: x, y: y)?.alphaComponent ?? 0, 0.1)
+                }
+            }
+        }
+    }
+
+    func testPositionEditingOutlineUsesTheNotchAccent() throws {
+        let model = model(edge: .right, cells: 0)
+        model.isEditingPosition = true
+
+        func colouredPixels(_ choice: AccentColorChoice, in image: NSBitmapImageRep) throws -> Int {
+            let expected = try XCTUnwrap(NSColor(choice.color).usingColorSpace(.deviceRGB))
+            var count = 0
+            for x in 0..<image.pixelsWide {
+                for y in 0..<image.pixelsHigh {
+                    guard let colour = image.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                          colour.alphaComponent > 0.2 else { continue }
+                    let hueDistance = abs(colour.hueComponent - expected.hueComponent)
+                    if colour.saturationComponent > 0.5,
+                       min(hueDistance, 1 - hueDistance) < 0.04 {
+                        count += 1
+                    }
+                }
+            }
+            return count
+        }
+
+        model.accentColor = .pink
+        let pink = try XCTUnwrap(render(model))
+        XCTAssertGreaterThan(try colouredPixels(.pink, in: pink), 0)
+
+        model.accentColor = .green
+        let green = try XCTUnwrap(render(model))
+        XCTAssertGreaterThan(try colouredPixels(.green, in: green), 0)
+        XCTAssertEqual(try colouredPixels(.pink, in: green), 0)
+    }
+
     /// The weekly ring has to actually appear, and only when asked for.
     ///
     /// Counted by colour rather than by ink: the arcs are drawn on top of the
@@ -122,6 +246,7 @@ final class NotchRenderTests: XCTestCase {
     /// starts a move is worse than a visible one.
     func testAHiddenMoveHandleIsNeitherDrawnNorPressable() throws {
         let shown = model(edge: .right)
+        shown.showsMoveHandle = true
         let point = try XCTUnwrap(shown.moveHandlePoints.first)
         XCTAssertTrue(shown.isOnMoveHandle(along: point.x, across: point.y))
 
@@ -237,6 +362,8 @@ final class NotchRenderTests: XCTestCase {
     func testNothingIsPaintedBeyondTheNotchAndItsOrbAtAnySize() {
         for size in NotchSize.allCases {
             let m = model(edge: .right)
+            m.showsSettingsHandle = true
+            m.showsMoveHandle = true
             m.sizeScale = size.scale
             guard let rep = render(m) else {
                 XCTFail("\(size.rawValue): no image")
@@ -500,6 +627,147 @@ final class PanelSizingIntegrityTests: XCTestCase {
 /// bargain of a window that sits over everything you are working in.
 @MainActor
 final class ClickThroughTests: XCTestCase {
+    private struct HandleScreen: ScreenDescribing {
+        let frameValue = CGRect(x: 0, y: 0, width: 1440, height: 900)
+        let visibleFrameValue = CGRect(x: 0, y: 24, width: 1440, height: 838)
+        let hardwareNotch: HardwareNotch? = HardwareNotch(width: 220, height: 38)
+    }
+
+    private func click(_ point: CGPoint, in panel: NSWindow) throws {
+        for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+            let event = try XCTUnwrap(NSEvent.mouseEvent(
+                with: type, location: point, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: panel.windowNumber, context: nil,
+                eventNumber: 1, clickCount: 1, pressure: 1))
+            panel.sendEvent(event)
+        }
+    }
+
+    func testIndependentHandlesLeaveTheHardwareNotchGapTransparent() throws {
+        let controller = NotchWindowController()
+        controller.model.edge = .top
+        controller.model.snapshots = Array(Fixtures.snapshots().prefix(4))
+        controller.show()
+        defer { controller.stop() }
+        let model = controller.model
+        model.adopt(screen: HandleScreen())
+        let content = try XCTUnwrap(controller.panelContentViewForTesting)
+        let panel = try XCTUnwrap(content.window)
+        let host = try XCTUnwrap(content.subviews.first as? NotchHostingView<NotchRootView>)
+        var opens = 0
+        var refreshes = 0
+        controller.onOpenSettings = { opens += 1 }
+        model.onOpenSettings = { opens += 1 }
+        controller.onRefreshProvider = { _ in refreshes += 1 }
+        // Keep the synthetic screen fixed: yielding would deliver real screen notifications.
+        for settings in [true, false] {
+            for move in [true, false] {
+                model.showsSettingsHandle = settings
+                model.showsMoveHandle = move
+                controller.apply(.alwaysShow)
+                let placement = NotchPlacement(edge: .top, panelSize: panel.frame.size)
+                let gap = placement.point(along: model.slack + model.shapeLength / 2,
+                                          across: model.notchDepth + 10)
+                let gear = placement.point(along: model.slack + model.orbAlong, across: model.orbInset)
+                let mover = placement.point(along: model.slack + model.moveAlong, across: model.orbInset)
+                for (point, enabled) in [(gear, settings), (mover, move), (gap, false)] {
+                    XCTAssertEqual(host.interactiveRects.contains { $0.contains(point) }, enabled)
+                    XCTAssertEqual(content.hitTest(CGPoint(x: point.x, y: panel.frame.height - point.y)) != nil,
+                                   enabled)
+                }
+                let before = opens
+                try click(CGPoint(x: gear.x, y: panel.frame.height - gear.y), in: panel)
+                XCTAssertEqual(opens - before, settings ? 1 : 0)
+                let pinned = model.isPinned
+                try click(CGPoint(x: gap.x, y: panel.frame.height - gap.y), in: panel)
+                XCTAssertEqual(opens - before, settings ? 1 : 0)
+                XCTAssertEqual(model.isPinned, pinned)
+                XCTAssertEqual(refreshes, 0)
+            }
+        }
+    }
+
+    func testTransparentHandleGapDoesNotPreventFullScreenFolding() throws {
+        var pointer = CGPoint.zero
+        let controller = NotchWindowController(mouseLocation: { pointer })
+        controller.model.edge = .top
+        controller.model.snapshots = Array(Fixtures.snapshots().prefix(4))
+        controller.show()
+        defer { controller.stop() }
+        let model = controller.model
+        model.adopt(screen: HandleScreen())
+        model.showsSettingsHandle = true
+        model.showsMoveHandle = true
+        controller.apply(.alwaysShow)
+        let frame = try XCTUnwrap(controller.panelFrameForTesting)
+        pointer = CGPoint(x: frame.minX + model.slack + model.shapeLength / 2,
+                          y: frame.maxY - model.notchDepth - 10)
+        controller.isFullScreenActive = { true }
+        controller.handleActiveSpaceOrAppChange()
+        XCTAssertFalse(model.isExpanded)
+    }
+
+    func testSettingsButtonOpensSettingsAndReleasesHiddenHitRegions() throws {
+        for edge in NotchEdge.allCases {
+            for scale: CGFloat in [0.75, 1, 1.5] {
+                let controller = NotchWindowController()
+                controller.model.edge = edge
+                controller.model.sizeScale = scale
+                controller.model.snapshots = Array(Fixtures.snapshots().prefix(2))
+                var opens = 0
+                var refreshes = 0
+                controller.onOpenSettings = { opens += 1 }
+                controller.model.onOpenSettings = { opens += 1 }
+                controller.onRefreshProvider = { _ in refreshes += 1 }
+                controller.show()
+                defer { controller.stop() }
+                controller.model.isExpanded = true
+                controller.apply(showsSettingsHandle: true)
+                let model = controller.model
+                let frame = try XCTUnwrap(controller.panelFrameForTesting)
+                let content = try XCTUnwrap(controller.panelContentViewForTesting)
+                let host = try XCTUnwrap(content.subviews.first as? NotchHostingView<NotchRootView>)
+                let point = NotchPlacement(edge: edge, panelSize: model.panelSize).point(
+                    along: model.slack + model.orbAlong * scale, across: model.orbInset * scale)
+                XCTAssertTrue(host.interactiveRects.contains { $0.contains(point) })
+                let panel = try XCTUnwrap(content.window)
+                try click(CGPoint(x: point.x, y: frame.height - point.y), in: panel)
+                XCTAssertEqual(opens, 1)
+                XCTAssertEqual(refreshes, 0)
+                controller.apply(showsSettingsHandle: false)
+                XCTAssertTrue(model.orbHandlePoints.isEmpty)
+                XCTAssertFalse(host.interactiveRects.contains { $0.contains(point) })
+                try click(CGPoint(x: point.x, y: frame.height - point.y), in: panel)
+                XCTAssertEqual(opens, 1)
+            }
+        }
+    }
+
+    func testScaledMoveHandleAcceptsOuterClicksAndReleasesThemWhenHidden() throws {
+        for edge in NotchEdge.allCases {
+            let controller = NotchWindowController()
+            controller.model.edge = edge
+            controller.model.sizeScale = 1.5
+            controller.model.snapshots = Array(Fixtures.snapshots().prefix(2))
+            controller.show()
+            defer { controller.stop() }
+            controller.model.isExpanded = true
+            controller.apply(showsMoveHandle: true)
+            let content = try XCTUnwrap(controller.panelContentViewForTesting)
+            let host = try XCTUnwrap(content.subviews.first as? NotchHostingView<NotchRootView>)
+            let model = controller.model
+            let point = NotchPlacement(edge: edge, panelSize: model.panelSize).point(
+                along: model.slack + model.moveAlong * model.sizeScale - 32,
+                across: model.orbInset * model.sizeScale)
+            XCTAssertTrue(host.interactiveRects.contains { $0.contains(point) })
+            XCTAssertNotNil(content.hitTest(CGPoint(x: point.x, y: content.bounds.height - point.y)))
+            controller.apply(showsMoveHandle: false)
+            XCTAssertFalse(host.interactiveRects.contains { $0.contains(point) })
+            XCTAssertNil(content.hitTest(CGPoint(x: point.x, y: content.bounds.height - point.y)))
+        }
+    }
+
     private func shownController() -> NotchWindowController {
         let controller = NotchWindowController()
         controller.show()
@@ -622,7 +890,8 @@ final class EdgeArrivalTests: XCTestCase {
     }
 
     private func openController() -> NotchWindowController {
-        let controller = NotchWindowController()
+        // Keep the runner's real pointer from opening or folding the notch during arrival.
+        let controller = NotchWindowController(mouseLocation: { CGPoint(x: -1_000_000, y: -1_000_000) })
         controller.show()
         controller.model.snapshots = (0..<3).map { index in
             ProviderSnapshot(id: "p\(index)", displayName: "P", glyph: .claude,
@@ -637,10 +906,9 @@ final class EdgeArrivalTests: XCTestCase {
     @discardableResult
     private func wait(upTo seconds: TimeInterval = 3,
                       for condition: () -> Bool) -> Bool {
-        var waited: TimeInterval = 0
-        while !condition(), waited < seconds {
+        let deadline = ProcessInfo.processInfo.systemUptime + seconds
+        while !condition(), ProcessInfo.processInfo.systemUptime < deadline {
             pump(0.02)
-            waited += 0.02
         }
         return condition()
     }
@@ -655,12 +923,32 @@ final class EdgeArrivalTests: XCTestCase {
         let controller = openController()
         defer { controller.stop() }
 
+        let landed = expectation(description: "landed folded at full strength on a later turn")
+        let opened = expectation(description: "opened after landing")
+        var sawFold = false
+        var landedOnLaterTurn = false
+        // Record the transition itself: polling can miss the 50 ms arrival beat on a busy runner.
+        let observation = controller.model.$isExpanded.dropFirst().sink { expanded in
+            guard controller.model.edge == .top else { return }
+            if !expanded, !sawFold {
+                sawFold = true
+                XCTAssertLessThan(controller.panelAlphaForTesting, 1, "it never went away")
+                // Published emits in willSet; inspect the completed landing on the next queue turn.
+                DispatchQueue.main.async {
+                    XCTAssertFalse(controller.model.isExpanded,
+                                   "it arrived at full size instead of opening into place")
+                    XCTAssertEqual(controller.panelAlphaForTesting, 1, accuracy: 0.01, "it never came back")
+                    landedOnLaterTurn = true
+                    landed.fulfill()
+                }
+            } else if expanded, sawFold {
+                XCTAssertTrue(landedOnLaterTurn, "it folded and opened in the same turn")
+                opened.fulfill()
+            }
+        }
+        defer { observation.cancel() }
         controller.apply(edge: .top)
-        XCTAssertTrue(wait { controller.panelAlphaForTesting < 1 }, "it never went away")
-        XCTAssertTrue(wait { controller.panelAlphaForTesting == 1 }, "it never came back")
-        XCTAssertFalse(controller.model.isExpanded,
-                       "it arrived at full size instead of opening into place")
-        XCTAssertTrue(wait { controller.model.isExpanded }, "it never opened")
+        wait(for: [landed, opened], timeout: 5, enforceOrder: true)
     }
 
     /// And it is on screen while it opens, not still fading in underneath.
@@ -669,10 +957,16 @@ final class EdgeArrivalTests: XCTestCase {
         let controller = openController()
         defer { controller.stop() }
 
+        let opened = expectation(description: "opened on the destination edge at full strength")
+        let observation = controller.model.$isExpanded.dropFirst().sink { expanded in
+            guard expanded, controller.model.edge == .bottom else { return }
+            XCTAssertEqual(controller.panelAlphaForTesting, 1, accuracy: 0.01,
+                           "it is still fading while it opens — two animations over each other")
+            opened.fulfill()
+        }
+        defer { observation.cancel() }
         controller.apply(edge: .bottom)
-        XCTAssertTrue(wait { controller.model.isExpanded }, "it never opened")
-        XCTAssertEqual(controller.panelAlphaForTesting, 1, accuracy: 0.01,
-                       "it is still fading while it opens — two animations over each other")
+        wait(for: [opened], timeout: 5)
     }
 
     /// A notch that was folded stays folded: moving it is not a reason to open.
@@ -682,7 +976,8 @@ final class EdgeArrivalTests: XCTestCase {
         controller.model.isExpanded = false
 
         controller.apply(edge: .left)
-        pump(0.6)
+        XCTAssertTrue(wait { controller.model.edge == .left && controller.panelAlphaForTesting == 1 },
+                      "it never landed on the destination edge")
         XCTAssertFalse(controller.model.isExpanded, "moving it opened it uninvited")
         XCTAssertEqual(controller.model.edge, .left)
     }

@@ -1,3 +1,12 @@
+/**
+ @name: MiniMax 凭据测试
+ @Descripttion: 验证 MiniMax 密钥、Cookie 归一化和区域配置。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 17:40:57
+ @LastEditTime: 2026-09-14 17:40:57
+ @FilePath: Tests/MiniMaxCredentialsTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -40,14 +49,25 @@ final class MiniMaxCredentialsTests: XCTestCase {
         )
     }
 
-    func testTheGenericEnvironmentKeyWinsOverTheKeychainWhenTheCodingPlanKeyIsAbsent() {
+    func testSavedCodingKeyWinsOverGenericEnvironmentKey() {
         XCTAssertEqual(
             MiniMaxCredentials.loadAPIKey(
                 environment: [MiniMaxCredentials.apiKeyEnvironmentFallback: " generic "],
                 keychain: { "stored" }
             ),
-            "generic"
+            "stored"
         )
+        XCTAssertEqual(MiniMaxCredentials.loadAPIKey(
+            environment: [MiniMaxCredentials.apiKeyEnvironmentFallback: " generic "], keychain: { nil }
+        ), "generic")
+        XCTAssertEqual(MiniMaxCredentials.loadAPIKey(
+            environment: [MiniMaxCredentials.apiKeyEnvironmentFallback: "sk-api-pay-as-you-go"],
+            keychain: { "sk-cp-saved" }
+        ), "sk-cp-saved")
+        XCTAssertNil(MiniMaxCredentials.loadAPIKey(
+            environment: [MiniMaxCredentials.apiKeyEnvironmentFallback: "sk-api-pay-as-you-go"],
+            keychain: { nil }
+        ))
     }
 
     func testABlankEnvironmentKeyIsAbsentAndFallsThrough() {
@@ -59,7 +79,7 @@ final class MiniMaxCredentialsTests: XCTestCase {
                 ],
                 keychain: { "stored" }
             ),
-            "generic",
+            "stored",
             "a blank coding-plan export is no key"
         )
         XCTAssertEqual(
@@ -80,6 +100,23 @@ final class MiniMaxCredentialsTests: XCTestCase {
         _ = MiniMaxCredentials.loadAPIKey(environment: [:], keychain: { calls += 1; return "stored" })
         _ = MiniMaxCredentials.loadAPIKey(environment: [:], keychain: { calls += 1; return "stored" })
         XCTAssertEqual(calls, 2, "the injectable path must bypass the cache")
+    }
+
+    func testFailedStorageAndInvalidCookiesDoNotReportSaved() {
+        XCTAssertFalse(MiniMaxCredentials.storeAPIKey("sk-cp-key", keychain: { _ in false }))
+        XCTAssertFalse(MiniMaxCredentials.storeAPIKey("sk-api-not-a-plan", keychain: { _ in
+            XCTFail("a pay-as-you-go key must not be written")
+            return true
+        }))
+        XCTAssertFalse(MiniMaxCredentials.storeCookieHeader("not-a-cookie", keychain: { _ in
+            XCTFail("invalid Cookie header must not be written")
+            return true
+        }))
+        XCTAssertFalse(MiniMaxCredentials.storeCookieHeader("Cookie: session=abc", keychain: { _ in false }))
+        XCTAssertTrue(MiniMaxCredentials.storeCookieHeader("Cookie: session=abc", keychain: {
+            XCTAssertEqual($0, "session=abc")
+            return true
+        }))
     }
 
     func testAnEnvironmentAPIKeyIsPresentWithoutReadingTheKeychain() {
@@ -136,6 +173,8 @@ final class MiniMaxCredentialsTests: XCTestCase {
     func testNormalizedCookieHeaderAcceptsABarePair() {
         XCTAssertEqual(MiniMaxCredentials.normalizedCookieHeader(from: " session=abc; token=xyz "),
                        "session=abc; token=xyz")
+        XCTAssertNil(MiniMaxCredentials.normalizedCookieHeader(from: "not-a-cookie"))
+        XCTAssertNil(MiniMaxCredentials.normalizedCookieHeader(from: "=missing-name"))
         XCTAssertNil(MiniMaxCredentials.normalizedCookieHeader(from: "  "))
         XCTAssertNil(MiniMaxCredentials.normalizedCookieHeader(from: ""))
     }

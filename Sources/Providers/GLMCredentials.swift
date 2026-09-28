@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 GLMCredentials.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/GLMCredentials.swift
+ */
 import Foundation
 
 /// The Z.ai key behind a GLM Coding Plan, borrowed from whichever tool holds
@@ -120,19 +129,13 @@ enum GLMCredentials {
         return nil
     }
 
-    /// ZCode uses separate provider ids for the paid Coding Plan and the
-    /// account's Start Plan. Both expose the same monitor shape now; a plain
-    /// `builtin:zai` entry remains pay-as-you-go and must not be claimed as a
-    /// plan quota.
-    static func isPlanProvider(_ id: String) -> Bool {
-        id.contains("coding-plan") || id.contains("start-plan")
-    }
-
-    /// Whether ZCode has Z.ai's Start Plan switched on.
+    /// Whether ZCode has Z.ai's Start Plan switched on (#71).
     ///
-    /// Start Plan keys are handled by `zcodePlanKey`; this helper lets the row
-    /// distinguish an active Start Plan from no ZCode configuration when the
-    /// entry has no usable key.
+    /// Its key is not claimed as a credential: the monitor endpoint the Coding
+    /// Plan is read from answers a Start Plan key with `code: 401` inside an
+    /// HTTP 200, and no usage route for the Start Plan is published. Knowing
+    /// it is there is still worth something — the row can say that, rather
+    /// than asking someone who is signed in to set up a key.
     static func zcodeHasStartPlan(_ url: URL = zcodeConfigURL) -> Bool {
         guard let root = dictionary(at: url), let providers = root["provider"] as? [String: Any]
         else { return false }

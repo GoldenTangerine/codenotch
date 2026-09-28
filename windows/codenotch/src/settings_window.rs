@@ -1,3 +1,12 @@
+/**
+ @name: 上游功能同步模块
+ @Descripttion: 维护 settings_window.rs 的上游功能与本地兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-17 11:04:24
+ @LastEditTime: 2026-09-17 11:04:24
+ @FilePath: windows/codenotch/src/settings_window.rs
+ */
 //! The settings window. Created when it is opened and destroyed when it is closed, so no second
 //! WebView sits hidden for the life of the app. Frameless over Windows 11's Mica, the closest
 //! Windows material to the Mac's window vibrancy, and told what the page cannot read for itself:
@@ -10,15 +19,11 @@ const LABEL: &str = "settings";
 /// Mica arrived with Windows 11's first build.
 const FIRST_MICA_BUILD: u32 = 22000;
 
-/// Always built on a later turn of the event loop. A window built inside a synchronous command
-/// deadlocks WebView2 and comes up blank, and asking `run_on_main_thread` from the main thread —
-/// where those commands run — builds it on the spot, so the request is posted from another thread.
+/// Queued on the main thread for every caller: a window built inside a synchronous command
+/// deadlocks on Windows, and `open_settings` is one.
 pub fn open(app: &AppHandle) {
     let handle = app.clone();
-    std::thread::spawn(move || {
-        let app = handle.clone();
-        let _ = handle.run_on_main_thread(move || open_now(&app));
-    });
+    let _ = app.run_on_main_thread(move || open_now(&handle));
 }
 
 fn open_now(app: &AppHandle) {
@@ -38,22 +43,12 @@ fn open_now(app: &AppHandle) {
         .decorations(false)
         .shadow(true)
         .center();
-    // Both before the build: a window that opens on the system appearance and is corrected after
-    // shows the wrong one for a frame, which on a dark Windows under a light choice is a black flash
-    let theme = crate::theme_choice(app);
-    builder = builder
-        .theme(theme)
-        .initialization_script(crate::theme_script(crate::resolved_theme(app)));
     // Without Mica the window stays opaque and the page draws solid surfaces instead
     if has_mica() {
-        builder = builder.transparent(true).effects(EffectsBuilder::new().effect(mica_for(theme)).build());
+        builder = builder.transparent(true).effects(EffectsBuilder::new().effect(Effect::Mica).build());
     }
-    match builder.build() {
-        // Raised again once it exists: a window created while the app is not in front can come up behind
-        Ok(w) => {
-            let _ = w.set_focus();
-        }
-        Err(e) => crate::applog(&format!("settings window: {e}")),
+    if let Err(e) = builder.build() {
+        crate::applog(&format!("settings window: {e}"));
     }
 }
 
@@ -90,29 +85,6 @@ pub fn open_author_page() {
         cmd.creation_flags(0x0800_0000);
     }
     let _ = cmd.spawn();
-}
-
-/// Keeps Mica on the same side as the page above it.
-///
-/// Plain `Effect::Mica` follows the Windows setting, which is right for "System" and wrong for the
-/// other two: a light page over dark Mica reads as a bug. Nothing to do without Mica, where the page
-/// draws its own opaque surfaces.
-pub fn follow_theme(app: &AppHandle, theme: Option<tauri::Theme>) {
-    let Some(w) = app.get_webview_window(LABEL) else { return };
-    if !has_mica() {
-        return;
-    }
-    let _ = w.set_effects(EffectsBuilder::new().effect(mica_for(theme)).build());
-}
-
-/// Plain `Mica` follows the Windows setting, which is right for "System" and wrong for the other
-/// two: a light page over dark Mica reads as a bug.
-fn mica_for(theme: Option<tauri::Theme>) -> Effect {
-    match theme {
-        Some(tauri::Theme::Light) => Effect::MicaLight,
-        Some(tauri::Theme::Dark) => Effect::MicaDark,
-        _ => Effect::Mica,
-    }
 }
 
 fn has_mica() -> bool {

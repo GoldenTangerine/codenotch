@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 LocalTokenLedger.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Model/LocalTokenLedger.swift
+ */
 import Foundation
 
 /// One completed response, as the runtime's own log recorded it: counts and

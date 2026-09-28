@@ -1,3 +1,12 @@
+<!--
+@name: 项目构建与文档
+@Descripttion: 维护 2026-09-07-local-llm-provider-plan.md 的项目实现与上游兼容。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-11 15:51:14
+@LastEditTime: 2026-09-11 15:51:14
+@FilePath: docs/plans/2026-09-07-local-llm-provider-plan.md
+-->
 # Local LLM monitoring plan
 
 Prepared 2026-09-07 against `60bafc292d087938edee278f6f9b5e491560bbe6`.

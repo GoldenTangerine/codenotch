@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 OllamaCredentials.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/OllamaCredentials.swift
+ */
 import Foundation
 
 /// The Ollama cloud API key, read from the environment first and the keychain

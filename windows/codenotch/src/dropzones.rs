@@ -62,12 +62,9 @@ pub fn show(app: &AppHandle, screen: &crate::Screen, zones: &Zones) {
             let _ = w.set_ignore_cursor_events(true);
             // The page asks for the zones itself once it is listening; this covers the other order
             let _ = w.emit_to(LABEL, "zones", zones);
-            // The notch is the thing being carried, so it belongs over the places it can go.
-            // `set_always_on_top(true)` is a no-op here — `tao` only calls `SetWindowPos` on a
-            // diff, and this flag is already true — so this goes through the same direct Win32
-            // call the topmost watchdog uses instead. See `topmost.rs`.
+            // The notch is the thing being carried, so it belongs over the places it can go
             if let Some(notch) = app.get_webview_window("notch") {
-                crate::topmost::reassert(&notch);
+                let _ = notch.set_always_on_top(true);
             }
         }
         Err(e) => crate::applog(&format!("drop zones: {e}")),

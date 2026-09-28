@@ -1,16 +1,26 @@
+/**
+ @name: 应用生命周期
+ @Descripttion: 连接应用服务和用户设置。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/App/AppDelegate.swift
+ */
 import AppKit
 import Combine
 import SwiftUI
 
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var notchFleet: NotchFleet?
     private var store: UsageStore?
+    private var codeSwitch: CodeSwitchBridge?
     var phoneLinkServer: PhoneLinkServer?
     var phoneLinkServerStatus: PhoneLinkServerStatus?
     var phoneLinkPairing: PhoneLinkPairing?
     var phoneLinkRegistry: PhoneLinkRegistry?
     private var activityCoordinator: ActivityCoordinator?
-    private var piResponseMonitor: PiResponseMonitor?
     private var ollamaRelay: OllamaActivityRelay?
     private var lmstudioMetrics: LMStudioMetrics?
     private var preferences: Preferences?
@@ -29,6 +39,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Turns the monitors' running commentary into the one event worth
     /// interrupting for: an agent that has just stopped working.
     private var completions = SessionCompletionWatcher()
+    private let hookMonitor = HookSessionMonitor()
+    private var hookSettings: HookSettings?
+    private var nativeSessions: [String: [AgentSession]] = [:]
+    private var localSnapshots: [ProviderSnapshot] = []
+    private var activitySources: [String: String] = [:]
+    private var activityRouting: ActivityRouting?
+    private var pendingAnnouncements: [SessionCompletionWatcher.Event] = []
+    private var announcementWork: DispatchWorkItem?
+    private var waitingProtection: SessionCompletionWatcher.WaitingProtection?
 
     /// The unit bundle is hosted by this app, so `xcodebuild test` launches it
     /// for real. Without this guard every test run put a live request on the
@@ -115,27 +134,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `CODENOTCH_DEMO=1` puts the design frame's three providers on screen
         // with its numbers, for screenshots and for eyeballing the layout.
         if ProcessInfo.processInfo.environment["CODENOTCH_DEMO"] == "1" {
-            fleet.setSnapshots(Fixtures.snapshots())
+            localSnapshots = Fixtures.snapshots()
+            activitySources = Dictionary(uniqueKeysWithValues: localSnapshots.map { ($0.id, $0.id) })
+            fleet.setSnapshots(localSnapshots)
         } else {
             // DeepSeek's Platform usage page is a browser-session provider:
             // login is explicit, stays in Codenotch's own WKWebView store, and
             // the page-local requests are refreshed only after that login.
             let deepSeek = WebSessionProvider(site: Sites.deepSeek)
-            // QianwenAI's Token Plan is the same kind of provider: no usage API
-            // to call, only a console, readable after the user signs in inside
-            // this app's own WKWebView. Unlike MiniMax's sheet below, its ring
-            // *is* this adapter, so it belongs in `webProviders` — exactly once.
-            let qianwen = WebSessionProvider(site: Sites.qianwen)
             // MiniMax's ring is MiniMaxProvider. The sheet is the same kind of
             // WebView DeepSeek uses, but it must not join `webProviders`:
-            // those are appended to `allProviders`, and two adapters with
-            // id `minimax` would both poll, both draw a row, and fight over
-            // the same archive key. Region is applied here and again when
-            // Settings changes it, because the fetch URLs live on the site.
+            // that list is only for standalone browser-backed providers, while
+            // MiniMaxProvider owns the one MiniMax usage poll. Region is applied
+            // here and again when Settings changes it, because the fetch URLs
+            // live on the site.
             let miniMaxWeb = WebSessionProvider(site: Sites.minimax(region: preferences.minimaxRegion))
             self.miniMaxWeb = miniMaxWeb
-            let webProviders: [WebSessionProvider] = [deepSeek, qianwen]
-            fleet.signInItems = [deepSeek, miniMaxWeb, qianwen].map { provider in
+            let miniMaxProvider = MiniMaxProvider(web: miniMaxWeb)
+            let webProviders: [WebSessionProvider] = [deepSeek]
+            fleet.signInItems = [deepSeek, miniMaxWeb].map { provider in
                 let name = provider.displayName
                 return (title: L10n.t("Sign in to \(name)…"),
                         action: { [weak provider] in provider?.presentSignIn() })
@@ -160,65 +177,79 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ClaudeOAuthProvider(profile: $0, displayName: claudeNames[$0.id])
             }
             self.claudeProviders = claudeProviders
-            let customProviders: [UsageProvider] = preferences.customEndpoints.filter(\.isEnabled).map { endpoint in
-                CustomEndpointProvider(endpoint: endpoint)
-            }
-            let allProviders: [UsageProvider] = claudeProviders
-                + [CursorLocalProvider()]
-                + codexProfiles.map { CodexLocalProvider(profile: $0) }
-                + antigravityProfiles.map { AntigravityProvider(profile: $0) }
-                + [GLMProvider(), MiniMaxProvider(web: miniMaxWeb), GrokLocalProvider(), DevinLocalProvider(), OpenCodeProvider(),
-                   CommandCodeProvider(), GitHubCopilotProvider(), KimiProvider(), KiroProvider(), AmpProvider(),
-                   ApifyProvider(), KiloProvider(),
-                   OllamaLocalProvider(endpoint: URL(string: preferences.ollamaEndpoint)!),
-                   LMStudioLocalProvider(endpoint: URL(string: preferences.lmstudioEndpoint)!),
-                   OllamaProvider(),
-                   // A closure, not the value: the provider is an actor and
-                   // re-reads the budget on every fetch, so a ceiling typed
-                   // into Settings applies without a restart.
-                   GeminiAPIProvider(budget: {
-                       Preferences.storedGeminiAPIMonthlyTokenBudget()
-                   })]
-                + webProviders
-                + customProviders
-            preferences.reconcile(discoveredIDs: allProviders.map(\.id))
+            let nativeProviders: [UsageProvider] = claudeProviders
+                    + [CursorLocalProvider()]
+                    + codexProfiles.map { CodexLocalProvider(profile: $0) }
+                    + [AntigravityProvider(),
+                       GLMProvider(), miniMaxProvider, GrokLocalProvider(), DevinLocalProvider(), OpenCodeProvider(),
+                       CommandCodeProvider(), GitHubCopilotProvider(), KimiProvider(), KiroProvider(),
+                       OllamaLocalProvider(endpoint: URL(string: preferences.ollamaEndpoint)!),
+                       LMStudioLocalProvider(endpoint: URL(string: preferences.lmstudioEndpoint)!),
+                       OllamaProvider(),
+                       // A closure, not the value: the provider is an actor and
+                       // re-reads the budget on every fetch, so a ceiling typed
+                       // into Settings applies without a restart.
+                       GeminiAPIProvider(budget: {
+                           Preferences.storedGeminiAPIMonthlyTokenBudget()
+                       })]
+                    + webProviders
+            preferences.reconcile(discoveredIDs: nativeProviders.map(\.id))
+            let catalog = QueryCatalog(providers: nativeProviders,
+                disconnected: preferences.disconnectedIDs(among: nativeProviders.map(\.id)))
+            preferences.reconcileCatalog(catalog.entries)
             let store = UsageStore(
-                providers: allProviders,
-                disconnected: preferences.disconnectedIDs(among: allProviders.map(\.id)),
-                // Passed at construction, not left to the sink below, for the
-                // same reason `disconnected` is: the sink delivers a run loop
-                // turn later, so without this every launch draws the built-in
-                // order for a frame and then visibly shuffles.
+                providers: catalog.providers(),
+                disconnected: preferences.disconnectedIDs(among: catalog.entries.map(\.id)), configured: true,
                 order: preferences.providerOrder
             )
-            preferences.$customEndpoints
-                .map { endpoints in
-                    endpoints.filter(\.isEnabled).map {
-                        "\($0.id):\($0.name):\($0.baseURL):\($0.trackingUnit.rawValue):\($0.monthlyBudgetUSD ?? -1):\($0.currentSpendUSD ?? -1):\($0.monthlyBudgetTokensM ?? -1):\($0.currentTokensUsedM ?? -1):\($0.displayRemaining):\($0.showCurrency):\($0.iconPreset ?? ""):\($0.customIconFilename ?? ""):\($0.accentColorHex):\($0.selectedModel):\($0.usageSource.rawValue):\($0.usagePreset?.rawValue ?? ""):\($0.usageURL ?? ""):\($0.usageRecordsPath ?? ""):\($0.usageModelField ?? ""):\($0.usageTokenField ?? ""):\($0.usageModelFilter ?? ""):\($0.usageAuthentication.rawValue)"
-                    }
-                }
-                .removeDuplicates()
-                .receive(on: RunLoop.main)
-                .sink { [weak store] _ in
-                    let stored = Preferences.storedCustomEndpoints()
-                    let active = stored.filter(\.isEnabled)
-                    let providers: [UsageProvider] = active.map { CustomEndpointProvider(endpoint: $0) }
-                    store?.registerCustomProviders(providers)
-                }
-                .store(in: &cancellables)
-            deepSeek.onAuthenticated = { [weak store] in
-                store?.providerAuthenticationChanged(providerID: "deepseek")
+            let applyCatalog: (Set<String>) -> Void = { [weak self, weak catalog, weak store, weak fleet, weak preferences] invalidated in
+                guard let catalog, let store, let preferences else { return }
+                preferences.reconcileCatalog(catalog.entries)
+                let disconnected = preferences.disconnectedIDs(among: catalog.entries.map(\.id) + store.knownIDs)
+                store.reconfigure(providers: catalog.providers(), disconnected: disconnected, invalidated: invalidated)
+                store.order = catalog.entries.map(\.id)
+                    + preferences.providerOrder.filter { id in !catalog.entries.contains { $0.id == id } }
+                fleet?.setActivitySourceIDs(Dictionary(uniqueKeysWithValues:
+                    catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) }))
+                self?.activitySources = Dictionary(uniqueKeysWithValues:
+                    catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) })
+                self?.updateActivityMonitoring()
+                self?.updateActivity()
             }
-            qianwen.onAuthenticated = { [weak store] in
-                store?.providerAuthenticationChanged(providerID: "qianwenai")
+            catalog.onChange = applyCatalog
+            fleet.setActivitySourceIDs(Dictionary(uniqueKeysWithValues:
+                catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) }))
+            activitySources = Dictionary(uniqueKeysWithValues:
+                catalog.entries.filter { $0.usesLocalAccount }.map { ($0.id, $0.nativeID) })
+            deepSeek.onAuthenticated = { [weak catalog, weak store] in
+                for id in catalog?.automaticEntryIDs(for: "deepseek") ?? [] {
+                    store?.providerAuthenticationChanged(providerID: id)
+                }
             }
-            miniMaxWeb.onAuthenticated = { [weak store] in
-                store?.providerAuthenticationChanged(providerID: "minimax")
+            miniMaxWeb.onAuthenticated = { [weak catalog, weak store] in
+                for id in catalog?.automaticEntryIDs(for: "minimax") ?? [] {
+                    store?.providerAuthenticationChanged(providerID: id)
+                }
             }
 
+            // The stored edge goes in before the panel is ever put up. The
+            // sink below delivers on the next run loop turn, by which time the
+            // notch has already been shown on the default edge — so without
+            // this, every launch on any other edge opens with a flash of the
+            // right-hand one and then crossfades away from it.
+            fleet.apply(edge: preferences.notchEdge)
+            fleet.restore(position: preferences.notchPosition)
+            fleet.onPositionCommitted = { [weak preferences] position in
+                preferences?.notchPosition = position
+                preferences?.displayPreference = position.displayID.map(DisplayPreference.display) ?? .followActiveWindow
+            }
             let updater = Updater()
             self.updater = updater
 
+            let hookSettings = HookSettings(monitor: hookMonitor)
+            self.hookSettings = hookSettings
+            let codeSwitch = CodeSwitchBridge()
+            self.codeSwitch = codeSwitch
             let relay = OllamaActivityRelay()
             self.ollamaRelay = relay
             // A single publisher chain exceeds Swift's type-checking time limit.
@@ -303,7 +334,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let serverStatus = PhoneLinkServerStatus()
             self.phoneLinkRegistry = phoneRegistry
             self.phoneLinkPairing = phonePairing
-            
+
             let server = PhoneLinkServer(
                 pairing: phonePairing,
                 registry: phoneRegistry,
@@ -312,9 +343,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let store, let fleet, let preferences else { return nil }
                     let snap = await MainActor.run {
                         PhoneLinkSnapshotBuilder.build(
-                            snapshots: Self.drawn(store.snapshots,
-                                                  weekly: preferences.weeklyHeadline,
-                                                  paced: preferences.claudeDailyPaceRing),
+                            snapshots: DailyPace.apply(to: store.snapshots,
+                                                       enabled: preferences.claudeDailyPaceRing),
                             sessions: Array(fleet.sessions.values.flatMap { $0 }),
                             disconnected: store.disconnected,
                             order: preferences.providerOrder,
@@ -335,9 +365,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     }
                     let snap = await MainActor.run {
                         PhoneLinkSnapshotBuilder.build(
-                            snapshots: Self.drawn(store.snapshots,
-                                                  weekly: preferences.weeklyHeadline,
-                                                  paced: preferences.claudeDailyPaceRing),
+                            snapshots: DailyPace.apply(to: store.snapshots,
+                                                       enabled: preferences.claudeDailyPaceRing),
                             sessions: Array(fleet.sessions.values.flatMap { $0 }),
                             disconnected: store.disconnected,
                             order: preferences.providerOrder,
@@ -370,9 +399,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 // leave the notch where it is until the next edge change, and
                 // moving only the panel would put it back on relaunch.
                 resetPosition: { [weak fleet, weak preferences] in
+                    preferences?.notchPosition = nil
+                    fleet?.restore(position: nil)
                     preferences?.setOffset(0, for: preferences?.notchEdge ?? .right)
                     fleet?.apply(alongOffset: 0)
                 },
+                catalog: catalog, hooks: hookSettings, codeSwitch: codeSwitch,
                 quit: { NSApp.terminate(nil) },
                 previewResetAlert: { [weak self] in
                     self?.previewUsageResetAlert()
@@ -383,14 +415,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 previewWeeklyLimitAlert: { [weak self] in
                     self?.previewWeeklyLimitAlert()
                 },
-                sendTestNotification: { [weak self] in
-                    self?.sendTestNotification()
-                },
-                usageStore: store, ollamaRelay: relay, lmstudioMetrics: lmstudio,
+                usageStore: store, botModel: fleet.menuModel, ollamaRelay: relay, lmstudioMetrics: lmstudio,
                 phoneLinkPairing: phonePairing, phoneLinkRegistry: phoneRegistry, phoneLinkServerStatus: serverStatus
             )
             // The gear toggles; everything else that opens settings opens it.
-            fleet.onOpenSettings = { [weak settings] in settings?.toggle() }
+            fleet.onOpenSettings = { [weak settings] in settings?.show() }
             // A session row answers where it runs by taking you there.
             fleet.onFocusSession = { pid in
                 Task { _ = await SessionFocus.focus(pid: pid) }
@@ -474,6 +503,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply($0) }
                 .store(in: &cancellables)
 
+            preferences.$notchHoverDelay
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(notchHoverDelay: $0) }
+                .store(in: &cancellables)
+
+            preferences.$notchTriggerHeight
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(notchTriggerHeight: $0) }
+                .store(in: &cancellables)
+
+            preferences.$topAvoidanceAdjustment.combineLatest(preferences.$ringEdgeAdjustment)
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak fleet] top, ring in
+                    fleet?.apply(topAvoidanceAdjustment: CGFloat(top), ringEdgeAdjustment: CGFloat(ring))
+                    fleet?.previewGeometry()
+                }
+                .store(in: &cancellables)
+
+            preferences.$collapsedSideWidth.combineLatest(preferences.$collapsedHeightAdjustment)
+                .dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak fleet] width, height in
+                    fleet?.apply(collapsedSideWidth: CGFloat(width))
+                    fleet?.apply(collapsedHeightAdjustment: CGFloat(height))
+                    fleet?.previewCollapsedGeometry()
+                }
+                .store(in: &cancellables)
+
+            preferences.$isEditingCollapsedGeometry.removeDuplicates().dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak fleet] editing in fleet?.previewCollapsedGeometry(editing: editing) }
+                .store(in: &cancellables)
+
+            preferences.$isEditingNotchGeometry.removeDuplicates().dropFirst()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak fleet] editing in fleet?.previewGeometry(editing: editing) }
+                .store(in: &cancellables)
+
             preferences.$foldsForFullScreen
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(foldsForFullScreen: $0) }
@@ -493,9 +561,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .dropFirst()
                 .removeDuplicates()
                 .receive(on: RunLoop.main)
-                .sink { [weak miniMaxWeb, weak store] region in
+                .sink { [weak miniMaxWeb, weak miniMaxProvider, weak catalog, weak store, weak preferences] region in
                     miniMaxWeb?.apply(site: Sites.minimax(region: region))
-                    store?.refresh(providerID: "minimax")
+                    store?.providerAccountChanged()
+                    let ids = catalog?.automaticEntryIDs(for: "minimax") ?? []
+                    for id in ids { store?.invalidateUsageSource(providerID: id) }
+                    Task { [weak miniMaxProvider, weak store, weak preferences] in
+                        await miniMaxProvider?.regionDidChange()
+                        guard preferences?.minimaxRegion == region else { return }
+                        for id in ids { store?.refresh(providerID: id) }
+                    }
                 }
                 .store(in: &cancellables)
 
@@ -561,6 +636,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 preferences?.setOffset(offset, for: preferences?.notchEdge ?? .right)
             }
 
+            fleet.onToggleKeepOpen = { [weak preferences] in
+                guard let prefs = preferences else { return }
+                prefs.notchVisibility = (prefs.notchVisibility == .alwaysShow) ? .onHover : .alwaysShow
+            }
+
             // Writing the preference is the whole of it: `notchEdge` is
             // `@Published` and the fleet already follows it, so the notch
             // relocates by the same path the Settings picker uses.
@@ -576,9 +656,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 .store(in: &cancellables)
 
-            preferences.$accentColor
+            preferences.$tooltipHeightMode
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet] in fleet?.apply(accentColor: $0) }
+                .sink { [weak fleet] in fleet?.apply(tooltipHeightMode: $0) }
+                .store(in: &cancellables)
+
+            preferences.$codeSwitchEnabled.combineLatest(preferences.$codeSwitchDisplayMode)
+                .sink { [weak codeSwitch] enabled, mode in codeSwitch?.configure(enabled: enabled, mode: mode) }
+                .store(in: &cancellables)
+            preferences.$showsMoveHandle
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(showsMoveHandle: $0) }
+                .store(in: &cancellables)
+
+            preferences.$showsSettingsHandle
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(showsSettingsHandle: $0) }
+                .store(in: &cancellables)
+
+            preferences.$watchLimit
+                .combineLatest(preferences.$criticalLimit)
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] watch, critical in
+                    fleet?.apply(watchLimit: watch, criticalLimit: critical)
+                }
+                .store(in: &cancellables)
+
+            preferences.$weeklyRingDashed
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(weeklyRingDashed: $0) }
                 .store(in: &cancellables)
             
             preferences.$watchLimit
@@ -609,32 +715,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(weeklyRing: $0) }
                 .store(in: &cancellables)
 
-            preferences.$showsMoveHandle
+            preferences.$independentInnerRing.combineLatest(preferences.$codeSwitchQuotaRatiosEnabled)
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet] in fleet?.apply(showsMoveHandle: $0) }
+                .sink { [weak fleet, weak codeSwitch] independent, ratios in
+                    fleet?.apply(independentInnerRing: independent, codeSwitchQuotaRatiosEnabled: ratios)
+                    codeSwitch?.setDailyBudgetEnabled(ratios)
+                }
                 .store(in: &cancellables)
-                
+
             preferences.$notchSurfaceStyle
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(surfaceStyle: $0) }
                 .store(in: &cancellables)
 
-            preferences.$colorTransitionStyle
-                .receive(on: RunLoop.main)
-                .sink { [weak fleet] in fleet?.apply(colorTransitionStyle: $0) }
-                .store(in: &cancellables)
-
             Publishers.CombineLatest(preferences.$connectedProviders, preferences.$disabledModels)
                 .receive(on: RunLoop.main)
-                .sink { [weak store, weak preferences] _, _ in
-                    guard let store, let preferences else { return }
-                    store.disconnected = preferences.disconnectedIDs(among: store.knownIDs)
+                .sink { [weak store, weak preferences, weak catalog] _, _ in
+                    guard let store, let preferences, let catalog else { return }
+                    let disconnected = preferences.disconnectedIDs(among: store.knownIDs)
+                    store.disconnected = disconnected
+                    for entry in catalog.entries where entry.enabled == disconnected.contains(entry.id) {
+                        catalog.setEnabled(!disconnected.contains(entry.id), id: entry.id)
+                    }
                 }
-                .store(in: &cancellables)
-
-            preferences.$accountNicknames
-                .receive(on: RunLoop.main)
-                .sink { [weak store] in store?.nicknames = $0 }
                 .store(in: &cancellables)
 
             preferences.$ollamaEndpoint
@@ -668,7 +771,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             preferences.$geminiAPIMonthlyTokenBudget
                 .dropFirst()
                 .receive(on: RunLoop.main)
-                .sink { [weak store] _ in store?.refresh(providerID: "gemini-api") }
+                .sink { [weak store, weak catalog] _ in
+                    for entry in catalog?.entries ?? [] where entry.usesLocalAccount && entry.nativeID == "gemini-api" {
+                        store?.refresh(providerID: entry.id)
+                    }
+                }
                 .store(in: &cancellables)
 
             // Limit crossings become notifications here rather than inside
@@ -683,6 +790,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let resetWatcher = UsageResetWatcher(
                 isMuted: { [weak preferences] in preferences?.isMutedAlerts(for: $0) ?? false },
+                onReset: { [weak fleet] event in
+                    MainActor.assumeIsolated { fleet?.animateBot(.limitReset, providerID: event.providerID) }
+                },
                 deliver: { [weak self] event in
                     MainActor.assumeIsolated {
                         self?.announceUsageReset(event: event)
@@ -701,46 +811,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             )
             self.limitWatcher = limitWatcher
 
-            // The daily-pace window is laid over the store's snapshots here,
-            // on the way out, rather than inside a provider: it is a reading
-            // of a preference as much as of the account, and the store keeps
-            // what the vendor said. Paired with the preference so flipping the
-            // toggle redraws at once, without a fetch. The weekly-first ring
-            // is laid the same way, and for the same reasons — see `drawn`.
-            store.$notchSnapshots
-                .combineLatest(preferences.$claudeDailyPaceRing, preferences.$weeklyHeadline)
+            store.$notchSnapshots.combineLatest(codeSwitch.$snapshots, preferences.$claudeDailyPaceRing)
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet] snapshots, paced, weekly in
-                    fleet?.setSnapshots(Self.drawn(snapshots, weekly: weekly, paced: paced))
-                }
-                .store(in: &cancellables)
-
-            // Not `drawn`: the weekly-first ring is for the rings alone. The
-            // menu bar already shows the week beside the short window, under a
-            // "Weekly Limit" label that would name the session after a swap.
-            // The alert watchers track one headline per provider and tell
-            // "session" from "week" by which window leads, so a swap under them
-            // re-fires thresholds, announces a reset that did not happen, and
-            // leaves a spent session with no "available again" to follow it.
-            store.$snapshots
-                .combineLatest(preferences.$claudeDailyPaceRing)
-                .receive(on: RunLoop.main)
-                .sink { [weak statusItem] snapshots, paced in
-                    let snapshots = DailyPace.apply(to: snapshots, enabled: paced)
-                    statusItem?.snapshots = snapshots
+                .sink { [weak self] local, linked, paced in
+                    let local = DailyPace.apply(to: local, enabled: paced)
+                    let snapshots = local + linked.filter { self?.preferences?.hiddenCodeSwitchProviders.contains($0.id) != true }
+                    self?.localSnapshots = local
+                    self?.updateActivity()
                     notifier.observe(snapshots)
                     resetWatcher.observe(snapshots)
                     limitWatcher.observe(snapshots)
                 }
                 .store(in: &cancellables)
+            codeSwitch.$displayedSnapshots.dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.updateActivity() }
+                .store(in: &cancellables)
+            preferences.$hiddenCodeSwitchProviders.dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.updateActivity() }
+                .store(in: &cancellables)
+            preferences.$codeSwitchProviderOrder.dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.updateActivity() }
+                .store(in: &cancellables)
+            preferences.$botAppearances.receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(botAppearances: $0) }
+                .store(in: &cancellables)
+            preferences.$idleBotAppearance.removeDuplicates().receive(on: DispatchQueue.main)
+                .sink { [weak fleet] in fleet?.apply(idleBotAppearance: $0) }
+                .store(in: &cancellables)
+            preferences.$showsIdleNotch.removeDuplicates().receive(on: DispatchQueue.main)
+                .sink { [weak fleet] in fleet?.apply(showsIdleNotch: $0) }
+                .store(in: &cancellables)
+            codeSwitch.$bindings.dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.updateActivity() }
+                .store(in: &cancellables)
             store.start()
-            fleet.onRefresh = { [weak store] in store?.refreshNow() }
-            fleet.onRefreshProvider = { [weak store] id in
-                await store?.refresh(providerID: id)?.value
+            fleet.onRefresh = { [weak store, weak codeSwitch] in
+                store?.refreshNow()
+                codeSwitch?.refresh()
             }
-            store.$refreshing
+            fleet.onRefreshProvider = { [weak store, weak codeSwitch] id in
+                if id.hasPrefix("code-switch:") { await codeSwitch?.refresh()?.value }
+                else { await store?.refresh(providerID: id)?.value }
+            }
+            statusItem.onRefreshAll = fleet.onRefresh
+            statusItem.onRefreshProvider = { [weak fleet] id in
+                Task { await fleet?.onRefreshProvider?(id) }
+            }
+            store.$refreshing.combineLatest(codeSwitch.$refreshing)
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet] ids in fleet?.setRefreshing(ids) }
+                .sink { [weak fleet] local, linked in fleet?.setRefreshing(local.union(linked)) }
                 .store(in: &cancellables)
 
             // CODENOTCH_DISCOVER=<url> loads that page in the signed-in WebView
@@ -819,7 +938,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.sessions.info("claude session ownership: \(named, privacy: .public) of \(total, privacy: .public) profiles name an account")
         }
         for profile in codexProfiles {
-            monitors[profile.id] = CodexActivityMonitor(profile: profile)
+            monitors[profile.id] = CodexActivityMonitor(profile: profile,
+                usesRolloutCompletion: { [weak preferences = self.preferences] in
+                    preferences?.codexRolloutCompletionEnabled ?? false
+                })
         }
 
         // The `/usage` probe is a Claude Code process too, and files a session
@@ -868,50 +990,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             refresher.start()
             tokenRefresher = refresher
         }
-        let activity = ActivityCoordinator(monitors: monitors) { [weak self, weak fleet] id, sessions in
-            guard let fleet else { return }
-            fleet.setSessions(providerID: id, sessions: sessions)
-            self?.statusItem?.setActivity(providerID: id, sessions: sessions)
-            self?.announceCompletions(sessions: fleet.sessions)
+        let activity = ActivityCoordinator(monitors: monitors) { [weak self] id, sessions in
+            guard let self else { return }
+            self.nativeSessions[id] = sessions
+            // The publisher delivers on the main run loop, but the
+            // closure itself is nonisolated — the same assertion the
+            // notch controller's timers make.
+            MainActor.assumeIsolated { self.updateActivity() }
         }
         self.activityCoordinator = activity
-        activity.setEnabled(preferences.connectedProviders)
-        preferences.$connectedProviders
-            .removeDuplicates()
+        updateActivityMonitoring()
+        preferences.$connectedProviders.combineLatest(preferences.$codeSwitchEnabled)
             .receive(on: RunLoop.main)
-            .sink { [weak activity] connected in
-                activity?.setEnabled(connected)
-            }
+            .sink { [weak self] _ in self?.updateActivityMonitoring() }
             .store(in: &cancellables)
-
-        let piResponseMonitor = PiResponseMonitor(
-            onResponse: { [weak self] providerID in
-                _ = self?.store?.refresh(providerID: providerID)
-            },
-            onActivity: { [weak activity] providerID, snapshots in
-                let sessions = snapshots.map {
-                    AgentSession(
-                        id: $0.id,
-                        name: $0.model,
-                        detail: L10n.t("Working"),
-                        state: .busy,
-                        waitingFor: nil,
-                        since: $0.since
-                    )
-                }
-                activity?.setSupplementalSessions(
-                    providerID: providerID,
-                    source: "pi",
-                    sessions: sessions
-                )
-            }
-        )
-        piResponseMonitor.start()
-        self.piResponseMonitor = piResponseMonitor
-
-        store?.isBusy = { [weak self, weak activity] in
-            (activity?.isBusy ?? false) || (self?.lmstudioMetrics?.isBusy ?? false)
+        // Poll usage hard only while something is actually running.
+        store?.isBusy = { [weak self] in
+            self?.hookMonitor.state.merging(self?.nativeSessions ?? [:]).values.contains { $0.contains { $0.state == .busy } } ?? false
+                || (self?.lmstudioMetrics?.isBusy ?? false)
         }
+        hookMonitor.$state.dropFirst().receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.updateActivity() }
+            .store(in: &cancellables)
+        hookMonitor.start()
 
         // Applied last, right before the panel goes up: every one of these
         // calls a `NotchFleet.apply(...)` that can trigger `reconcile()` on
@@ -926,16 +1027,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // doing exactly nothing. `fleet.show()`'s own reconcile only ever
         // repositions an existing controller — it does not re-copy them —
         // so this has to be the very last thing that can create one.
-        
-        // Banners need permission; ask the moment banners are chosen, not on
-        // the first event, and never of someone who keeps to the notch.
-        preferences.$notificationChannel
-            .removeDuplicates()
-            .receive(on: RunLoop.main)
-            .sink { channel in
-                if channel == .mac { ChannelNotifications.requestAuthorizationIfNeeded() }
-            }
-            .store(in: &cancellables)
 
         preferences.$phoneLinkEnabled
             .receive(on: RunLoop.main)
@@ -962,20 +1053,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(displayPreference: preferences.displayPreference)
         fleet.apply(alongOffset: preferences.offset(for: preferences.notchEdge))
         fleet.apply(scale: preferences.notchScale)
+        fleet.apply(topAvoidanceAdjustment: CGFloat(preferences.topAvoidanceAdjustment),
+                    ringEdgeAdjustment: CGFloat(preferences.ringEdgeAdjustment))
+        fleet.apply(collapsedSideWidth: CGFloat(preferences.collapsedSideWidth))
+        fleet.apply(collapsedHeightAdjustment: CGFloat(preferences.collapsedHeightAdjustment))
+        fleet.apply(showsIdleNotch: preferences.showsIdleNotch)
         fleet.apply(resetTimeFormat: preferences.resetTimeFormat)
-        fleet.apply(accentColor: preferences.accentColor)
-        fleet.apply(watchLimit: preferences.watchLimit, criticalLimit: preferences.criticalLimit)
-        fleet.apply(colorTransitionStyle: preferences.colorTransitionStyle)
+        fleet.apply(tooltipHeightMode: preferences.tooltipHeightMode)
+        Self.bindNotchAccentColor(preferences, to: fleet)
+            .store(in: &cancellables)
         fleet.apply(weeklyRing: preferences.weeklyRing)
+        fleet.apply(independentInnerRing: preferences.independentInnerRing,
+                    codeSwitchQuotaRatiosEnabled: preferences.codeSwitchQuotaRatiosEnabled)
+        fleet.apply(watchLimit: preferences.watchLimit, criticalLimit: preferences.criticalLimit)
         fleet.apply(weeklyRingDashed: preferences.weeklyRingDashed)
-        fleet.apply(showsNotchReadings: preferences.showsNotchReadings)
-        fleet.apply(weeklyReading: preferences.weeklyReading)
         fleet.apply(showsMoveHandle: preferences.showsMoveHandle)
+        fleet.apply(showsSettingsHandle: preferences.showsSettingsHandle)
         fleet.apply(foldsForFullScreen: preferences.foldsForFullScreen)
         fleet.apply(surfaceStyle: preferences.notchSurfaceStyle)
         fleet.apply(deepSeekPricingEnabled: preferences.deepSeekPricingEnabled)
         fleet.apply(deepSeekPricingSchedule: preferences.deepSeekPricingSchedule)
         fleet.show()
+    }
+
+    // Apply the saved colour before any window is shown; subsequent changes
+    // use the same binding in normal launches and the demo.
+    static func bindNotchAccentColor(_ preferences: Preferences, to fleet: NotchFleet) -> AnyCancellable {
+        fleet.apply(accentColor: preferences.notchAccentColor)
+        return preferences.$notchAccentColor
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak fleet] in fleet?.apply(accentColor: $0) }
     }
 
     /// Open the notch, and make a noise, when something has just finished.
@@ -992,21 +1100,176 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     private func announceCompletions(sessions: [String: [AgentSession]]) {
         let events = completions.absorb(sessions)
-        guard let event = events.first, let preferences, let fleet = notchFleet else { return }
+        for event in events where event.reason == .finished {
+            let targets = activityRouting?.sessions.filter { _, live in
+                live.contains { $0.id == event.session.id }
+            }.map(\.key) ?? [event.providerID]
+            for id in targets { notchFleet?.animateBot(.workFinished, providerID: id) }
+        }
+        guard !events.isEmpty else { return }
+        pendingAnnouncements.append(contentsOf: events)
+        guard announcementWork == nil else { return }
+        let work = DispatchWorkItem { [weak self] in
+            MainActor.assumeIsolated { self?.deliverAnnouncement() }
+        }
+        announcementWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: work)
+    }
+
+    private func updateActivityMonitoring() {
+        guard let preferences, let activityCoordinator else { return }
+        activityCoordinator.setConnected(preferences.connectedProviders, sources: activitySources,
+                                         codeSwitchEnabled: preferences.codeSwitchEnabled)
+    }
+
+    private func updateActivity() {
+        hookMonitor.reconcile(nativeSessions)
+        let merged = hookMonitor.state.merging(nativeSessions)
+        notchFleet?.recordBotActivity(merged.values.flatMap { $0 })
+        let routing = ActivityRouting(local: localSnapshots, linked: codeSwitch?.displayedSnapshots ?? [],
+                                      sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:],
+                                      hiddenLinked: preferences?.hiddenCodeSwitchProviders ?? [],
+                                      linkedOrder: preferences?.codeSwitchProviderOrder ?? [])
+        if (activityRouting?.unmatched ?? [:]) != routing.unmatched {
+            let summary = ActivityRouting.UnmatchedReason.allCases.map {
+                "\($0.rawValue)=\(routing.unmatched[$0, default: 0])"
+            }.joined(separator: " ")
+            Log.sessions.notice("activity routing: \(summary, privacy: .public)")
+        }
+        if activityRouting?.sessions != routing.sessions {
+            notchFleet?.setSessions(routing.sessions)
+        }
+        if activityRouting?.snapshots != routing.snapshots {
+            notchFleet?.setSnapshots(routing.snapshots)
+        }
+        // 设置列表保留全部供应商，机器人状态不受悬浮窗显示范围或隐藏设置过滤。
+        let settingsRouting = ActivityRouting(local: localSnapshots, linked: codeSwitch?.snapshots ?? [],
+            sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:])
+        if let model = notchFleet?.menuModel, model.sessions != settingsRouting.sessions {
+            model.sessions = settingsRouting.sessions
+        }
+        statusItem?.snapshots = routing.snapshots.filter { $0.localModel == nil }
+            + (store?.snapshots.filter { $0.kind == .localRuntime } ?? [])
+        activityRouting = routing
+        announceCompletions(sessions: merged)
+    }
+
+    private func deliverAnnouncement() {
+        announcementWork = nil
+        let events = pendingAnnouncements
+        pendingAnnouncements.removeAll()
+        guard let preferences, let fleet = notchFleet,
+              let event = SessionCompletionWatcher.nextAnnouncement(events, sessions: activityRouting?.sessions ?? [:],
+                  protecting: waitingProtection, enabled: {
+                  let settings = preferences.announcementSettings(for: $0)
+                  return settings.expand || settings.sound != nil
+              }) else { return }
         Log.usage.info("session \(event.session.name, privacy: .public) \(String(describing: event.reason), privacy: .public)")
 
-        if preferences.sessionEndSound {
-            SessionChime.play(event.reason == .blocked
-                              ? preferences.sessionBlockedSoundName
-                              : preferences.sessionEndSoundName)
+        let settings = preferences.announcementSettings(for: event.reason)
+        let played = settings.sound.map { SessionChime.play($0, volume: preferences.sessionSoundVolume) } ?? false
+        let displayed = settings.expand && fleet.peek(for: settings.duration,
+                   focusing: event.session.processID, providerID: activityRouting?.providerID(for: event.session),
+                   startedAt: event.session.processStartedAt)
+        waitingProtection = .init(event: event, presented: displayed || played, duration: settings.duration)
+    }
+
+    /// Open the notch and show a usage reset notification modal when a limit resets.
+    @MainActor
+    private func announceUsageReset(event: UsageResetEvent) {
+        guard let preferences, let fleet = notchFleet else { return }
+        Log.usage.info("usage reset for \(event.providerName, privacy: .public) (\(event.windowLabel, privacy: .public))")
+
+        if preferences.usageResetSound {
+            SessionChime.play(preferences.usageResetSoundName, volume: preferences.sessionSoundVolume)
         }
-        guard preferences.announceSessionEnd else { return }
-        if preferences.notificationChannel == .mac {
-            ChannelNotifications.sessionEnded(name: event.session.name, blocked: event.reason == .blocked)
-            return
+        guard preferences.announceUsageReset else { return }
+        if !fleet.showResetAlert(event, duration: 5.0) {
+            UsageAlertNotifications.deliver(event)
         }
-        fleet.peek(for: preferences.peekDuration.seconds,
-                   focusing: event.session.processID)
+    }
+
+    @MainActor
+    private func previewUsageResetAlert() {
+        guard let preferences, let fleet = notchFleet else { return }
+        let demo = UsageResetEvent(
+            providerID: "claude",
+            providerName: "Claude",
+            windowLabel: "5-hour limit",
+            glyph: .claude,
+            previousFraction: 0.95,
+            currentFraction: 0.00,
+            resetsAt: Date().addingTimeInterval(5 * 3600)
+        )
+        if preferences.usageResetSound {
+            SessionChime.play(preferences.usageResetSoundName, volume: preferences.sessionSoundVolume)
+        }
+        fleet.showResetAlert(demo, duration: 5.0)
+    }
+
+    /// Open the notch and show a usage limit reached notification modal when a limit is exhausted.
+    @MainActor
+    private func announceUsageLimit(event: UsageAlertEvent) {
+        guard let preferences, let fleet = notchFleet else { return }
+
+        let isAnnounceEnabled: Bool
+        switch event.kind {
+        case .sessionLimitReached:
+            isAnnounceEnabled = preferences.announceSessionLimitReached
+        case .weeklyLimitReached:
+            isAnnounceEnabled = preferences.announceWeeklyLimitReached
+        case .reset:
+            isAnnounceEnabled = preferences.announceUsageReset
+        }
+
+        guard isAnnounceEnabled else { return }
+
+        Log.usage.info("usage limit reached for \(event.providerName, privacy: .public) (\(event.windowLabel, privacy: .public))")
+
+        if preferences.limitReachedSound {
+            SessionChime.play(preferences.limitReachedSoundName, volume: preferences.sessionSoundVolume)
+        }
+        if !fleet.showResetAlert(event, duration: 6.0) {
+            UsageAlertNotifications.deliver(event)
+        }
+    }
+
+    @MainActor
+    private func previewSessionLimitAlert() {
+        guard let preferences, let fleet = notchFleet else { return }
+        let demo = UsageAlertEvent(
+            kind: .sessionLimitReached,
+            providerID: "claude",
+            providerName: "Claude",
+            windowLabel: "5-hour",
+            glyph: .claude,
+            previousFraction: 0.95,
+            currentFraction: 1.00,
+            resetsAt: Date().addingTimeInterval(45 * 60)
+        )
+        if preferences.limitReachedSound {
+            SessionChime.play(preferences.limitReachedSoundName, volume: preferences.sessionSoundVolume)
+        }
+        fleet.showResetAlert(demo, duration: 6.0)
+    }
+
+    @MainActor
+    private func previewWeeklyLimitAlert() {
+        guard let preferences, let fleet = notchFleet else { return }
+        let demo = UsageAlertEvent(
+            kind: .weeklyLimitReached,
+            providerID: "claude",
+            providerName: "Claude",
+            windowLabel: "Weekly",
+            glyph: .claude,
+            previousFraction: 0.98,
+            currentFraction: 1.00,
+            resetsAt: Date().addingTimeInterval(3 * 86400)
+        )
+        if preferences.limitReachedSound {
+            SessionChime.play(preferences.limitReachedSoundName, volume: preferences.sessionSoundVolume)
+        }
+        fleet.showResetAlert(demo, duration: 6.0)
     }
 
     /// A crossing is a banner on the Mac channel, as it always was; on the
@@ -1181,6 +1444,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        preferences?.flushIdleBotAppearance()
+        announcementWork?.cancel()
+        hookMonitor.stop()
+        codeSwitch?.stop()
         ollamaRelay?.configure(enabled: false, endpoint: OllamaEndpoint.defaultAddress)
         lmstudioMetrics?.stop()
         tokenRefresher?.stop()
@@ -1189,5 +1456,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         activityCoordinator?.stop()
         notchFleet?.stop()
         Task { await phoneLinkServer?.stop() }
+    }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        Task { @MainActor in
+            await codeSwitch?.stopAndWait()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 }

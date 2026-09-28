@@ -1,3 +1,12 @@
+/**
+ @name: MiniMax 额度供应商
+ @Descripttion: 读取 MiniMax Token Plan 与 Coding Plan 的额度窗口。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 17:40:57
+ @LastEditTime: 2026-09-14 17:40:57
+ @FilePath: Sources/Providers/MiniMaxProvider.swift
+ */
 import Foundation
 import os
 
@@ -76,7 +85,12 @@ actor MiniMaxProvider: UsageProvider {
     }
 
     nonisolated func account() -> ProviderAccount? {
-        guard let base = MiniMaxCredentials.account(region: resolveRegion()) else { return nil }
+        // A browser login is owned by the WebView rather than the keychain.
+        // Keep it visible in Settings even when no optional key or pasted
+        // cookie exists; otherwise the row would immediately ask the user to
+        // sign in again after the WebView has already confirmed the session.
+        let base = MiniMaxCredentials.account(region: resolveRegion()) ?? web?.account()
+        guard let base else { return nil }
         return ProviderAccount(
             label: base.label,
             plan: lastKnownPlan ?? base.plan,
@@ -105,6 +119,18 @@ actor MiniMaxProvider: UsageProvider {
         if let web {
             await web.signOut()
         }
+        credentialsDidChange()
+    }
+
+    func credentialsDidChange() {
+        regionDidChange()
+    }
+
+    func regionDidChange() {
+        retryNoEarlierThan = nil
+        consecutiveRateLimits = 0
+        lastKnownPlan = nil
+        archive.saveBackoffUntil(nil, providerID: id)
     }
 
     func fetchSnapshot() async throws -> ProviderSnapshot {
@@ -119,28 +145,39 @@ actor MiniMaxProvider: UsageProvider {
         let cookie = loadCookieHeader()
 
         do {
-            let data: Data
-            let fidelity: Fidelity
+            var data: Data?
+            var fidelity: Fidelity = .derived
             if let apiKey {
-                data = try await fetchOfficialRemains(token: apiKey, region: region)
-                fidelity = .official
-            } else if let cookie {
-                data = try await fetchCookieRemains(cookie: cookie, region: region)
-                fidelity = .derived
-            } else if let web {
+                do {
+                    data = try await fetchOfficialRemains(token: apiKey, region: region)
+                    fidelity = .official
+                } catch UsageProviderError.needsAuth where cookie != nil || web != nil {
+                    Log.usage.notice("minimax: key rejected, trying another saved sign-in")
+                } catch UsageProviderError.badResponse(let status) where status == 404 && (cookie != nil || web != nil) {
+                    Log.usage.notice("minimax: key endpoint unavailable, trying another saved sign-in")
+                }
+            }
+            if data == nil, let cookie {
+                do {
+                    data = try await fetchCookieRemains(cookie: cookie, region: region)
+                } catch UsageProviderError.needsAuth where web != nil {
+                    Log.usage.notice("minimax: cookie rejected, trying in-app sign-in")
+                }
+            }
+            if data == nil, let web {
                 let snapshot = try await fetchWebRemains(web)
+                guard region == resolveRegion() else { throw CancellationError() }
                 return recordedSuccess(
                     fidelity: .derived,
                     windows: snapshot.windows,
                     plan: snapshot.plan,
                     usageDetail: snapshot.usageDetail
                 )
-            } else {
-                throw UsageProviderError.needsAuth
             }
 
-            let body = String(decoding: data, as: UTF8.self)
-            Log.usage.debug("minimax usage -> \(body.prefix(400), privacy: .public)")
+            guard let data else { throw UsageProviderError.needsAuth }
+            guard region == resolveRegion() else { throw CancellationError() }
+            Log.usage.debug("minimax usage response received")
             let parsed = try MiniMaxUsage.parse(data)
             return recordedSuccess(
                 fidelity: fidelity,
@@ -148,6 +185,7 @@ actor MiniMaxProvider: UsageProvider {
                 plan: parsed.plan
             )
         } catch UsageProviderError.rateLimited(let retryAfter) {
+            guard region == resolveRegion() else { throw CancellationError() }
             consecutiveRateLimits += 1
             retryNoEarlierThan = Date().addingTimeInterval(retryAfter)
             archive.saveBackoffUntil(retryNoEarlierThan, providerID: id)
@@ -302,6 +340,10 @@ actor MiniMaxProvider: UsageProvider {
             cookieAuth: cookie != nil
         )
 
+        if bearer != nil, envelope == 1004, Self.isRejectedAPIKey(in: data) {
+            throw UsageProviderError.needsAuth
+        }
+
         if Self.isMissingEndpoint(status: status, envelope: envelope, cookieAuth: cookie != nil) {
             return .missingEndpoint
         }
@@ -354,6 +396,20 @@ actor MiniMaxProvider: UsageProvider {
         return false
     }
 
+    static func isRejectedAPIKey(in data: Data) -> Bool {
+        guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else { return false }
+        let responses = [
+            root["base_resp"] as? [String: Any],
+            (root["data"] as? [String: Any])?["base_resp"] as? [String: Any]
+        ].compactMap { $0 }
+        return responses.contains { response in
+            guard let message = response["status_msg"] as? String else { return false }
+            return message.localizedCaseInsensitiveContains("api secret key")
+                || message.localizedCaseInsensitiveContains("api key")
+        }
+    }
+
     /// Pay-as-you-go `sk-api-` keys cannot query coding-plan remains.
     /// `sk-cp-` and any unrecognised prefix still can.
     static func codingPlanToken(from apiKey: String?) -> String? {
@@ -368,17 +424,22 @@ actor MiniMaxProvider: UsageProvider {
         return raw
     }
 
-    private static func envelopeStatus(in data: Data) -> Int? {
+    static func envelopeStatus(in data: Data) -> Int? {
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             return nil
         }
-        if let code = int(root["status_code"]) ?? int(root["code"]) { return code }
-        let resp = (root["base_resp"] as? [String: Any])
-            ?? ((root["data"] as? [String: Any])?["base_resp"] as? [String: Any])
-        if let resp {
-            return int(resp["status_code"]) ?? int(resp["code"])
-        }
-        return nil
+        let outer = root["base_resp"] as? [String: Any]
+        let inner = (root["data"] as? [String: Any])?["base_resp"] as? [String: Any]
+        let codes = [
+            int(root["status_code"]) ?? int(root["code"]),
+            int(outer?["status_code"]) ?? int(outer?["code"]),
+            int(inner?["status_code"]) ?? int(inner?["code"])
+        ].compactMap { $0 }
+        return codes.first { $0 == 429 || $0 == 2045 }
+            ?? codes.first { $0 == 401 || $0 == 403 }
+            ?? codes.first { $0 == 1004 }
+            ?? codes.first { $0 != 0 && $0 != 200 }
+            ?? codes.first
     }
 
     private static func int(_ value: Any?) -> Int? {

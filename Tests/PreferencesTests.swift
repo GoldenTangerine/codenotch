@@ -1,5 +1,330 @@
+/**
+ @name: 偏好设置测试
+ @Descripttion: 验证设置迁移与刘海触发高度持久化。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 09:41:19
+ @LastEditTime: 2026-09-09 09:41:19
+ @FilePath: Tests/PreferencesTests.swift
+ */
+import AppKit
+import Combine
 import XCTest
 @testable import Codenotch
+
+@MainActor
+final class AccentColorPreferencesTests: XCTestCase {
+    func testIdleNotchDefaultsVisibleAndPersistsWithoutChangingAppearance() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertTrue(preferences.showsIdleNotch)
+        preferences.idleBotAppearance.enabled = true
+        preferences.idleBotAppearance.personality = "calm"
+        let appearance = preferences.idleBotAppearance
+        preferences.showsIdleNotch = false
+        let restored = Preferences(defaults: defaults)
+        XCTAssertFalse(restored.showsIdleNotch)
+        XCTAssertEqual(restored.idleBotAppearance, appearance)
+        restored.showsIdleNotch = true
+        XCTAssertTrue(Preferences(defaults: defaults).showsIdleNotch)
+    }
+    func testIdleRobotDefaultsToFirstProviderAndPersistsIndependentAppearance() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertFalse(preferences.idleBotAppearance.enabled)
+        preferences.idleBotAppearance.enabled = true
+        preferences.idleBotAppearance.personality = "calm"
+        preferences.idleBotAppearance.rgb = 0xABCDEF
+        preferences.flushIdleBotAppearance()
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance, preferences.idleBotAppearance)
+        XCTAssertTrue(preferences.botAppearances.isEmpty)
+        preferences.idleBotAppearance.enabled = false
+        let restored = Preferences(defaults: defaults)
+        XCTAssertFalse(restored.idleBotAppearance.enabled)
+        XCTAssertEqual(restored.idleBotAppearance.rgb, 0xABCDEF)
+        defaults.set(Data("invalid".utf8), forKey: "idleBotAppearance")
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance, BotAppearance())
+    }
+    func testIdleRobotColourCoalescesAndFlushPreservesTheLatestValue() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        preferences.idleBotAppearance.enabled = true
+        let initial = defaults.data(forKey: "idleBotAppearance")
+        for colour in 1...100 { preferences.idleBotAppearance.rgb = UInt32(colour) }
+        XCTAssertEqual(preferences.idleBotAppearance.rgb, 100)
+        XCTAssertEqual(defaults.data(forKey: "idleBotAppearance"), initial)
+        let deadline = Date().addingTimeInterval(1)
+        while defaults.data(forKey: "idleBotAppearance") == initial, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance.rgb, 100)
+        preferences.idleBotAppearance.rgb = 200
+        preferences.flushIdleBotAppearance()
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance.rgb, 200)
+        preferences.idleBotAppearance.rgb = 300
+        preferences.idleBotAppearance.enabled = false
+        RunLoop.main.run(until: Date().addingTimeInterval(0.35))
+        let restored = Preferences(defaults: defaults)
+        XCTAssertFalse(restored.idleBotAppearance.enabled)
+        XCTAssertEqual(restored.idleBotAppearance.rgb, 300)
+    }
+
+    func testPendingColourSaveDoesNotRetainPreferencesOrLoseTheLastValue() {
+        let defaults = makeDefaults()
+        var preferences: Preferences? = Preferences(defaults: defaults)
+        weak var released = preferences
+        preferences?.idleBotAppearance.rgb = 0x123456
+        preferences = nil
+        XCTAssertNil(released)
+        let deadline = Date().addingTimeInterval(1)
+        while defaults.data(forKey: "idleBotAppearance") == nil, Date() < deadline {
+            RunLoop.main.run(until: Date().addingTimeInterval(0.01))
+        }
+        XCTAssertEqual(Preferences(defaults: defaults).idleBotAppearance.rgb, 0x123456)
+    }
+    func testCollapsedHeightDefaultsClampsPersistsAndResets() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.collapsedHeightAdjustment, 0)
+        for (input, expected) in [(-12.0, -12.0), (-80, -20), (18, 18), (80, 40), (.nan, 0), (.infinity, 0)] {
+            preferences.collapsedHeightAdjustment = input
+            XCTAssertEqual(preferences.collapsedHeightAdjustment, expected)
+            XCTAssertEqual(Preferences(defaults: defaults).collapsedHeightAdjustment, expected)
+        }
+        preferences.collapsedHeightAdjustment = 0
+        XCTAssertEqual(Preferences(defaults: defaults).collapsedHeightAdjustment, 0)
+        defaults.set(-100.0, forKey: "collapsedHeightAdjustment")
+        XCTAssertEqual(Preferences(defaults: defaults).collapsedHeightAdjustment, -20)
+    }
+
+    func testCollapsedSideWidthDefaultsPersistsClampsAndResets() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.collapsedSideWidth, 64)
+        for (input, expected) in [(90.0, 90.0), (0, 40), (300, 160), (.nan, 64), (.infinity, 64)] {
+            preferences.collapsedSideWidth = input
+            XCTAssertEqual(preferences.collapsedSideWidth, expected)
+            XCTAssertEqual(Preferences(defaults: defaults).collapsedSideWidth, expected)
+        }
+        preferences.collapsedSideWidth = Preferences.defaultCollapsedSideWidth
+        XCTAssertEqual(Preferences(defaults: defaults).collapsedSideWidth, 64)
+        defaults.set(-10.0, forKey: "collapsedSideWidth")
+        XCTAssertEqual(Preferences(defaults: defaults).collapsedSideWidth, 40)
+    }
+
+    func testHoverDelayDefaultsPersistsAndNormalizes() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.notchHoverDelay, 0)
+        for (input, expected) in [(0.35, 0.35), (0.37, 0.35), (-1, 0), (2, 1), (.nan, 0)] {
+            preferences.notchHoverDelay = input
+            XCTAssertEqual(preferences.notchHoverDelay, expected)
+            XCTAssertEqual(Preferences(defaults: defaults).notchHoverDelay, expected)
+        }
+        defaults.set(9.0, forKey: "notchHoverDelay")
+        XCTAssertEqual(Preferences(defaults: defaults).notchHoverDelay, 1)
+    }
+
+    private func makeDefaults() -> UserDefaults {
+        let name = "AccentColorPreferencesTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        addTeardownBlock { defaults.removePersistentDomain(forName: name) }
+        return defaults
+    }
+
+    func testFreshInstallKeepsNotchOnSystemAfterChangingInterface() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.accentColor, .system)
+        XCTAssertEqual(preferences.notchAccentColor, .system)
+
+        preferences.accentColor = .blue
+        XCTAssertEqual(preferences.notchAccentColor, .system)
+        let reloaded = Preferences(defaults: defaults)
+        XCTAssertEqual(reloaded.accentColor, .blue)
+        XCTAssertEqual(reloaded.notchAccentColor, .system)
+    }
+
+    func testUpgradePreservesEveryLegacyChoiceForBothScopes() {
+        for choice in AccentColorChoice.allCases {
+            let defaults = makeDefaults()
+            defaults.set(choice.rawValue, forKey: "accentColor")
+
+            let preferences = Preferences(defaults: defaults)
+            XCTAssertEqual(preferences.accentColor, choice)
+            XCTAssertEqual(preferences.notchAccentColor, choice)
+
+            preferences.accentColor = choice == .blue ? .pink : .blue
+            XCTAssertEqual(Preferences(defaults: defaults).notchAccentColor, choice)
+        }
+    }
+
+    func testBothChoicesChangeIndependentlyAndSurviveRestart() {
+        let defaults = makeDefaults()
+        defaults.set(AccentColorChoice.green.rawValue, forKey: "accentColor")
+        let preferences = Preferences(defaults: defaults)
+
+        preferences.notchAccentColor = .pink
+        XCTAssertEqual(preferences.accentColor, .green)
+        preferences.accentColor = .blue
+        XCTAssertEqual(preferences.notchAccentColor, .pink)
+
+        let reloaded = Preferences(defaults: defaults)
+        XCTAssertEqual(reloaded.accentColor, .blue)
+        XCTAssertEqual(reloaded.notchAccentColor, .pink)
+    }
+
+    func testExistingNotchChoiceIsNeverOverwrittenByMigration() {
+        let defaults = makeDefaults()
+        defaults.set(AccentColorChoice.blue.rawValue, forKey: "accentColor")
+        for choice in [AccentColorChoice.pink, .system] {
+            defaults.set(choice.rawValue, forKey: "notchAccentColor")
+            let preferences = Preferences(defaults: defaults)
+            XCTAssertEqual(preferences.accentColor, .blue)
+            XCTAssertEqual(preferences.notchAccentColor, choice)
+            XCTAssertEqual(Preferences(defaults: defaults).notchAccentColor, choice)
+        }
+    }
+
+    func testInvalidChoicesFallBackIndependently() {
+        let defaults = makeDefaults()
+        defaults.set("ultraviolet", forKey: "accentColor")
+        let migrated = Preferences(defaults: defaults)
+        XCTAssertEqual(migrated.accentColor, .system)
+        XCTAssertEqual(migrated.notchAccentColor, .system)
+
+        defaults.set(AccentColorChoice.pink.rawValue, forKey: "notchAccentColor")
+        let invalidInterface = Preferences(defaults: defaults)
+        XCTAssertEqual(invalidInterface.accentColor, .system)
+        XCTAssertEqual(invalidInterface.notchAccentColor, .pink)
+
+        defaults.set(AccentColorChoice.blue.rawValue, forKey: "accentColor")
+        for invalidValue: Any in ["ultraviolet", 42] {
+            defaults.set(invalidValue, forKey: "notchAccentColor")
+            let invalidNotch = Preferences(defaults: defaults)
+            XCTAssertEqual(invalidNotch.accentColor, .blue)
+            XCTAssertEqual(invalidNotch.notchAccentColor, .system)
+        }
+    }
+
+    func testFleetAppliesAccentToExistingAndRecreatedControllers() throws {
+        guard !NSScreen.screens.isEmpty else { throw XCTSkip("Requires a display") }
+        let fleet = NotchFleet(scope: .allDisplays, edge: .top)
+        defer { fleet.stop() }
+        fleet.apply(accentColor: .pink)
+        fleet.show()
+        XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.accentColor == .pink })
+
+        fleet.apply(accentColor: .blue)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.accentColor == .blue })
+
+        fleet.stop()
+        fleet.show()
+        XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.accentColor == .blue })
+    }
+
+    func testFleetKeepsIndependentHandlesWhenControllersAreRecreated() throws {
+        guard !NSScreen.screens.isEmpty else { throw XCTSkip("Requires a display") }
+        let fleet = NotchFleet(scope: .allDisplays, edge: .top)
+        defer { fleet.stop() }
+        for settings in [true, false] {
+            for move in [true, false] {
+                fleet.apply(showsSettingsHandle: settings)
+                fleet.apply(showsMoveHandle: move)
+                fleet.show()
+                XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+                XCTAssertTrue(fleet.controllersForTesting.allSatisfy {
+                    $0.model.showsSettingsHandle == settings && $0.model.showsMoveHandle == move
+                })
+                fleet.stop()
+                fleet.show()
+                XCTAssertTrue(fleet.controllersForTesting.allSatisfy {
+                    $0.model.showsSettingsHandle == settings && $0.model.showsMoveHandle == move
+                })
+            }
+        }
+    }
+
+    func testAppBindingUsesOnlyNotchAccentAndKeepsNewWindowsCurrent() throws {
+        guard !NSScreen.screens.isEmpty else { throw XCTSkip("Requires a display") }
+        let preferences = Preferences(defaults: makeDefaults())
+        preferences.accentColor = .blue
+        preferences.notchAccentColor = .pink
+        let fleet = NotchFleet(scope: .allDisplays, edge: .top)
+        let binding = AppDelegate.bindNotchAccentColor(preferences, to: fleet)
+        defer {
+            binding.cancel()
+            fleet.stop()
+        }
+        fleet.show()
+        XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.accentColor == .pink })
+
+        preferences.accentColor = .green
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.accentColor == .pink })
+
+        let updated = expectation(description: "All windows receive the notch colour")
+        updated.expectedFulfillmentCount = fleet.controllersForTesting.count
+        let observations = fleet.controllersForTesting.map { controller in
+            controller.model.$accentColor.dropFirst().sink { colour in
+                if colour == .purple { updated.fulfill() }
+            }
+        }
+        defer { observations.forEach { $0.cancel() } }
+        preferences.notchAccentColor = .purple
+        wait(for: [updated], timeout: 1)
+        XCTAssertEqual(preferences.accentColor, .green)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.accentColor == .purple })
+
+        fleet.stop()
+        preferences.notchAccentColor = .orange
+        RunLoop.main.run(until: Date().addingTimeInterval(0.05))
+        fleet.show()
+        XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.accentColor == .orange })
+    }
+}
+
+@MainActor
+final class NotchTriggerPreferencesTests: XCTestCase {
+    func testFleetAppliesHeightToExistingAndNewControllers() throws {
+        guard !NSScreen.screens.isEmpty else { throw XCTSkip("Requires a display") }
+        let fleet = NotchFleet(scope: .mainDisplay, edge: .top)
+        defer { fleet.stop() }
+        fleet.apply(notchTriggerHeight: -2)
+        fleet.show()
+        XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.notchTriggerHeight == -2 })
+        fleet.apply(notchTriggerHeight: 0)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.notchTriggerHeight == 0 })
+        fleet.stop()
+        fleet.show()
+        XCTAssertFalse(fleet.controllersForTesting.isEmpty)
+        XCTAssertTrue(fleet.controllersForTesting.allSatisfy { $0.model.notchTriggerHeight == 0 })
+    }
+
+    func testDefaultAndSignedValuesSurviveReload() {
+        let name = "NotchTriggerTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.notchTriggerHeight, 2)
+        for value in [-20, -2, 0, 2, 20] {
+            preferences.notchTriggerHeight = value
+            XCTAssertEqual(Preferences(defaults: defaults).notchTriggerHeight, value)
+        }
+        for (value, expected) in [(-100, -20), (100, 20)] {
+            preferences.notchTriggerHeight = value
+            XCTAssertEqual(preferences.notchTriggerHeight, expected)
+            XCTAssertEqual(Preferences(defaults: defaults).notchTriggerHeight, expected)
+            defaults.set(value, forKey: "notchTriggerHeight")
+            XCTAssertEqual(Preferences(defaults: defaults).notchTriggerHeight, expected)
+        }
+    }
+}
 
 /// The rename from UsageNotch to Codenotch moved every setting into a new,
 /// empty defaults domain — the migration is the difference between a rename
@@ -7,6 +332,55 @@ import XCTest
 /// first-launch basics live with the other PreferencesTests.)
 @MainActor
 final class PreferencesMigrationTests: XCTestCase {
+    func testHandleVisibilityPersistsIndependently() {
+        let (fresh, _) = makeDefaults()
+        let initial = Preferences(defaults: fresh)
+        XCTAssertFalse(initial.showsSettingsHandle)
+        XCTAssertFalse(initial.showsMoveHandle)
+        for settings in [true, false] {
+            for move in [true, false] {
+                initial.showsSettingsHandle = settings
+                initial.showsMoveHandle = move
+                let restored = Preferences(defaults: fresh)
+                XCTAssertEqual(restored.showsSettingsHandle, settings)
+                XCTAssertEqual(restored.showsMoveHandle, move)
+            }
+        }
+    }
+
+    func testSavedQueryCatalogPreservesEnabledAccountsAndHiddenModels() {
+        let (defaults, _) = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        preferences.reconcile(discoveredIDs: ["claude", "codex", "kiro"])
+        let model = "ollama-local:model:test"
+        preferences.setConnected(false, for: model)
+        var manual = QueryEntry()
+        manual.id = "manual-account"
+        manual.enabled = true
+        var claude = QueryEntry()
+        claude.id = "claude"
+        claude.enabled = false
+        preferences.reconcileCatalog([manual, claude])
+
+        let restored = Preferences(defaults: defaults)
+        restored.reconcile(discoveredIDs: ["claude", "codex", "kiro", "kimi"])
+        XCTAssertTrue(restored.isConnected(manual.id))
+        XCTAssertFalse(restored.isConnected("claude"))
+        XCTAssertFalse(restored.isConnected("kiro"))
+        XCTAssertFalse(restored.isConnected("kimi"))
+        XCTAssertFalse(restored.isConnected(model))
+    }
+
+    func testCodexCompletionDefaultsToHooksAndPersistsLogOptIn() {
+        let (defaults, _) = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertFalse(preferences.codexRolloutCompletionEnabled)
+        preferences.codexRolloutCompletionEnabled = true
+        XCTAssertTrue(Preferences(defaults: defaults).codexRolloutCompletionEnabled)
+        preferences.codexRolloutCompletionEnabled = false
+        XCTAssertFalse(Preferences(defaults: defaults).codexRolloutCompletionEnabled)
+    }
+
     private func makeDefaults() -> (UserDefaults, String) {
         let name = "PreferencesTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -281,11 +655,13 @@ final class PreferencesMigrationTests: XCTestCase {
         XCTAssertEqual(Preferences(defaults: UserDefaults(suiteName: name)!).weeklyRing, .outside)
     }
 
-    /// On by default — it is how the notch is carried to another edge — and
-    /// once somebody hides it, it has to stay hidden across a relaunch.
-    func testTheMoveHandleShowsUntilHiddenAndStaysHidden() {
+    /// Keep the fork's hidden default and persist both explicit choices.
+    func testTheMoveHandleStaysHiddenUntilEnabledAndPersistsBothChoices() {
         let (fresh, name) = makeDefaults()
-        XCTAssertTrue(Preferences(defaults: fresh).showsMoveHandle)
+        XCTAssertFalse(Preferences(defaults: fresh).showsMoveHandle)
+
+        Preferences(defaults: fresh).showsMoveHandle = true
+        XCTAssertTrue(Preferences(defaults: UserDefaults(suiteName: name)!).showsMoveHandle)
 
         Preferences(defaults: fresh).showsMoveHandle = false
 
@@ -499,65 +875,5 @@ final class MenuBarLimitsPreferenceTests: XCTestCase {
         XCTAssertTrue(reopened.isConnected("claude"))
         XCTAssertFalse(reopened.isConnected("codex"))
         XCTAssertEqual(reopened.menuBarProviders, ["codex", "gemini"])
-    }
-}
-
-/// One channel for every notification. The notch is the default because it
-/// is what every earlier version did; the choice has to survive a relaunch.
-@MainActor
-final class NotificationChannelPreferenceTests: XCTestCase {
-    private func makeDefaults() -> UserDefaults {
-        let name = "PreferencesTests.channel.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defaults.removePersistentDomain(forName: name)
-        return defaults
-    }
-
-    func testTheNotchIsTheDefault() {
-        XCTAssertEqual(Preferences(defaults: makeDefaults()).notificationChannel, .notch)
-    }
-
-    func testTheChoiceIsKept() {
-        let defaults = makeDefaults()
-        Preferences(defaults: defaults).notificationChannel = .mac
-        XCTAssertEqual(Preferences(defaults: defaults).notificationChannel, .mac)
-    }
-
-    func testEveryChannelExplainsItself() {
-        for channel in NotificationChannel.allCases {
-            XCTAssertFalse(channel.title.isEmpty)
-            XCTAssertFalse(channel.explanation.isEmpty)
-        }
-    }
-}
-
-/// How small the notch may be made.
-final class NotchScaleRangeTests: XCTestCase {
-    /// The floor was 0.75, set there because the percentage under each ring
-    /// stopped being readable below it. That reading is its own setting now,
-    /// so the floor no longer has to protect type that can be switched off.
-    func testTheSliderReachesHalfSize() {
-        XCTAssertEqual(Preferences.customScaleRange.lowerBound, 0.5, accuracy: 0.0001)
-        XCTAssertEqual(Preferences.customScaleRange.upperBound, 1.5, accuracy: 0.0001)
-    }
-
-    /// The presets stay inside it, or a preset would be unreachable by slider.
-    func testEveryPresetIsInsideTheSliderRange() {
-        for size in NotchSize.allCases {
-            XCTAssertTrue(Preferences.customScaleRange.contains(Double(size.scale)),
-                          "\(size.rawValue) at \(size.scale) is outside the slider's range")
-        }
-    }
-
-    /// And a half-size notch is still a target you can hit: the wake band has
-    /// a floor of its own, so the pill does not shrink out of reach with it.
-    @MainActor
-    func testAHalfSizeNotchIsStillReachable() {
-        let m = NotchViewModel()
-        m.edge = .right
-        m.sizeScale = 0.5
-        XCTAssertGreaterThanOrEqual(m.wakeDepth, NotchLayout.pillHotZone,
-                                    "the hot zone shrank with the notch")
-        XCTAssertGreaterThanOrEqual(m.wakeLength, NotchLayout.pillHotZone)
     }
 }

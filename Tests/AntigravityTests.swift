@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 AntigravityTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/AntigravityTests.swift
+ */
 import XCTest
 import Sparkle
 @testable import Codenotch
@@ -1110,6 +1119,9 @@ final class FirstRunCopyTests: XCTestCase {
                       "nothing warns that the Claude app is not Claude Code")
     }
 
+    /// 旧版说明保留；本次扩展后的行为见下方实现。
+    /// The keychain prompt is the only interruption in the whole first run, and
+    /// choosing Allow rather than Always Allow is what makes it recur.
     /// The keychain prompt is explained before it appears: that it only comes
     /// from Allow access…, and that Deny is honoured (#98). "Always Allow"
     /// cannot outlast these items (#72), so the copy must not promise it.

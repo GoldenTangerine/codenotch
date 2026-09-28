@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · PhoneLinkPairing
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/PhoneLink/PhoneLinkPairing.swift
+ */
 import Foundation
 import Combine
 import Security
@@ -61,7 +70,7 @@ final class PhoneLinkPairing: ObservableObject {
         }
         return .invalid
     }
-    
+
     private func cleanRetiredCodes() {
         let now = Date()
         retiredCodes = retiredCodes.filter { now.timeIntervalSince($0.value) < 600 }
@@ -71,7 +80,7 @@ final class PhoneLinkPairing: ObservableObject {
             retiredCodes = Dictionary(uniqueKeysWithValues: sorted.prefix(8).map { ($0.key, $0.value) })
         }
     }
-    
+
     @Published var lastPaired: PairedDevice?
 
     func authenticationCodes() -> AuthenticationCodes {

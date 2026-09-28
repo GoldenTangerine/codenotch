@@ -1,4 +1,14 @@
+/**
+ @name: 上游同步回归测试
+ @Descripttion: 维护 CodexProfileTests.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Tests/CodexProfileTests.swift
+ */
 import SQLite3
+import Combine
 import XCTest
 @testable import Codenotch
 
@@ -189,7 +199,7 @@ final class CodexProfileTests: XCTestCase {
     }
 
     @MainActor
-    func testActivityUsesEachProfilesStoreAndDistinctSessionIDs() throws {
+    func testActivityUsesEachProfilesStoreAndDistinctSessionIDs() async throws {
         let root = try home([".codex": [], ".codex-work": []])
         let personal = CodexProfile.default(home: root)
         let work = CodexProfile(slug: "work", configDirectory: root.appendingPathComponent(".codex-work"))
@@ -197,10 +207,10 @@ final class CodexProfileTests: XCTestCase {
         try catalogue(profile: work, title: "Work task")
         let p = CodexActivityMonitor(profile: personal)
         let w = CodexActivityMonitor(profile: work)
-        p.start(); w.start()
         defer { p.stop(); w.stop() }
-        XCTAssertEqual(p.sessions.map(\.id), ["codex.desktop"])
-        XCTAssertEqual(w.sessions.map(\.id), ["codex-work.desktop"])
+        await startAndAwaitSessions([p, w])
+        XCTAssertEqual(p.sessions.map(\.id), ["codex.desktop:test"])
+        XCTAssertEqual(w.sessions.map(\.id), ["codex-work.desktop:test"])
         XCTAssertEqual(p.sessions.map(\.name), ["Personal task"])
         XCTAssertEqual(w.sessions.map(\.name), ["Work task"])
     }
@@ -216,7 +226,7 @@ final class CodexProfileTests: XCTestCase {
     }
 
     @MainActor
-    func testCLIActivityWithTheSameRolloutFilenameDoesNotCollide() throws {
+    func testCLIActivityWithTheSameRolloutFilenameDoesNotCollide() async throws {
         let root = try home([".codex": [], ".codex-work": []])
         let personal = CodexProfile.default(home: root)
         let work = CodexProfile(slug: "work", configDirectory: root.appendingPathComponent(".codex-work"))
@@ -226,16 +236,28 @@ final class CodexProfileTests: XCTestCase {
             var db: OpaquePointer?
             XCTAssertEqual(sqlite3_open(profile.stateURL.path, &db), SQLITE_OK)
             defer { sqlite3_close(db) }
-            XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE threads (rollout_path TEXT, archived INTEGER, updated_at_ms INTEGER)", nil, nil, nil), SQLITE_OK)
-            XCTAssertEqual(sqlite3_exec(db, "INSERT INTO threads VALUES ('\(rollout.path)', 0, 1)", nil, nil, nil), SQLITE_OK)
+            XCTAssertEqual(sqlite3_exec(db, "CREATE TABLE threads (id TEXT, rollout_path TEXT, archived INTEGER, updated_at_ms INTEGER)", nil, nil, nil), SQLITE_OK)
+            XCTAssertEqual(sqlite3_exec(db, "INSERT INTO threads VALUES ('test', '\(rollout.path)', 0, 1)", nil, nil, nil), SQLITE_OK)
         }
         let p = CodexActivityMonitor(profile: personal)
         let w = CodexActivityMonitor(profile: work)
-        p.start(); w.start()
         defer { p.stop(); w.stop() }
+        await startAndAwaitSessions([p, w])
         XCTAssertEqual(p.sessions.map(\.id), ["codex.rollout.jsonl"])
         XCTAssertEqual(w.sessions.map(\.id), ["codex-work.rollout.jsonl"])
         XCTAssertEqual(w.sessions.map(\.name), ["Codex (work)"])
+    }
+
+    @MainActor
+    private func startAndAwaitSessions(_ monitors: [CodexActivityMonitor]) async {
+        let ready = expectation(description: "Each profile publishes its first activity reading")
+        ready.expectedFulfillmentCount = monitors.count
+        let subscriptions = monitors.map { monitor in
+            monitor.$sessions.filter { !$0.isEmpty }.first().sink { _ in ready.fulfill() }
+        }
+        monitors.forEach { $0.start() }
+        await fulfillment(of: [ready], timeout: 5)
+        withExtendedLifetime(subscriptions) {}
     }
 }
 

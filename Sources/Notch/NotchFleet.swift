@@ -1,3 +1,12 @@
+/**
+ @name: 多屏显示栏管理
+ @Descripttion: 同步各屏幕的显示栏数据、设置和拖动位置。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:05:58
+ @LastEditTime: 2026-09-08 22:05:58
+ @FilePath: Sources/Notch/NotchFleet.swift
+ */
 import AppKit
 import Combine
 import SwiftUI
@@ -27,6 +36,9 @@ final class NotchFleet {
     private var visibility: NotchVisibility = .onHover
 
     private var snapshots: [ProviderSnapshot] = []
+    private var activitySourceIDs: [String: String]?
+    private var savedPosition: NotchPosition?
+    var onPositionCommitted: ((NotchPosition) -> Void)?
     private(set) var thinkingModels: [String: Date] = [:]
     /// Per source, the way the view model keeps them: the Ollama relay and
     /// the LM Studio log each replace their own readings wholesale.
@@ -35,12 +47,51 @@ final class NotchFleet {
     private var ledger = LocalTokenLedger()
     private var localMetricsEnabled = false
 
-    func setLocalMetricsEnabled(_ enabled: Bool) {
+    func setLocalMetricsEnabled(_ enabled: Bool, now: Date = Date()) {
         localMetricsEnabled = enabled
         if !enabled { performances[NotchViewModel.ollamaSource] = nil; thinkingModels = [:] }
+        if !enabled { recordBotActivity(source: .ollama, busy: false, now: now) }
         for model in models { model.setLocalMetricsEnabled(enabled) }
     }
     private var refreshing: Set<String> = []
+    private var botAppearances: [String: BotAppearance] = [:]
+    private var idleBotAppearance = BotAppearance()
+
+    func apply(idleBotAppearance: BotAppearance) {
+        self.idleBotAppearance = idleBotAppearance
+        for model in models { model.idleBotAppearance = idleBotAppearance }
+    }
+    private var botActivity = BotActivityTimeline()
+    private var botLastActivity: Date? { botActivity.lastActivity }
+    private var botGloballyBusy: Bool { botActivity.isBusy }
+
+    func recordBotActivity(_ sessions: [AgentSession], now: Date = Date()) {
+        // 会话消失后保留已观测的活动；视图重建、路由和窗口数量不改变安静计时。
+        recordBotActivity(source: .cli, busy: sessions.contains { $0.state == .busy },
+                          latest: sessions.map(\.since).max(), now: now)
+    }
+
+    private func recordBotActivity(source: BotActivityTimeline.Source, busy: Bool,
+                                   latest: Date? = nil, now: Date) {
+        botActivity.record(source, busy: busy, latest: latest, now: now)
+        for model in models {
+            if model.botLastActivity != botLastActivity { model.botLastActivity = botLastActivity }
+            if model.botGloballyBusy != botGloballyBusy { model.botGloballyBusy = botGloballyBusy }
+        }
+    }
+
+    func apply(botAppearances: [String: BotAppearance]) {
+        self.botAppearances = botAppearances
+        for model in models { model.botAppearances = botAppearances }
+    }
+
+    func animateBot(_ kind: BotMarkEvent, providerID: String) {
+        let event = BotAnimationEvent(kind: kind)
+        for model in models where model.isExpanded {
+            model.botEvents = model.botEvents.filter { Date().timeIntervalSince($0.value.occurredAt) < 7 }
+            model.botEvents[providerID] = event
+        }
+    }
     /// Exposed read-only rather than private: completion-watching needs the
     /// merged dict after a fan-out, the same way it read `controller.model
     /// .sessions` before there was more than one controller.
@@ -51,17 +102,27 @@ final class NotchFleet {
     /// `NotchWindowController.currentScreen()`.
     private var displayPreference: DisplayPreference = .followActiveWindow
     private var resetTimeFormat: ResetTimeFormat = .automatic
+    private var tooltipHeightMode: TooltipHeightMode = .standard
     private var accentColor: AccentColorChoice = .system
-    private var watchLimit: Double = 0.50
-    private var criticalLimit: Double = 0.70
-    private var colorTransitionStyle: ColorTransitionStyle = .hardStep
+    private var notchTriggerHeight = NotchTriggerHeight.defaultValue
+    private var notchHoverDelay: Double = 0
     /// One choice for the whole fleet, like the edge and the size: a weekly
     /// ring on one display and not another would read as a bug.
     private var weeklyRing: WeeklyRing = .off
-    private var weeklyRingDashed: Bool = false
-    private var showsNotchReadings: Bool = true
-    private var weeklyReading: Bool = false
-    private var showsMoveHandle = true
+    private var independentInnerRing = false
+    private var topAvoidanceAdjustment: CGFloat = 0
+    private var ringEdgeAdjustment: CGFloat = 0
+    private var collapsedSideWidth: CGFloat = 64
+    private var collapsedHeightAdjustment: CGFloat = 0
+    private var showsIdleNotch = true
+    private var isEditingCollapsedGeometry = false
+    private var isEditingGeometry = false
+    private var codeSwitchQuotaRatiosEnabled = false
+    private var showsMoveHandle = false
+    private var showsSettingsHandle = false
+    private var watchLimit: Double = 0.50
+    private var criticalLimit: Double = 0.70
+    private var weeklyRingDashed = false
     private var foldsForFullScreen = true
     private var surfaceStyle: NotchSurfaceStyle = .glass
     private var deepSeekPricingEnabled = true
@@ -139,6 +200,11 @@ final class NotchFleet {
     }
 
     func apply(edge: NotchEdge) {
+        if self.edge != edge, var position = savedPosition {
+            position.edge = edge
+            position.fraction = 0.5
+            savedPosition = position
+        }
         self.edge = edge
         for controller in controllers.values {
             controller.apply(edge: edge)
@@ -156,6 +222,15 @@ final class NotchFleet {
     /// mean anything to — reconciling picks it a screen using the new
     /// preference the same way it does on a screen-parameter change.
     func apply(displayPreference: DisplayPreference) {
+        if self.displayPreference != displayPreference, var position = savedPosition {
+            switch displayPreference {
+            case .display(let id): position.displayID = id
+            case .followActiveWindow: position.displayID = nil
+            }
+            savedPosition = position
+            for controller in controllers.values { controller.restore(position: position) }
+            onPositionCommitted?(position)
+        }
         self.displayPreference = displayPreference
         guard hasShown else { return }
         reconcile(screens: NSScreen.screens)
@@ -168,6 +243,13 @@ final class NotchFleet {
         }
     }
 
+    func apply(tooltipHeightMode: TooltipHeightMode) {
+        self.tooltipHeightMode = tooltipHeightMode
+        for controller in controllers.values {
+            controller.apply(tooltipHeightMode: tooltipHeightMode)
+        }
+    }
+
     func apply(showsMoveHandle: Bool) {
         self.showsMoveHandle = showsMoveHandle
         for controller in controllers.values {
@@ -175,26 +257,17 @@ final class NotchFleet {
         }
     }
 
+    func apply(showsSettingsHandle: Bool) {
+        self.showsSettingsHandle = showsSettingsHandle
+        for controller in controllers.values {
+            controller.apply(showsSettingsHandle: showsSettingsHandle)
+        }
+    }
+
     func apply(foldsForFullScreen: Bool) {
         self.foldsForFullScreen = foldsForFullScreen
         for controller in controllers.values {
             controller.apply(foldsForFullScreen: foldsForFullScreen)
-        }
-    }
-
-    func apply(showsNotchReadings: Bool) {
-        self.showsNotchReadings = showsNotchReadings
-        // Through the controller, which relays the window out: this one
-        // changes the ring's size and so the notch's own length.
-        for controller in controllers.values {
-            controller.apply(showsNotchReadings: showsNotchReadings)
-        }
-    }
-
-    func apply(weeklyReading: Bool) {
-        self.weeklyReading = weeklyReading
-        for controller in controllers.values {
-            controller.model.weeklyReading = weeklyReading
         }
     }
 
@@ -212,6 +285,15 @@ final class NotchFleet {
         }
     }
 
+    func apply(independentInnerRing: Bool, codeSwitchQuotaRatiosEnabled: Bool) {
+        self.independentInnerRing = independentInnerRing
+        self.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
+        for controller in controllers.values {
+            controller.model.independentInnerRing = independentInnerRing
+            controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
+        }
+    }
+
     func apply(watchLimit: Double, criticalLimit: Double) {
         self.watchLimit = watchLimit
         self.criticalLimit = criticalLimit
@@ -221,17 +303,66 @@ final class NotchFleet {
         }
     }
 
-    func apply(colorTransitionStyle: ColorTransitionStyle) {
-        self.colorTransitionStyle = colorTransitionStyle
-        for controller in controllers.values {
-            controller.model.colorTransitionStyle = colorTransitionStyle
-        }
-    }
-
     func apply(accentColor: AccentColorChoice) {
         self.accentColor = accentColor
         for controller in controllers.values {
             controller.model.accentColor = accentColor
+        }
+    }
+
+    func apply(topAvoidanceAdjustment: CGFloat, ringEdgeAdjustment: CGFloat) {
+        self.topAvoidanceAdjustment = CGFloat(Preferences.geometryValue(Double(topAvoidanceAdjustment), in: Preferences.topAvoidanceRange))
+        self.ringEdgeAdjustment = CGFloat(Preferences.geometryValue(Double(ringEdgeAdjustment), in: Preferences.ringEdgeRange))
+        for controller in controllers.values {
+            controller.apply(topAvoidanceAdjustment: self.topAvoidanceAdjustment, ringEdgeAdjustment: self.ringEdgeAdjustment)
+        }
+    }
+
+    func apply(collapsedSideWidth: CGFloat) {
+        self.collapsedSideWidth = CGFloat(Preferences.normalizedCollapsedSideWidth(Double(collapsedSideWidth)))
+        for controller in controllers.values {
+            controller.apply(collapsedSideWidth: self.collapsedSideWidth)
+        }
+    }
+
+    func previewGeometry(editing: Bool? = nil) {
+        if let editing { isEditingGeometry = editing }
+        for controller in controllers.values {
+            controller.previewGeometry(editing: editing)
+        }
+    }
+
+    func apply(collapsedHeightAdjustment: CGFloat) {
+        self.collapsedHeightAdjustment = CGFloat(Preferences.geometryValue(
+            Double(collapsedHeightAdjustment), in: Preferences.collapsedHeightRange))
+        for controller in controllers.values {
+            controller.apply(collapsedHeightAdjustment: self.collapsedHeightAdjustment)
+        }
+    }
+
+    func apply(showsIdleNotch: Bool) {
+        self.showsIdleNotch = showsIdleNotch
+        for controller in controllers.values { controller.apply(showsIdleNotch: showsIdleNotch) }
+    }
+
+    func previewCollapsedGeometry(editing: Bool? = nil) {
+        if let editing { isEditingCollapsedGeometry = editing }
+        for controller in controllers.values {
+            controller.previewCollapsedGeometry(editing: editing)
+        }
+    }
+
+    func apply(notchHoverDelay: Double) {
+        self.notchHoverDelay = Preferences.normalizedHoverDelay(notchHoverDelay)
+        for controller in controllers.values {
+            controller.apply(notchHoverDelay: self.notchHoverDelay)
+        }
+    }
+
+    func apply(notchTriggerHeight: Int) {
+        self.notchTriggerHeight = NotchTriggerHeight.clamp(notchTriggerHeight)
+        for controller in controllers.values {
+            controller.apply(notchTriggerHeight: self.notchTriggerHeight)
         }
     }
 
@@ -273,19 +404,40 @@ final class NotchFleet {
         }
     }
 
+    func restore(position: NotchPosition?) {
+        savedPosition = position
+        if let position {
+            edge = position.edge
+            displayPreference = position.displayID.map(DisplayPreference.display) ?? .followActiveWindow
+        }
+        for controller in controllers.values {
+            controller.displayPreference = displayPreference
+            controller.restore(position: position)
+            controller.relocate()
+        }
+    }
+
+    func setActivitySourceIDs(_ ids: [String: String]) {
+        activitySourceIDs = ids
+        for model in models { model.activitySourceIDs = ids }
+    }
+
     // MARK: - Readings
 
-    func setSnapshots(_ snapshots: [ProviderSnapshot]) {
+    func setSnapshots(_ snapshots: [ProviderSnapshot], now: Date = Date()) {
         self.snapshots = snapshots
-        let now = Date()
+        recordBotActivity(source: .codeSwitch, busy: snapshots.contains {
+            $0.linked.map { $0.provider.status == "active" && $0.provider.activeRequests > 0 } ?? false
+        }, now: now)
         for model in models {
             model.updateSnapshots(snapshots)
             model.now = now
         }
     }
 
-    func setThinkingModels(_ thinking: [String: Date]) {
+    func setThinkingModels(_ thinking: [String: Date], now: Date = Date()) {
         thinkingModels = thinking
+        recordBotActivity(source: .ollama, busy: !thinking.isEmpty, latest: thinking.values.max(), now: now)
         for model in models {
             model.thinkingModels = thinking
         }
@@ -299,8 +451,10 @@ final class NotchFleet {
         }
     }
 
-    func setLocalActivities(_ activities: [String: LocalModelActivity]) {
+    func setLocalActivities(_ activities: [String: LocalModelActivity], now: Date = Date()) {
         localActivities = activities
+        recordBotActivity(source: .lmStudio, busy: !activities.isEmpty,
+                          latest: activities.values.map(\.since).max(), now: now)
         for model in models {
             model.localActivities = activities
         }
@@ -316,10 +470,27 @@ final class NotchFleet {
     /// Opens every panel for a moment, because something happened — the same
     /// announcement on every display rather than only the one you happen to
     /// be looking at.
-    func peek(for duration: TimeInterval, focusing pid: pid_t?) {
+    @discardableResult
+    func peek(for duration: TimeInterval, focusing pid: pid_t?, providerID: String? = nil, startedAt: Date? = nil) -> Bool {
+        var displayed = false
         for controller in controllers.values {
-            controller.peek(for: duration, focusing: pid)
+            if controller.peek(for: duration, focusing: pid, providerID: providerID, startedAt: startedAt) {
+                displayed = true
+            }
         }
+        return displayed
+    }
+
+    /// Shows a usage reset notification modal on every panel.
+    /// Returns whether at least one notch had somewhere to show the card. With
+    /// every notch hidden the alert would otherwise vanish without a trace.
+    @discardableResult
+    func showResetAlert(_ event: UsageResetEvent, duration: TimeInterval = 5.0) -> Bool {
+        var shown = false
+        for controller in controllers.values {
+            shown = controller.showResetAlert(event, duration: duration) || shown
+        }
+        return shown
     }
 
     /// Shows a usage reset notification modal on every panel.
@@ -336,8 +507,8 @@ final class NotchFleet {
 
     func setRefreshing(_ ids: Set<String>) {
         self.refreshing = ids
-        for controller in controllers.values {
-            controller.model.refreshing = ids
+        for model in models {
+            model.refreshing = ids
         }
     }
 
@@ -351,6 +522,14 @@ final class NotchFleet {
                 controller.model.sessions[id] = live
             }
             controller.model.now = now
+        }
+    }
+
+    func setSessions(_ sessions: [String: [AgentSession]]) {
+        self.sessions = sessions
+        for model in models {
+            model.sessions = sessions
+            model.now = Date()
         }
     }
 
@@ -415,8 +594,9 @@ final class NotchFleet {
         // its controller and moves it, the way a single panel always did,
         // instead of tearing a panel down and building another.
         if scope == .mainDisplay, controllers.count == 1,
-           let screen = desired.first, let controller = controllers.values.first {
-            controller.assignedScreen = screen
+           !desired.isEmpty, let controller = controllers.values.first {
+            controller.assignedScreen = nil
+            controller.displayPreference = displayPreference
             controller.relocate()
             return
         }
@@ -424,6 +604,9 @@ final class NotchFleet {
         for id in plan.remove {
             controllers[id]?.retire()
             controllers[id] = nil
+        }
+        for (screen, id) in zip(desired, keys) {
+            controllers[id]?.assignedScreen = scope == .allDisplays ? screen : nil
         }
         for (screen, id) in zip(desired, keys) where plan.add.contains(id) {
             controllers[id] = makeController(on: screen)
@@ -435,28 +618,46 @@ final class NotchFleet {
     /// open on empty rings.
     private func makeController(on screen: NSScreen) -> NotchWindowController {
         let controller = NotchWindowController()
-        controller.assignedScreen = screen
+        controller.assignedScreen = scope == .allDisplays ? screen : nil
         controller.displayPreference = displayPreference
         controller.foldsForFullScreen = foldsForFullScreen
         controller.model.edge = edge
+        controller.restore(position: savedPosition)
+        controller.model.activitySourceIDs = activitySourceIDs
+        controller.onPositionCommitted = { [weak self] position in
+            guard let self else { return }
+            self.restore(position: position)
+            self.onPositionCommitted?(position)
+        }
         controller.model.alongOffset = alongOffset
         // Set before `show()`, so a display plugged in later builds its panel
         // at the current size rather than at medium and resizing a beat later.
-        controller.prime(scale: scale)
+        controller.model.sizeScale = scale
+        controller.model.topAvoidanceAdjustment = topAvoidanceAdjustment
+        controller.model.ringEdgeAdjustment = ringEdgeAdjustment
+        controller.model.collapsedSideWidth = collapsedSideWidth
+        controller.model.collapsedHeightAdjustment = collapsedHeightAdjustment
+        controller.model.showsIdleNotch = showsIdleNotch
         controller.model.resetTimeFormat = resetTimeFormat
+        controller.model.botAppearances = botAppearances
+        controller.model.idleBotAppearance = idleBotAppearance
+        controller.model.botLastActivity = botLastActivity
+        controller.model.botGloballyBusy = botGloballyBusy
+        controller.model.tooltipHeightMode = tooltipHeightMode
         controller.model.accentColor = accentColor
+        controller.model.notchTriggerHeight = notchTriggerHeight
+        controller.apply(notchHoverDelay: notchHoverDelay)
+        controller.model.weeklyRing = weeklyRing
+        controller.model.independentInnerRing = independentInnerRing
+        controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
         controller.model.watchLimit = watchLimit
         controller.model.criticalLimit = criticalLimit
-        controller.model.colorTransitionStyle = colorTransitionStyle
-        controller.model.weeklyRing = weeklyRing
         controller.model.weeklyRingDashed = weeklyRingDashed
-        controller.model.showsNotchReadings = showsNotchReadings
-        controller.model.weeklyReading = weeklyReading
         controller.model.showsMoveHandle = showsMoveHandle
+        controller.model.showsSettingsHandle = showsSettingsHandle
         controller.model.surfaceStyle = surfaceStyle
         controller.model.deepSeekPricingEnabled = deepSeekPricingEnabled
         controller.model.deepSeekPricingSchedule = deepSeekPricingSchedule
-
         controller.onRefresh = onRefresh
         controller.onRefreshProvider = onRefreshProvider
         controller.onOpenSettings = onOpenSettings
@@ -476,8 +677,10 @@ final class NotchFleet {
         controller.model.refreshing = refreshing
         controller.model.sessions = sessions
         controller.model.now = Date()
-        controller.apply(visibility)
         controller.show()
+        controller.apply(visibility)
+        if isEditingGeometry { controller.previewGeometry(editing: true) }
+        if isEditingCollapsedGeometry { controller.previewCollapsedGeometry(editing: true) }
         return controller
     }
 }

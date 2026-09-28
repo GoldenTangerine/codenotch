@@ -24,7 +24,7 @@ jobs:
   package:
     # workflow_dispatch is let through so a fork can try the installer before
     # opening a pull request; every other trigger only runs here.
-    if: github.repository == 'vinzdg/codenotch' || github.event_name == 'workflow_dispatch'
+    if: github.repository == 'GoldenTangerine/codenotch' || github.event_name == 'workflow_dispatch'
     name: NSIS installer
     # Only the release step writes anything; `gh release upload` fails without it.
     permissions:
@@ -65,12 +65,27 @@ jobs:
         id: signing
         env:
           KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
         run: |
           $have = -not [string]::IsNullOrWhiteSpace($env:KEY)
+          $havePublic = -not [string]::IsNullOrWhiteSpace($env:PUBLIC_KEY)
+          if ($have -and -not $havePublic) {
+            throw 'TAURI_SIGNING_PUBLIC_KEY is required when TAURI_SIGNING_PRIVATE_KEY is set.'
+          }
           "signed=$($have.ToString().ToLower())" >> $env:GITHUB_OUTPUT
           if (-not $have) {
             Write-Host '::warning::TAURI_SIGNING_PRIVATE_KEY is not set - building an installer with no update feed.'
           }
+
+      - name: Configure updater verification key
+        if: steps.signing.outputs.signed == 'true'
+        working-directory: windows/codenotch
+        env:
+          TAURI_SIGNING_PUBLIC_KEY: ${{ secrets.TAURI_SIGNING_PUBLIC_KEY }}
+        run: |
+          $config = Get-Content tauri.conf.json -Raw | ConvertFrom-Json
+          $config.plugins.updater.pubkey = $env:TAURI_SIGNING_PUBLIC_KEY.Trim()
+          $config | ConvertTo-Json -Depth 20 | Set-Content tauri.conf.json -Encoding utf8
 
       # tauri.bundle.conf.json is merged only here, so a plain `cargo build`
       # never looks for a hook binary that has not been built.
@@ -164,7 +179,7 @@ jobs:
             platforms = [ordered]@{
               'windows-x86_64' = [ordered]@{
                 signature = $signature
-                url = "https://github.com/vinzdg/codenotch/releases/download/v$version/Codenotch-Setup.nsis.zip"
+                    url = "https://github.com/GoldenTangerine/codenotch/releases/download/v$version/Codenotch-Setup.nsis.zip"
               }
             }
           }

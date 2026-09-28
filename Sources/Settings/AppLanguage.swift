@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 AppLanguage.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Settings/AppLanguage.swift
+ */
 import Foundation
 
 /// Which language Codenotch's own copy uses.
@@ -10,16 +19,12 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case english = "en"
     case french = "fr"
     case german = "de"
-    case indonesian = "id"
     case japanese = "ja"
     case korean = "ko"
     case brazilianPortuguese = "pt-BR"
     case russian = "ru"
     case simplifiedChinese = "zh-Hans"
-    case traditionalChinese = "zh-Hant"
     case ukrainian = "uk"
-    case uzbek = "uz"
-    case turkish = "tr"
 
     var id: String { rawValue }
 
@@ -35,39 +40,30 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .english:             return Locale(identifier: "en")
         case .french:              return Locale(identifier: "fr")
         case .german:              return Locale(identifier: "de")
-        case .indonesian:          return Locale(identifier: "id")
         case .japanese:            return Locale(identifier: "ja")
         case .korean:              return Locale(identifier: "ko")
         case .brazilianPortuguese: return Locale(identifier: "pt-BR")
         case .russian:             return Locale(identifier: "ru")
         case .simplifiedChinese:   return Locale(identifier: "zh-Hans")
-        case .traditionalChinese:  return Locale(identifier: "zh-Hant")
         case .ukrainian:           return Locale(identifier: "uk")
-        case .uzbek:               return Locale(identifier: "uz")
-        case .turkish:             return Locale(identifier: "tr")
         }
     }
 
-    /// English, Français, Deutsch, Bahasa Indonesia, 日本語, 한국어,
-    /// Português (Brasil), Русский, 简体中文, 繁體中文, Українська, Oʻzbekcha and
-    /// Türkçe stay in their own language so the row is recognizable when the
-    /// rest of Settings is in another one.
+    /// English, Français, Deutsch, 日本語, Português (Brasil), Русский, 简体中文 and
+    /// Українська stay in their own language so the row is recognizable when
+    /// the rest of Settings is in another one.
     var title: String {
         switch self {
         case .system:              return L10n.t("Follow System")
         case .english:             return "English"
         case .french:              return "Français"
         case .german:              return "Deutsch"
-        case .indonesian:          return "Bahasa Indonesia"
         case .japanese:            return "日本語"
         case .korean:              return "한국어"
         case .brazilianPortuguese: return "Português (Brasil)"
         case .russian:             return "Русский"
         case .simplifiedChinese:   return "简体中文"
-        case .traditionalChinese:  return "繁體中文"
         case .ukrainian:           return "Українська"
-        case .uzbek:               return "Oʻzbekcha"
-        case .turkish:             return "Türkçe"
         }
     }
 
@@ -75,10 +71,48 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         switch self {
         case .system:
             return L10n.t("Matches the Mac's preferred language.")
-        case .english, .french, .german, .indonesian, .japanese, .korean,
-             .brazilianPortuguese, .russian, .simplifiedChinese, .traditionalChinese,
-             .ukrainian, .uzbek, .turkish:
+        case .english, .french, .german, .japanese, .brazilianPortuguese, .russian,
+             .simplifiedChinese, .ukrainian:
             return L10n.t("Codenotch uses this language even if the Mac does not.")
         }
+    }
+
+    static var chinese: AppLanguage { .simplifiedChinese }
+
+    /// The `AppleLanguages` value for this choice, or nil to follow macOS.
+    private var languageCodes: [String]? {
+        switch self {
+        case .system:  return nil
+        case .english: return ["en"]
+        case .french: return ["fr"]
+        case .german: return ["de"]
+        case .japanese: return ["ja"]
+        case .brazilianPortuguese: return ["pt-BR"]
+        case .russian: return ["ru"]
+        case .simplifiedChinese: return ["zh-Hans"]
+        case .ukrainian: return ["uk"]
+        }
+    }
+
+    /// Writes the override for the *next* launch; the running process keeps
+    /// the language it started with.
+    func apply(to defaults: UserDefaults) {
+        if let codes = languageCodes {
+            defaults.set(codes, forKey: "AppleLanguages")
+        } else {
+            defaults.removeObject(forKey: "AppleLanguages")
+        }
+    }
+
+    /// The override written to this app's *own* defaults domain — the same
+    /// key System Settings writes for a per-app language, so a choice made
+    /// there shows up here for free. A plain `object(forKey:)` read would fall
+    /// through to the global domain and mistake the system's language list
+    /// for a per-app choice.
+    static func ownOverride(in defaults: UserDefaults, domainName: String?) -> AppLanguage? {
+        guard let domainName,
+              let code = (defaults.persistentDomain(forName: domainName)?["AppleLanguages"] as? [String])?.first
+        else { return nil }
+        return code.hasPrefix("zh") ? .simplifiedChinese : AppLanguage(rawValue: code) ?? .english
     }
 }

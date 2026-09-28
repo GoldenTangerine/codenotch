@@ -1,4 +1,13 @@
 /**
+ @name: 上游同步模块
+ @Descripttion: 维护 zstddeclib.c 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Vendor/zstd/zstddeclib.c
+ */
+/**
  * \file zstddeclib.c
  * Single-file Zstandard decompressor.
  *

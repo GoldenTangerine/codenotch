@@ -1,3 +1,12 @@
+/**
+ @name: 活动摘要
+ @Descripttion: 归并本地会话或联动供应商的调用状态。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 17:00:00
+ @LastEditTime: 2026-09-08 17:00:00
+ @FilePath: Sources/Sessions/ActivitySummary.swift
+ */
 import SwiftUI
 
 /// What the activity cell shows: the state of every live session, reduced to
@@ -18,6 +27,13 @@ struct ActivitySummary: Equatable {
     /// What the tooltip's header says while this is going on, where a local
     /// runtime names the phase. Nil leaves the header to the session's name.
     let note: String?
+
+    init(state: State) {
+        self.state = state
+        self.sessions = []
+        self.queued = 0
+        self.note = nil
+    }
 
     /// Nil when nothing is running — the cell disappears rather than sitting
     /// there saying nothing.
@@ -56,7 +72,7 @@ struct ActivitySummary: Equatable {
     var color: Color {
         switch state {
         case .working: return Palette.textPrimary
-        case .waiting: return Palette.watch
+        case .waiting: return Palette.activityWaiting
         case .success: return Palette.ample
         case .idle:    return Palette.ringTrack
         }

@@ -1,4 +1,41 @@
+/**
+ @name: 额度展示模型
+ @Descripttion: 统一表示供应商读数、金额及查询状态。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Model/UsageModel.swift
+ */
 import Foundation
+
+struct QuotaQuantity: Codable, Equatable {
+    var remaining: Double?
+    var used: Double?
+    var total: Double?
+    var unit = ""
+    var unlimited = false
+
+    static func format(_ value: Double, compact: Bool = false) -> String {
+        guard value.isFinite else { return "—" }
+        let magnitude = abs(value)
+        if compact && magnitude >= 1e12 {
+            return value.formatted(.number.notation(.scientific).precision(.significantDigits(1...3)))
+        }
+        let divisor: Double = compact ? (magnitude >= 1e9 ? 1e9 : magnitude >= 1e6 ? 1e6 : magnitude >= 1e3 ? 1e3 : 1) : 1
+        let suffix = divisor == 1e9 ? "B" : divisor == 1e6 ? "M" : divisor == 1e3 ? "K" : ""
+        return (value / divisor).formatted(.number.precision(.fractionLength(0...2))) + suffix
+    }
+
+    var summary: String {
+        if unlimited { return L10n.t("Unlimited") }
+        let suffix = unit.isEmpty ? "" : " \(unit)"
+        if let remaining { return L10n.t("\(Self.format(remaining) + suffix) remaining") }
+        if let used { return L10n.t("\(Self.format(used) + suffix) used") }
+        if let total { return L10n.t("\(Self.format(total) + suffix) total") }
+        return L10n.t("No reading")
+    }
+}
 
 /// How much to trust a provider's numbers. The UI never presents a derived or
 /// manual figure as if a vendor had published it.
@@ -60,15 +97,21 @@ enum ProviderStatus: Equatable {
 /// a percent and still add up: 0.3% used is 99.7% left. A tenth of nothing
 /// says so rather than pretending to be zero.
 enum Percent {
+    static func roundedValue(for fraction: Double) -> Int? {
+        guard fraction >= 0 else { return nil }
+        return Int(exactly: (fraction * 100).rounded())
+    }
+
     /// The two halves of a used-fraction, as display text.
     static func halves(for fraction: Double) -> (used: String, left: String) {
+        guard let rounded = roundedValue(for: fraction) else { return ("—", "—") }
         let value = fraction * 100
         let fractional = (value > 0 && value < 1) || (value > 99 && value < 100)
         guard fractional else {
             // The left half derives from the *rounded* used half, not from the
             // raw value — 9.5% used is "10% Used · 90% left", because that is
             // how the dashboard the user is comparing against does the maths.
-            let used = Int(value.rounded())
+            let used = rounded
             return ("\(used)", "\(max(0, 100 - used))")
         }
         let left = max(0, 100 - value)
@@ -79,15 +122,12 @@ enum Percent {
 
     /// One percentage, as display text — the ring's label.
     static func text(for fraction: Double) -> String {
+        guard let rounded = roundedValue(for: fraction) else { return "—" }
         let value = fraction * 100
-        guard value > 0, value < 1 else { return "\(Int(value.rounded()))" }
+        guard value > 0, value < 1 else { return "\(rounded)" }
         return small(value)
     }
 
-    /// One percentage with no decimals, for the menu bar, where a tenth is
-    /// noise at a glance. Rounding never lands on the two figures that would
-    /// say something else happened: "0" when a little has been used, or "100"
-    /// while there is still room.
     static func whole(for fraction: Double) -> String {
         let value = max(0, fraction * 100)
         if value > 0, value < 1 { return "<1" }
@@ -130,6 +170,7 @@ struct LimitWindow: Identifiable, Codable, Equatable {
     let usedText: String?
     /// Nil when the provider does not say when the window rolls over.
     let resetsAt: Date?
+    let quantity: QuotaQuantity?
 
     /// Exact cycle length when known; optional to keep older archives readable.
     let duration: TimeInterval?
@@ -139,8 +180,8 @@ struct LimitWindow: Identifiable, Codable, Equatable {
     init(id: String, group: String? = nil, label: String, usedFraction: Double? = nil,
          remaining: Int? = nil, used: Int? = nil, usedText: String? = nil, detail: String? = nil,
          money: UsageMoneyBreakdown? = nil, resetsAt: Date? = nil,
-         duration: TimeInterval? = nil, bandOverride: UsageBand? = nil,
-         prefersUsedText: Bool = false) {
+         quantity: QuotaQuantity? = nil, duration: TimeInterval? = nil,
+         bandOverride: UsageBand? = nil, prefersUsedText: Bool = false) {
         self.id = id
         self.group = group
         self.label = label
@@ -151,59 +192,14 @@ struct LimitWindow: Identifiable, Codable, Equatable {
         self.detail = detail
         self.money = money
         self.resetsAt = resetsAt
+        self.quantity = quantity
         self.duration = duration
         self.bandOverride = bandOverride
         self.prefersUsedText = prefersUsedText
     }
 
-    enum CodingKeys: String, CodingKey {
-        case id, group, label, usedFraction, remaining, used, detail, money, usedText, resetsAt, duration, bandOverride, prefersUsedText
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.container(keyedBy: CodingKeys.self)
-        self.id = try container.decode(String.self, forKey: .id)
-        self.group = try container.decodeIfPresent(String.self, forKey: .group)
-        self.label = try container.decode(String.self, forKey: .label)
-        self.usedFraction = try container.decodeIfPresent(Double.self, forKey: .usedFraction)
-        self.remaining = try container.decodeIfPresent(Int.self, forKey: .remaining)
-        self.used = try container.decodeIfPresent(Int.self, forKey: .used)
-        self.detail = try container.decodeIfPresent(String.self, forKey: .detail)
-        self.money = try container.decodeIfPresent(UsageMoneyBreakdown.self, forKey: .money)
-        self.usedText = try container.decodeIfPresent(String.self, forKey: .usedText)
-        self.resetsAt = try container.decodeIfPresent(Date.self, forKey: .resetsAt)
-        self.duration = try container.decodeIfPresent(TimeInterval.self, forKey: .duration)
-        self.bandOverride = try container.decodeIfPresent(UsageBand.self, forKey: .bandOverride)
-        self.prefersUsedText = try container.decodeIfPresent(Bool.self, forKey: .prefersUsedText) ?? false
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(id, forKey: .id)
-        try container.encodeIfPresent(group, forKey: .group)
-        try container.encode(label, forKey: .label)
-        try container.encodeIfPresent(usedFraction, forKey: .usedFraction)
-        try container.encodeIfPresent(remaining, forKey: .remaining)
-        try container.encodeIfPresent(used, forKey: .used)
-        try container.encodeIfPresent(detail, forKey: .detail)
-        try container.encodeIfPresent(money, forKey: .money)
-        try container.encodeIfPresent(usedText, forKey: .usedText)
-        try container.encodeIfPresent(resetsAt, forKey: .resetsAt)
-        try container.encodeIfPresent(duration, forKey: .duration)
-        try container.encodeIfPresent(bandOverride, forKey: .bandOverride)
-        if prefersUsedText {
-            try container.encode(prefersUsedText, forKey: .prefersUsedText)
-        }
-    }
-
-    /// Whether this is a rolling five-hour window — the limit a coding session
-    /// runs into first. Read from the length the provider reported rather than
-    /// from an id, because every vendor names it differently: Claude's
-    /// `session`, Codex's `primary`, Kimi's `rolling`.
     var isFiveHour: Bool {
         guard let duration else { return false }
-        // A minute's slack: some vendors send the window as a start and an
-        // end, and the difference is not always a whole number of seconds.
         return abs(duration - 5 * 3600) < 60
     }
 
@@ -222,6 +218,12 @@ struct LimitWindow: Identifiable, Codable, Equatable {
     var summary: String { summary(locale: L10n.locale) }
 
     func summary(locale: Locale = L10n.locale) -> String {
+        if let quantity {
+            if let used = quantity.used, let total = quantity.total {
+                return "\(QuotaQuantity.format(used)) / \(QuotaQuantity.format(total)) \(quantity.unit) · \(quantity.summary)"
+            }
+            return quantity.summary
+        }
         if let usedFraction {
             // Both ends of the same figure. Vendors do not agree on which to
             // show — Codex writes "87% remaining", Claude writes "% used" — so
@@ -297,6 +299,11 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// Set when something is blocked right now. Deliberately separate from the
     /// windows: it is not a measurement, it is a door being shut.
     var block: UsageBlock?
+    var icon: ProviderIcon?
+    var manualQuery: Bool = false
+    var queryFailure: String?
+    var queryRetryAfter: Date?
+    var linked: CodeSwitchDetails?
     var kind: ProviderKind = .usage
     var localRuntime: LocalRuntimeReading?
     var localModel: LocalRuntimeReading.Model?
@@ -316,7 +323,12 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// A model cell has its own display preference, but polling belongs to the
     /// runtime that supplied it.
     var sourceProviderID: String?
-    var customIconFilename: String?
+    /// Account identity remains the refresh key; native features use this type.
+    var nativeProviderID: String? = nil
+    // 合成节奏窗口不应丢失供应商声明，包括缺失窗口的标识和显式的 nil。
+    var dailyPaceOriginalQuotaIDs: DailyPace.OriginalQuotaIDs? = nil
+    var codeSwitchDailyUsage: CodeSwitchDailyUsage.Sample? = nil
+    var customIconFilename: String? = nil
 
     var providerID: String { sourceProviderID ?? id }
 
@@ -340,21 +352,17 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// the tooltip title. Nil when there is nothing to name.
     var plan: String? = nil
 
-    /// Unused rate-limit resets reported for this account.
-    var resetCredits: UsageResetCredits? = nil
+    /// Unused rate-limit resets on this Codex account, listed by the same
+    /// backend as usage.
+    var resetCredits: CodexResetCredits? = nil
 
-    /// Whether the tooltip has a reset-credit section to draw.
+    /// Whether the Codex tooltip has a reset-credit section to draw.
     ///
     /// The endpoint can successfully return an empty result. That is data,
     /// but it is not useful card content and must not reserve layout space.
     var hasAvailableResetCredits: Bool {
-        availableResetCredits(at: Date()) != nil
+        (resetCredits?.availableCount ?? 0) > 0
     }
-    func availableResetCredits(at now: Date) -> UsageResetCredits? {
-        guard let credits = resetCredits?.unexpired(at: now), credits.availableCount > 0 else { return nil }
-        return credits
-    }
-
     /// Provider-owned online usage detail, such as DeepSeek's API key/model
     /// breakdown and daily token/cost series.
     var usageDetail: ProviderUsageDetail? = nil
@@ -406,6 +414,26 @@ struct ProviderSnapshot: Identifiable, Equatable {
         return windows.first { $0.id == weeklyID }
     }
 
+    var fiveHourWindow: LimitWindow? {
+        if let headline, headline.isFiveHour { return headline }
+        return windows.first { $0.isFiveHour && $0.group == nil }
+    }
+
+    var weeklyLimitWindow: LimitWindow? {
+        guard let weeklyID, weeklyID != headlineID else { return nil }
+        return windows.first { $0.id == weeklyID }
+    }
+
+    // 联动提醒按真实窗口独立监测，不受主环、细环或来源顺序影响。
+    var linkedAlertWindows: [LimitWindow] {
+        guard linked != nil else { return [] }
+        let groups = Dictionary(grouping: windows, by: \.id)
+        return windows.filter {
+            groups[$0.id]?.count == 1 && $0.quantity?.unlimited != true
+                && $0.usedFraction.flatMap { Percent.roundedValue(for: $0) } != nil
+        }
+    }
+
     /// The window the second ring draws, when one is switched on.
     ///
     /// Declared by the provider, exactly like `headlineID`, and for the same
@@ -431,14 +459,38 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// without a denominator — the same rule the headline ring follows.
     var weeklyFraction: Double? { weeklyWindow?.usedFraction }
 
+    var secondaryWindow: LimitWindow? {
+        // 联动额度保留来源顺序，本地来源优先使用已声明的第二额度。
+        func isUsable(_ window: LimitWindow) -> Bool {
+            guard window.id != headline?.id, let fraction = window.usedFraction else { return false }
+            return fraction.isFinite && fraction >= 0 && window.quantity?.unlimited != true
+        }
+        if linked != nil {
+            let periods = ["five_hour", "daily", "weekly", "monthly"]
+            return windows.first { periods.contains($0.id) && isUsable($0) }
+        }
+        if let weeklyWindow, isUsable(weeklyWindow) { return weeklyWindow }
+        return windows.first {
+            isUsable($0) && ($0.duration.map { $0.isFinite && $0 > 0 } ?? false)
+                && $0.duration != headline?.duration
+        }
+    }
+
     /// What the cell prints under the ring.
     var headlineText: String {
+        if headline?.quantity?.unlimited == true { return "∞" }
         if kind == .localRuntime {
             return showsLocalPerformance ? (localPerformance?.headlineText ?? "— tok/s")
                 : (localModel?.memoryText ?? "—")
         }
         if headline?.prefersUsedText == true, let usedText = headline?.usedText { return usedText }
         if let usedFraction { return Percent.text(for: usedFraction) + "%" }
+        if let quantity = headline?.quantity {
+            if let value = quantity.remaining ?? quantity.used ?? quantity.total {
+                let symbol = ["USD": "$", "CNY": "¥", "EUR": "€", "GBP": "£"][quantity.unit.uppercased()] ?? ""
+                return symbol + QuotaQuantity.format(value, compact: true)
+            }
+        }
         if let remaining = headline?.remaining { return LimitWindow.compact(remaining) }
         if let usedText = headline?.usedText { return usedText }
         if let used = headline?.used { return LimitWindow.compact(used) }
@@ -470,6 +522,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// Signing in means something different per provider, so the prompt has to
     /// say which door to knock on.
     private var authPrompt: String {
+        if manualQuery { return L10n.t("Update this provider's credentials in Settings.") }
         let locale = L10n.locale
         switch id {
         case "claude":     return L10n.t("Sign in to Claude Code to read your usage", locale: locale)
@@ -494,9 +547,6 @@ struct ProviderSnapshot: Identifiable, Equatable {
         case "opencode":   return L10n.t("Connect the Go plan in OpenCode to read your usage", locale: locale)
         case "commandcode": return L10n.t("Sign in with the Command Code app to read your usage", locale: locale)
         case "kiro":       return L10n.t("Sign in with kiro-cli to read your usage", locale: locale)
-        case "amp":        return L10n.t("Run amp login in Terminal to read your usage", locale: locale)
-        case "apify":      return L10n.t("Run apify login in Terminal, or paste an Apify API token in Settings", locale: locale)
-        case "kilo":       return L10n.t("Sign in with the Kilo CLI to read your usage", locale: locale)
         // Two Ollamas, and they are stuck for different reasons: the hosted
         // one wants a key, the local one wants the daemon running.
         case "ollama":       return L10n.t("Enter an Ollama API key in Settings, or export OLLAMA_API_KEY", locale: locale)
@@ -506,8 +556,25 @@ struct ProviderSnapshot: Identifiable, Equatable {
         }
     }
 
+    var isActivityOnly: Bool { id.hasPrefix("activity:") }
+
+    var tooltipTitle: String {
+        isActivityOnly ? displayName : L10n.t("\(displayName) Usage")
+    }
+
+    func refreshNote(isRefreshing: Bool, now: Date) -> String? {
+        if isRefreshing { return L10n.t("Refreshing…") }
+        if let until = queryRetryAfter, until > now {
+            return L10n.t("Retry after \(until.formatted(date: .omitted, time: .standard))")
+        }
+        if queryFailure != nil { return L10n.t("Refresh failed") }
+        guard hasReading, let since = status.staleSince, since != .distantPast else { return nil }
+        return ElapsedCopy.ago(since: since, now: now)
+    }
+
     /// What the tooltip says instead of limit rows when there is nothing to show.
     var statusMessage: String? {
+        if isActivityOnly { return L10n.t("Provider not linked yet") }
         if kind == .localRuntime {
             if localModel != nil { return nil }
             if let localRuntime {

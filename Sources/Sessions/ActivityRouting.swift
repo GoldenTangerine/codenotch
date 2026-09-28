@@ -1,0 +1,100 @@
+/**
+ @name: 会话供应商关联
+ @Descripttion: 将真实会话映射到联动供应商或独立工具入口。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-09 12:03:00
+ @LastEditTime: 2026-09-09 12:03:00
+ @FilePath: Sources/Sessions/ActivityRouting.swift
+ */
+import Foundation
+
+struct ActivityRouting {
+    enum UnmatchedReason: String, CaseIterable {
+        case missingBinding, platformMismatch, staleBinding
+    }
+
+    var snapshots: [ProviderSnapshot]
+    var sessions: [String: [AgentSession]] = [:]
+    var unmatched: [UnmatchedReason: Int] = [:]
+
+    init(local: [ProviderSnapshot], linked: [ProviderSnapshot], sources: [String: String],
+         sessions native: [String: [AgentSession]], bindings: [String: CodeSwitchSessionLink],
+         hiddenLinked: Set<String> = [], linkedOrder: [String] = [], now: Date = Date()) {
+        let hasLinkedCodex = linked.contains {
+            $0.linked != nil && $0.id.hasPrefix("code-switch:5:codex:") && !hiddenLinked.contains($0.id)
+        }
+        let displayedLocal = local.filter { snapshot in
+            // A placeholder local account adds no usage beside the linked supplier.
+            // Authentication and query errors remain actionable and visible.
+            !(hasLinkedCodex && sources[snapshot.id] == "codex" && !snapshot.hasReading
+              && (snapshot.status == .ok || snapshot.status == .stale(since: .distantPast))
+              && snapshot.queryFailure == nil && snapshot.queryRetryAfter == nil)
+        }
+        snapshots = displayedLocal + linked
+        var visible = Set(snapshots.map(\.id))
+        for source in native.keys.sorted() {
+            let localIDs = displayedLocal.filter { sources[$0.id] == source }.map(\.id)
+            for session in native[source] ?? [] {
+                let needsEntrance = session.state != .idle || (session.noticeID != nil && now.timeIntervalSince(session.since) < 15)
+                var link = session.providerSessionKey.flatMap { bindings[$0] }
+                var reason = UnmatchedReason.missingBinding
+                if let candidate = link {
+                    if candidate.platform != (source == "codex" ? "codex" : "claude") {
+                        link = nil
+                        reason = .platformMismatch
+                    } else if let start = session.hookTurnStartedAt,
+                              candidate.binding.updatedAt < (start.timeIntervalSince1970 * 1000).rounded(.down) {
+                        link = nil
+                        reason = .staleBinding
+                    }
+                }
+                // A listener started mid-turn may never see UserPromptSubmit.
+                // The latest explicit session association still identifies its supplier.
+                if needsEntrance, session.hookSessionKey != nil, link == nil {
+                    unmatched[reason, default: 0] += 1
+                }
+                if let link {
+                    let id = link.snapshot.id
+                    sessions[id, default: []].append(session)
+                    if needsEntrance, visible.insert(id).inserted {
+                        snapshots.append(link.snapshot)
+                    }
+                } else if !localIDs.isEmpty {
+                    for id in localIDs { sessions[id, default: []].append(session) }
+                } else if session.hookSessionKey != nil {
+                    let id = "activity:" + source
+                    sessions[id, default: []].append(session)
+                    let needsFallback = source == "codex"
+                        ? session.state == .waiting || (session.state == .idle && needsEntrance)
+                        : needsEntrance
+                    if needsFallback, visible.insert(id).inserted {
+                        let claude = source != "codex"
+                        snapshots.append(ProviderSnapshot(id: id, displayName: claude ? "Claude Code" : "Codex CLI",
+                                                          glyph: claude ? .claude : .openai, fidelity: .derived,
+                                                          status: .ok, windows: [], headlineID: nil))
+                    }
+                }
+            }
+        }
+        if !hiddenLinked.isEmpty {
+            snapshots.removeAll { hiddenLinked.contains($0.id) && $0.id.hasPrefix("code-switch:") }
+            sessions = sessions.filter { !hiddenLinked.contains($0.key) || !$0.key.hasPrefix("code-switch:") }
+        }
+        // Session entrances can restore a supplier excluded by the display scope.
+        // Keep local entries that still own unmatched sessions.
+        if snapshots.contains(where: { $0.linked != nil && $0.id.hasPrefix("code-switch:5:codex:") }) {
+            snapshots.removeAll { snapshot in
+                sources[snapshot.id] == "codex" && snapshot.linked == nil && !snapshot.hasReading
+                    && (snapshot.status == .ok || snapshot.status == .stale(since: .distantPast))
+                    && snapshot.queryFailure == nil && snapshot.queryRetryAfter == nil
+                    && (sessions[snapshot.id]?.isEmpty ?? true)
+            }
+        }
+        snapshots = CodeSwitchProviderOrder.apply(linkedOrder, to: snapshots)
+    }
+
+    func providerID(for session: AgentSession) -> String? {
+        snapshots.first { snapshot in sessions[snapshot.id]?.contains(where: { $0.id == session.id }) == true }?.id
+    }
+}

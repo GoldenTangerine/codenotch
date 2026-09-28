@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · DailyPace
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/Features/DailyPace.swift
+ */
 import Foundation
 
 /// A day's share of Claude's weekly allowance, drawn as a ring of its own.
@@ -19,6 +28,11 @@ enum DailyPace {
     static let dayLength: TimeInterval = 86_400
     static let days = 7
     static let weekLength: TimeInterval = Double(days) * dayLength
+
+    struct OriginalQuotaIDs: Equatable {
+        let headline: String?
+        let secondary: String?
+    }
 
     struct Reading: Equatable {
         /// Used against today's cumulative share, 0...1+.
@@ -63,11 +77,13 @@ enum DailyPace {
     /// with a weekly reading is returned untouched, and so is a snapshot that
     /// already carries the window: the store re-publishes what it archived.
     static func apply(to snapshot: ProviderSnapshot, now: Date) -> ProviderSnapshot {
-        guard ClaudeProfile.isClaude(providerID: snapshot.providerID),
+        guard ClaudeProfile.isClaude(providerID: snapshot.nativeProviderID ?? snapshot.providerID),
               !snapshot.windows.contains(where: { $0.id == windowID }),
               let weekly = snapshot.windows.first(where: { $0.id == "weekly_all" }),
               let daily = window(weekly: weekly, now: now) else { return snapshot }
         var paced = snapshot
+        paced.dailyPaceOriginalQuotaIDs = OriginalQuotaIDs(headline: snapshot.headlineID,
+                                                         secondary: snapshot.weeklyID)
         paced.windows.insert(daily, at: 0)
         paced.headlineID = windowID
         paced.weeklyID = snapshot.windows.contains { $0.id == "session" } ? "session" : nil

@@ -1,3 +1,12 @@
+/**
+ @name: 应用偏好
+ @Descripttion: 存储用户设置与显示栏位置。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Settings/Preferences.swift
+ */
 import Combine
 import Foundation
 import ServiceManagement
@@ -6,6 +15,97 @@ import os
 /// What the user has chosen, kept in `UserDefaults`.
 @MainActor
 final class Preferences: ObservableObject {
+    @Published var showsIdleNotch: Bool {
+        didSet { defaults.set(showsIdleNotch, forKey: "showsIdleNotch") }
+    }
+    @Published var idleBotAppearance: BotAppearance {
+        didSet {
+            guard oldValue != idleBotAppearance else { return }
+            idleBotSaveTimer?.invalidate()
+            idleBotSaveTimer = nil
+            var previous = oldValue
+            previous.rgb = idleBotAppearance.rgb
+            if previous == idleBotAppearance {
+                // 颜色实时预览，停止拖动后合并保存；闭包不保留偏好对象。
+                let save: @MainActor @Sendable () -> Void = { [defaults, appearance = idleBotAppearance] in
+                    if let data = try? JSONEncoder().encode(appearance) {
+                        defaults.set(data, forKey: "idleBotAppearance")
+                    }
+                }
+                let timer = Timer(timeInterval: 0.25, repeats: false) { _ in
+                    MainActor.assumeIsolated { save() }
+                }
+                idleBotSaveTimer = timer
+                RunLoop.main.add(timer, forMode: .common)
+            } else {
+                persistIdleBotAppearance()
+            }
+        }
+    }
+    private var idleBotSaveTimer: Timer?
+
+    func flushIdleBotAppearance() {
+        let pending = idleBotSaveTimer?.isValid == true
+        idleBotSaveTimer?.invalidate()
+        idleBotSaveTimer = nil
+        if pending { persistIdleBotAppearance() }
+    }
+
+    private func persistIdleBotAppearance() {
+        if let data = try? JSONEncoder().encode(idleBotAppearance) {
+            defaults.set(data, forKey: "idleBotAppearance")
+        }
+    }
+    @Published private(set) var botAppearances: [String: BotAppearance] {
+        didSet {
+            if let data = try? JSONEncoder().encode(botAppearances) {
+                defaults.set(data, forKey: "botAppearances")
+            }
+        }
+    }
+
+    func botAppearance(for id: String) -> BotAppearance { botAppearances[id] ?? BotAppearance() }
+
+    func setBotAppearance(_ appearance: BotAppearance, for id: String) {
+        guard botAppearance(for: id) != appearance else { return }
+        botAppearances[id] = appearance
+    }
+
+    @Published var codexRolloutCompletionEnabled: Bool {
+        didSet { defaults.set(codexRolloutCompletionEnabled, forKey: "codexRolloutCompletionEnabled") }
+    }
+    @Published var tooltipHeightMode: TooltipHeightMode {
+        didSet { defaults.set(tooltipHeightMode.rawValue, forKey: "tooltipHeightMode") }
+    }
+    @Published var codeSwitchEnabled: Bool {
+        didSet { defaults.set(codeSwitchEnabled, forKey: "codeSwitchEnabled") }
+    }
+    @Published var codeSwitchDisplayMode: CodeSwitchDisplayMode {
+        didSet { defaults.set(codeSwitchDisplayMode.rawValue, forKey: "codeSwitchDisplayMode") }
+    }
+    static let codeSwitchQuotaRatiosKey = "codeSwitchQuotaRatiosEnabled"
+    static let independentInnerRingKey = "independentInnerRing"
+    @Published var independentInnerRing: Bool {
+        didSet { defaults.set(independentInnerRing, forKey: Self.independentInnerRingKey) }
+    }
+    @Published var codeSwitchQuotaRatiosEnabled: Bool {
+        didSet { defaults.set(codeSwitchQuotaRatiosEnabled, forKey: Self.codeSwitchQuotaRatiosKey) }
+    }
+    @Published var hiddenCodeSwitchProviders: Set<String> {
+        didSet { defaults.set(hiddenCodeSwitchProviders.sorted(), forKey: "hiddenCodeSwitchProviders") }
+    }
+    @Published var hiddenCodeSwitchNames: [String: String] {
+        didSet { defaults.set(hiddenCodeSwitchNames, forKey: "hiddenCodeSwitchNames") }
+    }
+    @Published private(set) var codeSwitchProviderOrder: [String] {
+        didSet { defaults.set(codeSwitchProviderOrder, forKey: "codeSwitchProviderOrder") }
+    }
+    /// Providers the user has switched off. Stored as the *disconnected* set
+    /// rather than the connected one, so a provider added in a later version is
+    /// on by default instead of silently staying dark.
+    ///
+    /// Switching one off is not merely hiding it: the store stops fetching it,
+    /// so its credential is never read at all.
     static let showUsagePaceKey = "showUsagePace"
 
     /// Provider IDs that currently have a ring. Stored as the ones that are
@@ -56,7 +156,6 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(lmstudioEndpoint, forKey: Keys.lmstudioEndpoint) }
     }
 
-    /// User-configured custom OpenAI-compatible endpoints.
     @Published var customEndpoints: [CustomEndpoint] {
         didSet {
             if let data = try? JSONEncoder().encode(customEndpoints) {
@@ -98,6 +197,27 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(notchVisibility.rawValue, forKey: Keys.visibility) }
     }
 
+    static func normalizedHoverDelay(_ value: Double) -> Double {
+        guard value.isFinite else { return 0 }
+        return (min(1, max(0, value)) * 20).rounded() / 20
+    }
+
+    @Published var notchHoverDelay: Double {
+        didSet {
+            let normalized = Self.normalizedHoverDelay(notchHoverDelay)
+            if notchHoverDelay != normalized { notchHoverDelay = normalized }
+            defaults.set(notchHoverDelay, forKey: Keys.hoverDelay)
+        }
+    }
+
+    @Published var notchTriggerHeight: Int {
+        didSet {
+            let clamped = NotchTriggerHeight.clamp(notchTriggerHeight)
+            if notchTriggerHeight != clamped { notchTriggerHeight = clamped }
+            defaults.set(notchTriggerHeight, forKey: Keys.triggerHeight)
+        }
+    }
+
     /// Whether a frontmost full-screen app folds the notch away.
     @Published var foldsForFullScreen: Bool {
         didSet { defaults.set(foldsForFullScreen, forKey: Keys.foldsForFullScreen) }
@@ -106,6 +226,19 @@ final class Preferences: ObservableObject {
     /// Which screen edge the notch is welded to.
     @Published var notchEdge: NotchEdge {
         didSet { defaults.set(notchEdge.rawValue, forKey: Keys.edge) }
+    }
+
+    var notchPosition: NotchPosition? {
+        get {
+            defaults.data(forKey: "notchPosition")
+                .flatMap { try? JSONDecoder().decode(NotchPosition.self, from: $0) }
+        }
+        set {
+            guard let newValue else { defaults.removeObject(forKey: "notchPosition"); return }
+            guard let data = try? JSONEncoder().encode(newValue) else { return }
+            defaults.set(data, forKey: "notchPosition")
+            if notchEdge != newValue.edge { notchEdge = newValue.edge }
+        }
     }
 
     /// How large the notch is drawn, as one of three named sizes.
@@ -145,6 +278,49 @@ final class Preferences: ObservableObject {
     /// type off and keep the rings, which read as colour and fill at any size.
     /// Half is as small as a ring stays legible as a ring.
     static let customScaleRange: ClosedRange<Double> = 0.5...1.5
+
+    static let topAvoidanceRange: ClosedRange<Double> = -60...120
+    @Published var isEditingNotchGeometry = false
+    static let ringEdgeRange: ClosedRange<Double> = -40...80
+    static let collapsedSideWidthRange: ClosedRange<Double> = 40...160
+    static let defaultCollapsedSideWidth: Double = 64
+    static let collapsedHeightRange: ClosedRange<Double> = -20...40
+    @Published var isEditingCollapsedGeometry = false
+    @Published var collapsedHeightAdjustment: Double {
+        didSet {
+            let clamped = Self.geometryValue(collapsedHeightAdjustment, in: Self.collapsedHeightRange)
+            if collapsedHeightAdjustment != clamped { collapsedHeightAdjustment = clamped }
+            defaults.set(clamped, forKey: "collapsedHeightAdjustment")
+        }
+    }
+    static func normalizedCollapsedSideWidth(_ value: Double) -> Double {
+        value.isFinite ? min(max(value, collapsedSideWidthRange.lowerBound), collapsedSideWidthRange.upperBound)
+            : defaultCollapsedSideWidth
+    }
+    @Published var collapsedSideWidth: Double {
+        didSet {
+            let clamped = Self.normalizedCollapsedSideWidth(collapsedSideWidth)
+            if collapsedSideWidth != clamped { collapsedSideWidth = clamped }
+            defaults.set(clamped, forKey: "collapsedSideWidth")
+        }
+    }
+    static func geometryValue(_ value: Double, in range: ClosedRange<Double>) -> Double {
+        value.isFinite ? min(max(value, range.lowerBound), range.upperBound) : 0
+    }
+    @Published var topAvoidanceAdjustment: Double {
+        didSet {
+            let clamped = Self.geometryValue(topAvoidanceAdjustment, in: Self.topAvoidanceRange)
+            if topAvoidanceAdjustment != clamped { topAvoidanceAdjustment = clamped; return }
+            defaults.set(topAvoidanceAdjustment, forKey: "topAvoidanceAdjustment")
+        }
+    }
+    @Published var ringEdgeAdjustment: Double {
+        didSet {
+            let clamped = Self.geometryValue(ringEdgeAdjustment, in: Self.ringEdgeRange)
+            if ringEdgeAdjustment != clamped { ringEdgeAdjustment = clamped; return }
+            defaults.set(ringEdgeAdjustment, forKey: "ringEdgeAdjustment")
+        }
+    }
 
     /// What the notch is actually drawn at, whichever control is in charge.
     var notchScale: CGFloat {
@@ -212,12 +388,6 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(claudeDailyPaceRing, forKey: Keys.claudeDailyPaceRing) }
     }
 
-    /// Whether the big ring shows the weekly limit instead of the shorter
-    /// window, for every provider that has both. See `WeeklyHeadline`.
-    @Published var weeklyHeadline: Bool {
-        didSet { defaults.set(weeklyHeadline, forKey: Keys.weeklyHeadline) }
-    }
-
     /// Whether Spark and code-review Codex windows appear in the hover card.
     /// On by default so a first launch shows them; the ring still follows
     /// the main Codex window either way.
@@ -252,24 +422,8 @@ final class Preferences: ObservableObject {
     }
 
     /// Whether the weekly limit gets a ring of its own, and where it sits.
-    /// Whether each ring carries its percentage under it, on every edge.
-    ///
-    /// On by default, which is what the notch has always drawn everywhere but
-    /// the strip beside a Mac's own cutout. There it costs ring size, because
-    /// the bar is the cutout's depth and one ring already fills it — see
-    /// `NotchViewModel.showsCellReading`.
-    @Published var showsNotchReadings: Bool {
-        didSet { defaults.set(showsNotchReadings, forKey: Keys.showsNotchReadings) }
-    }
-
     @Published var weeklyRingDashed: Bool {
         didSet { defaults.set(weeklyRingDashed, forKey: Keys.weeklyRingDashed) }
-    }
-
-    /// Whether the reading under each ring adds the weekly ring's percentage,
-    /// as "30%/70%". Only while the weekly ring is on.
-    @Published var weeklyReading: Bool {
-        didSet { defaults.set(weeklyReading, forKey: Keys.weeklyReading) }
     }
 
     @Published var weeklyRing: WeeklyRing {
@@ -281,11 +435,19 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(showsMoveHandle, forKey: Keys.showsMoveHandle) }
     }
 
+    @Published var showsSettingsHandle: Bool {
+        didSet { defaults.set(showsSettingsHandle, forKey: Keys.showsSettingsHandle) }
+    }
+
     /// The colour used for positive usage and active-work indicators.
     @Published var accentColor: AccentColorChoice {
         didSet { defaults.set(accentColor.rawValue, forKey: Keys.accentColor) }
     }
 
+    /// The colour used for positive usage and active-work indicators.
+    @Published var notchAccentColor: AccentColorChoice {
+        didSet { defaults.set(notchAccentColor.rawValue, forKey: Keys.notchAccentColor) }
+    }
     /// The material the expanded notch, tooltip and settings orb are painted with.
     @Published var notchSurfaceStyle: NotchSurfaceStyle {
         didSet { defaults.set(notchSurfaceStyle.rawValue, forKey: Keys.notchSurfaceStyle) }
@@ -293,23 +455,24 @@ final class Preferences: ObservableObject {
 
     @Published var watchLimit: Double {
         didSet {
-            let clamped = min(max(watchLimit, 0.01), criticalLimit - 0.01)
-            if clamped != watchLimit { watchLimit = clamped; return }
+            let clamped = min(max(watchLimit.isFinite ? watchLimit : 0.50, 0.01), criticalLimit - 0.01)
+            if clamped != watchLimit { watchLimit = clamped }
             defaults.set(watchLimit, forKey: Keys.watchLimit)
         }
     }
 
     @Published var criticalLimit: Double {
         didSet {
-            let clamped = min(max(criticalLimit, watchLimit + 0.01), 1.0)
-            if clamped != criticalLimit { criticalLimit = clamped; return }
+            let clamped = min(max(criticalLimit.isFinite ? criticalLimit : 0.70, watchLimit + 0.01), 1.0)
+            if clamped != criticalLimit { criticalLimit = clamped }
             defaults.set(criticalLimit, forKey: Keys.criticalLimit)
         }
     }
 
-    /// Hard step or continuous ramp — see `ColorTransitionStyle`.
-    @Published var colorTransitionStyle: ColorTransitionStyle {
-        didSet { defaults.set(colorTransitionStyle.rawValue, forKey: Keys.colorTransitionStyle) }
+    func resetUsageLimits() {
+        watchLimit = 0.01
+        criticalLimit = 0.70
+        watchLimit = 0.50
     }
 
     /// The language the app itself speaks.
@@ -317,7 +480,11 @@ final class Preferences: ObservableObject {
     /// `.system` follows the Mac. Written through `L10n.apply` so the store
     /// and the change notification stay a single write.
     @Published var language: AppLanguage {
-        didSet { L10n.apply(language) }
+        didSet {
+            language.apply(to: defaults)
+            defaults.set(language.rawValue, forKey: L10n.languageDefaultsKey)
+            if defaults === UserDefaults.standard { L10n.apply(language) }
+        }
     }
 
     /// Where the app itself shows up: Dock, menu bar, or nowhere.
@@ -325,50 +492,38 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(appPresence.rawValue, forKey: Keys.presence) }
     }
 
-    /// Where every notification goes: the notch, or a banner. One choice for
-    /// all of them; which events notify stays a switch per event.
-    @Published var notificationChannel: NotificationChannel {
-        didSet { defaults.set(notificationChannel.rawValue, forKey: Keys.notificationChannel) }
-    }
-
-    /// Whether the menu bar item shows five-hour limits instead of its icon.
+    /// The language the app speaks from its next launch on.
     ///
-    /// Off unless switched on. The item is the way into an app that has left
-    /// the Dock, and an update that swapped it for a readout several times as
-    /// wide — pushing everything beside it along, and on a notched MacBook
-    /// perhaps off the bar altogether — would be a change nobody asked for.
-    @Published var showsLimitsInMenuBar: Bool {
-        didSet { defaults.set(showsLimitsInMenuBar, forKey: Keys.showsLimitsInMenuBar) }
+    /// Backed directly by the `AppleLanguages` override in this app's own
+    /// defaults domain rather than by a key of our own: System Settings writes
+    /// the same key for a per-app language, so a choice made there is what the
+    /// picker shows, and there is no second source to drift out of sync.
+
+    /// The language choice as it stood when this process launched — what the
+    /// running UI is actually speaking. `language` writes take effect on the
+    /// next launch, so the settings page compares the two to know when to say
+    /// so.
+    let appliedLanguage: AppLanguage
+
+    /// The defaults domain `language` reads its override from. The bundle id
+    /// in the app; injectable because a test's scratch suite is its own
+    /// domain, and nil there means "no override tracking".
+    private let domainName: String?
+
+    @Published var announceSessionStart: Bool {
+        didSet { defaults.set(announceSessionStart, forKey: Keys.announceSessionStart) }
     }
 
-    /// Whether providers with a weekly allowance add its compact ring to the
-    /// existing limit readout. Off by default so upgrades keep the exact menu
-    /// bar width and appearance they had before this setting existed.
-    @Published var showsWeeklyLimitInMenuBar: Bool {
-        didSet { defaults.set(showsWeeklyLimitInMenuBar, forKey: Keys.showsWeeklyLimitInMenuBar) }
+    @Published var sessionStartPeekDuration: PeekDuration {
+        didSet { defaults.set(sessionStartPeekDuration.rawValue, forKey: Keys.sessionStartPeekDuration) }
     }
 
-    /// The providers the menu bar summarises when it does, as ids. Nil until
-    /// the first choice — see `MenuBarLimits` for what that reads as. From
-    /// then on it is the ones that are on, so a provider that turns up later
-    /// stays out of the bar until someone puts it there.
-    ///
-    /// Never written alongside `connectedProviders`: one is what the menu bar
-    /// shows, the other what Codenotch reads, and `MenuBarLimits` says why the
-    /// two stay apart.
-    @Published private(set) var menuBarProviders: Set<String>? {
-        didSet {
-            if let menuBarProviders {
-                defaults.set(menuBarProviders.sorted(), forKey: Keys.menuBarProviders)
-            } else {
-                defaults.removeObject(forKey: Keys.menuBarProviders)
-            }
-        }
+    @Published var sessionStartSound: Bool {
+        didSet { defaults.set(sessionStartSound, forKey: Keys.sessionStartSound) }
     }
 
-    /// Both halves of the menu bar choice, the way the status item takes them.
-    var menuBarLimits: MenuBarLimits {
-        MenuBarLimits(isOn: showsLimitsInMenuBar, chosen: menuBarProviders)
+    @Published var sessionStartSoundName: String {
+        didSet { defaults.set(sessionStartSoundName, forKey: Keys.sessionStartSoundName) }
     }
 
     /// Open the notch for a few seconds when an agent stops working.
@@ -394,6 +549,17 @@ final class Preferences: ObservableObject {
     /// other.
     @Published var sessionEndSound: Bool {
         didSet { defaults.set(sessionEndSound, forKey: Keys.sessionEndSound) }
+    }
+
+    @Published var sessionSoundVolume: Double {
+        didSet {
+            let normalized = SessionChime.normalizedVolume(sessionSoundVolume)
+            if normalized != sessionSoundVolume {
+                sessionSoundVolume = normalized
+                return
+            }
+            defaults.set(sessionSoundVolume, forKey: Keys.sessionSoundVolume)
+        }
     }
 
     /// Which sound a finished turn makes.
@@ -470,7 +636,6 @@ final class Preferences: ObservableObject {
     @Published var minimaxRegion: MiniMaxRegion {
         didSet { defaults.set(minimaxRegion.rawValue, forKey: Keys.minimaxRegion) }
     }
-
     /// The version whose changes have already been shown.
     ///
     /// Written when the What's New dialogue is dismissed rather than when it
@@ -503,6 +668,7 @@ final class Preferences: ObservableObject {
         static let phoneLinkPort = "phoneLinkPort"
 
         static let lmstudioEndpoint = "lmstudioEndpoint"
+        static let customEndpoints = "customEndpoints"
         static let introducedOllama = "introducedOllama"
         static let migratedOllamaID = "migratedOllamaLocalID"
         static let ollamaMetricsEnabled = "ollamaMetricsEnabled"
@@ -510,6 +676,8 @@ final class Preferences: ObservableObject {
         static let accountNicknames = "accountNicknames"
         static let hasLaunched = "hasLaunchedBefore"
         static let visibility = "notchVisibility"
+        static let triggerHeight = "notchTriggerHeight"
+        static let hoverDelay = "notchHoverDelay"
         static let foldsForFullScreen = "foldsForFullScreen"
         static let presence = "appPresence"
         static let notificationChannel = "notificationChannel"
@@ -525,23 +693,25 @@ final class Preferences: ObservableObject {
         static let resetTimeFormat = "resetTimeFormat"
         static let scope = "notchScope"
         static let accentColor = "accentColor"
+        static let notchAccentColor = "notchAccentColor"
         // A new key, so there is nothing under the old app name to migrate.
         static let weeklyRing = "weeklyRing"
         static let weeklyRingDashed = "weeklyRingDashed"
-        static let showsNotchReadings = "showsNotchReadings"
-        static let weeklyReading = "weeklyReading"
-        static let claudeDailyPaceRing = "claudeDailyPaceRing"
-        static let weeklyHeadline = "weeklyHeadline"
         static let showsMoveHandle = "showsMoveHandle"
+        static let showsSettingsHandle = "showsSettingsHandle"
+        static let claudeDailyPaceRing = "claudeDailyPaceRing"
         static let notchSurfaceStyle = "notchSurfaceStyle"
         static let watchLimit = "watchLimit"
         static let criticalLimit = "criticalLimit"
-        static let colorTransitionStyle = "colorTransitionStyle"
-        static let customEndpoints = "customEndpoints"
         static let lastSeenVersion = "lastSeenVersion"
         static let order = "providerOrder"
         static let announceSessionEnd = "announceSessionEnd"
+        static let announceSessionStart = "announceSessionStart"
+        static let sessionStartPeekDuration = "sessionStartPeekDuration"
+        static let sessionStartSound = "sessionStartSound"
+        static let sessionStartSoundName = "sessionStartSoundName"
         static let sessionEndSound = "sessionEndSound"
+        static let sessionSoundVolume = "sessionSoundVolume"
         static let peekDuration = "peekDuration"
         static let sessionEndSoundName = "sessionEndSoundName"
         static let sessionBlockedSoundName = "sessionBlockedSoundName"
@@ -575,7 +745,7 @@ final class Preferences: ObservableObject {
         else { return nil }
         return budget
     }
-    
+
     nonisolated static func storedAntigravityHeadlineLimit(
         defaults: UserDefaults = .standard
     ) -> AntigravityHeadlineLimit {
@@ -610,62 +780,6 @@ final class Preferences: ObservableObject {
 
     /// The MiniMax region read straight from disk, off the main actor.
     ///
-    /// Custom endpoints read straight from disk, off the main actor.
-    ///
-    /// Moves any key an earlier build left in the defaults plist into the keychain,
-    /// once, and writes the list back without it.
-    ///
-    /// The rewrite is the point. `customEndpoints` is assigned during `init`, where
-    /// `didSet` does not run, so without this the plaintext key stayed in the plist —
-    /// readable by any process running as the user, and swept into backups — until
-    /// the user happened to edit that endpoint. Returns the list with the carried
-    /// keys cleared, so a later encode cannot put them back.
-    nonisolated static func movingLegacyKeysToKeychain(
-        _ list: [CustomEndpoint],
-        defaults: UserDefaults
-    ) -> [CustomEndpoint] {
-        guard list.contains(where: { $0.legacyAPIKey != nil }) else { return list }
-        var migrated = list
-        for index in migrated.indices {
-            guard let legacy = migrated[index].legacyAPIKey else { continue }
-            // Only if the keychain has nothing: a key already moved is the newer one.
-            if migrated[index].apiKey == nil {
-                migrated[index].saveAPIKey(legacy)
-            }
-            migrated[index].legacyAPIKey = nil
-        }
-        if let data = try? JSONEncoder().encode(migrated) {
-            defaults.set(data, forKey: Keys.customEndpoints)
-        }
-        return migrated
-    }
-
-    /// Custom endpoint providers are actors and ask for this on every fetch, and
-    /// `@Published` state is main-actor-isolated where `UserDefaults` is
-    /// thread-safe — so providers read the store, not the object.
-    nonisolated static func storedCustomEndpoints(
-        defaults: UserDefaults = .standard
-    ) -> [CustomEndpoint] {
-        guard let data = defaults.data(forKey: Keys.customEndpoints),
-              let endpoints = try? JSONDecoder().decode([CustomEndpoint].self, from: data)
-        else { return [] }
-        return endpoints
-    }
-
-    nonisolated static func updateStoredCustomEndpoint(
-        _ endpoint: CustomEndpoint,
-        defaults: UserDefaults = .standard
-    ) {
-        var endpoints = storedCustomEndpoints(defaults: defaults)
-        guard let index = endpoints.firstIndex(where: { $0.id == endpoint.id }) else { return }
-        endpoints[index] = endpoint
-        if let data = try? JSONEncoder().encode(endpoints) {
-            defaults.set(data, forKey: Keys.customEndpoints)
-        }
-    }
-
-    /// The MiniMax region read straight from disk, off the main actor.
-    ///
     /// The provider is an actor and asks for this on every fetch, and
     /// `@Published` state is main-actor-isolated where `UserDefaults` is
     /// thread-safe — so the provider reads the store, not the object.
@@ -676,6 +790,15 @@ final class Preferences: ObservableObject {
               let region = MiniMaxRegion(rawValue: value)
         else { return .international }
         return region
+    }
+
+    nonisolated static func storedCustomEndpoints(
+        defaults: UserDefaults = .standard
+    ) -> [CustomEndpoint] {
+        guard let data = defaults.data(forKey: Keys.customEndpoints),
+              let endpoints = try? JSONDecoder().decode([CustomEndpoint].self, from: data)
+        else { return [] }
+        return endpoints
     }
 
     /// True the very first time this copy runs, and never again.
@@ -710,8 +833,24 @@ final class Preferences: ObservableObject {
         Log.usage.info("migrated \(old.count) settings from the previous app name")
     }
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, domainName: String? = nil) {
+        self.showsIdleNotch = defaults.object(forKey: "showsIdleNotch") as? Bool ?? true
+        self.idleBotAppearance = defaults.data(forKey: "idleBotAppearance")
+            .flatMap { try? JSONDecoder().decode(BotAppearance.self, from: $0) } ?? BotAppearance()
+        self.botAppearances = defaults.data(forKey: "botAppearances")
+            .flatMap { try? JSONDecoder().decode([String: BotAppearance].self, from: $0) } ?? [:]
+        self.tooltipHeightMode = defaults.string(forKey: "tooltipHeightMode")
+            .flatMap(TooltipHeightMode.init(rawValue:)) ?? .standard
         self.defaults = defaults
+        self.codeSwitchEnabled = defaults.object(forKey: "codeSwitchEnabled") as? Bool ?? true
+        self.codeSwitchDisplayMode = defaults.string(forKey: "codeSwitchDisplayMode")
+            .flatMap(CodeSwitchDisplayMode.init(rawValue:)) ?? .tray
+        let hiddenCodeSwitchProviders = Set(defaults.stringArray(forKey: "hiddenCodeSwitchProviders") ?? [])
+        self.hiddenCodeSwitchProviders = hiddenCodeSwitchProviders
+        self.hiddenCodeSwitchNames = (defaults.dictionary(forKey: "hiddenCodeSwitchNames") as? [String: String] ?? [:])
+            .filter { hiddenCodeSwitchProviders.contains($0.key) }
+        self.codeSwitchProviderOrder = CodeSwitchProviderOrder.normalized(defaults.stringArray(forKey: "codeSwitchProviderOrder") ?? [])
+        self.domainName = domainName ?? (defaults === UserDefaults.standard ? Bundle.main.bundleIdentifier : nil)
         self.isFirstLaunch = !defaults.bool(forKey: Keys.hasLaunched)
         defaults.set(true, forKey: Keys.hasLaunched)
         // Only the earlier local integration used this sentinel. Keep unrelated
@@ -755,6 +894,7 @@ final class Preferences: ObservableObject {
             connected = []
             seen = storedSeen
         }
+        self.codexRolloutCompletionEnabled = defaults.bool(forKey: "codexRolloutCompletionEnabled")
         self.connectedProviders = connected.filter { !Self.isModelCell($0) }
         self.seenProviders = seen.filter { !Self.isModelCell($0) }
         self.pendingHidden = hidden
@@ -792,6 +932,7 @@ final class Preferences: ObservableObject {
             defaults.string(forKey: Keys.lmstudioEndpoint)
                 ?? LMStudioEndpoint.configuredAddress() ?? LMStudioEndpoint.defaultAddress
         ).absoluteString) ?? LMStudioEndpoint.defaultAddress
+        self.customEndpoints = Self.storedCustomEndpoints(defaults: defaults)
         self.mutedAlertProviders = Set(defaults.stringArray(forKey: Keys.mutedAlerts) ?? [])
         self.accountNicknames = defaults.dictionary(forKey: Keys.accountNicknames) as? [String: String] ?? [:]
         // Absent means never chosen, which is the hover behaviour the app was
@@ -799,6 +940,9 @@ final class Preferences: ObservableObject {
         // like it failed to start.
         self.notchVisibility = defaults.string(forKey: Keys.visibility)
             .flatMap(NotchVisibility.init(rawValue:)) ?? .onHover
+        self.notchHoverDelay = Self.normalizedHoverDelay(defaults.double(forKey: Keys.hoverDelay))
+        self.notchTriggerHeight = NotchTriggerHeight.clamp(
+            (defaults.object(forKey: Keys.triggerHeight) as? NSNumber)?.intValue ?? NotchTriggerHeight.defaultValue)
         // Absent means the fold that has shipped since full-screen detection
         // exists — the setting silences it, it does not introduce it.
         self.foldsForFullScreen = defaults.object(forKey: Keys.foldsForFullScreen) as? Bool ?? true
@@ -830,11 +974,22 @@ final class Preferences: ObservableObject {
         // Absent means never chosen, and the presets are what every earlier
         // version had — so the slider is opt-in rather than the default.
         self.usesCustomNotchScale = defaults.bool(forKey: Keys.usesCustomSize)
+        self.topAvoidanceAdjustment = Self.geometryValue(defaults.double(forKey: "topAvoidanceAdjustment"), in: Self.topAvoidanceRange)
+        self.ringEdgeAdjustment = Self.geometryValue(defaults.double(forKey: "ringEdgeAdjustment"), in: Self.ringEdgeRange)
+        self.collapsedSideWidth = Self.normalizedCollapsedSideWidth(
+            (defaults.object(forKey: "collapsedSideWidth") as? Double) ?? Self.defaultCollapsedSideWidth)
+        self.collapsedHeightAdjustment = Self.geometryValue(
+            defaults.double(forKey: "collapsedHeightAdjustment"), in: Self.collapsedHeightRange)
         let stored = defaults.object(forKey: Keys.customSize) as? Double
         self.customNotchScale = stored.map {
             min(max($0, Self.customScaleRange.lowerBound), Self.customScaleRange.upperBound)
         } ?? 1
-        self.displayPreference = defaults.string(forKey: Keys.display)
+        // What this launch is running in: the override as it stood before the
+        // picker can touch it.
+        self.appliedLanguage = AppLanguage.ownOverride(in: defaults, domainName: self.domainName) ?? .system
+        let savedDisplay = defaults.data(forKey: "notchPosition")
+            .flatMap { try? JSONDecoder().decode(NotchPosition.self, from: $0) }?.displayID
+        self.displayPreference = (defaults.string(forKey: Keys.display) ?? savedDisplay)
             .map(DisplayPreference.display) ?? .followActiveWindow
         self.resetTimeFormat = defaults.string(forKey: Keys.resetTimeFormat)
             .flatMap(ResetTimeFormat.init(rawValue:)) ?? .automatic
@@ -842,8 +997,8 @@ final class Preferences: ObservableObject {
         // Off by default: it swaps what Claude's ring means, and that is a
         // choice for whoever budgets their week that way.
         self.claudeDailyPaceRing = defaults.bool(forKey: Keys.claudeDailyPaceRing)
-        // Off by default for the same reason: it changes what every ring means.
-        self.weeklyHeadline = defaults.bool(forKey: Keys.weeklyHeadline)
+        self.codeSwitchQuotaRatiosEnabled = defaults.bool(forKey: Self.codeSwitchQuotaRatiosKey)
+        self.independentInnerRing = defaults.bool(forKey: Self.independentInnerRingKey)
         self.showCodexExtraLimits = Self.storedShowCodexExtraLimits(defaults: defaults)
         self.deepSeekPricingEnabled = defaults.object(forKey: Keys.deepSeekPricingEnabled) as? Bool ?? true
         if let data = defaults.data(forKey: Keys.deepSeekPricingSchedule),
@@ -865,40 +1020,60 @@ final class Preferences: ObservableObject {
         // Off by default: an extra arc in a 44pt circle is a change to how
         // every reading looks, and nobody asked for it on their behalf.
         self.weeklyRingDashed = defaults.object(forKey: Keys.weeklyRingDashed) as? Bool ?? false
-        self.showsNotchReadings = defaults.object(forKey: Keys.showsNotchReadings) as? Bool ?? true
-        self.weeklyReading = defaults.object(forKey: Keys.weeklyReading) as? Bool ?? false
 
         self.weeklyRing = defaults.string(forKey: Keys.weeklyRing)
             .flatMap(WeeklyRing.init(rawValue:)) ?? .off
-        // On unless turned off: it is how the notch is carried to another edge,
-        // and a control that is missing by default is one nobody finds.
-        self.showsMoveHandle = defaults.object(forKey: Keys.showsMoveHandle) as? Bool ?? true
+        // Preserve this fork's menu-based placement until the handle is enabled.
+        self.showsMoveHandle = defaults.object(forKey: Keys.showsMoveHandle) as? Bool ?? false
+        self.showsSettingsHandle = defaults.object(forKey: Keys.showsSettingsHandle) as? Bool ?? false
         self.accentColor = defaults.string(forKey: Keys.accentColor)
             .flatMap(AccentColorChoice.init(rawValue:)) ?? .system
+        // Snapshot the shared choice once, before either picker can change it.
+        // A stored but invalid notch choice falls back independently.
+        let notchAccentColor: AccentColorChoice
+        if defaults.object(forKey: Keys.notchAccentColor) == nil {
+            notchAccentColor = defaults.string(forKey: Keys.accentColor)
+                .flatMap(AccentColorChoice.init(rawValue:)) ?? .system
+            defaults.set(notchAccentColor.rawValue, forKey: Keys.notchAccentColor)
+        } else {
+            notchAccentColor = defaults.string(forKey: Keys.notchAccentColor)
+                .flatMap(AccentColorChoice.init(rawValue:)) ?? .system
+        }
+        self.notchAccentColor = notchAccentColor
         self.notchSurfaceStyle = defaults.string(forKey: Keys.notchSurfaceStyle)
             .flatMap(NotchSurfaceStyle.init(rawValue:)) ?? .glass
         let storedWatchLimit = defaults.object(forKey: Keys.watchLimit) as? Double ?? 0.50
         let storedCriticalLimit = defaults.object(forKey: Keys.criticalLimit) as? Double ?? 0.70
         // `didSet` does the clamping, and it does not run for these assignments,
         // so a stored pair that crossed over is repaired here instead.
-        let critical = min(max(storedCriticalLimit, 0.02), 1.0)
+        let critical = min(max(storedCriticalLimit.isFinite ? storedCriticalLimit : 0.70, 0.02), 1.0)
         self.criticalLimit = critical
-        self.watchLimit = min(max(storedWatchLimit, 0.01), critical - 0.01)
-        self.colorTransitionStyle = defaults.string(forKey: Keys.colorTransitionStyle)
-            .flatMap(ColorTransitionStyle.init(rawValue:)) ?? .hardStep
+        self.watchLimit = min(max(storedWatchLimit.isFinite ? storedWatchLimit : 0.50, 0.01), critical - 0.01)
         // Absent means never chosen, which is follow-the-Mac.
-        self.language = defaults.string(forKey: L10n.languageDefaultsKey)
-            .flatMap(AppLanguage.init(rawValue:)) ?? .system
+        let language = defaults.string(forKey: L10n.languageDefaultsKey)
+            .flatMap(AppLanguage.init(rawValue:)) ?? self.appliedLanguage
+        self.language = language
+        if defaults.string(forKey: L10n.languageDefaultsKey) == nil, language != .system {
+            defaults.set(language.rawValue, forKey: L10n.languageDefaultsKey)
+        }
         // Absent means nothing has been shown yet, which is true of a fresh
         // install — so the current release reads as new to it.
         self.lastSeenVersion = defaults.string(forKey: Keys.lastSeenVersion)
         // Absent means never chosen, so the rings keep the order the app ships
         // with until someone drags one.
         self.providerOrder = defaults.stringArray(forKey: Keys.order) ?? []
+        self.announceSessionStart = defaults.object(forKey: Keys.announceSessionStart) as? Bool ?? true
+        self.sessionStartPeekDuration = defaults.string(forKey: Keys.sessionStartPeekDuration)
+            .flatMap(PeekDuration.init(rawValue:)) ?? .standard
+        self.sessionStartSound = defaults.object(forKey: Keys.sessionStartSound) as? Bool ?? false
+        self.sessionStartSoundName = defaults.string(forKey: Keys.sessionStartSoundName)
+            ?? SessionChime.defaultStarted
         // Both default to on, so `bool(forKey:)` — which answers false for a
         // key that was never written — cannot stand in for the default.
         self.announceSessionEnd = defaults.object(forKey: Keys.announceSessionEnd) as? Bool ?? true
         self.sessionEndSound = defaults.object(forKey: Keys.sessionEndSound) as? Bool ?? true
+        self.sessionSoundVolume = SessionChime.normalizedVolume(
+            defaults.object(forKey: Keys.sessionSoundVolume) as? Double ?? 1)
         self.peekDuration = defaults.string(forKey: Keys.peekDuration)
             .flatMap(PeekDuration.init(rawValue:)) ?? .standard
         self.sessionEndSoundName = defaults.string(forKey: Keys.sessionEndSoundName)
@@ -916,58 +1091,20 @@ final class Preferences: ObservableObject {
             ?? SessionChime.defaultBlocked
         self.geminiAPIMonthlyTokenBudget = Self.storedGeminiAPIMonthlyTokenBudget(defaults: defaults)
         self.minimaxRegion = Self.storedMinimaxRegion(defaults: defaults)
-        if let data = defaults.data(forKey: Keys.customEndpoints),
-           let list = try? JSONDecoder().decode([CustomEndpoint].self, from: data) {
-            self.customEndpoints = Self.movingLegacyKeysToKeychain(list, defaults: defaults)
-        } else {
-            self.customEndpoints = []
-        }
         // Read from the system rather than from our own store: the user can turn
         // this off in System Settings, and a remembered `true` would then be a lie.
         self.launchAtLogin = Self.isRegisteredForLogin
     }
 
-    // MARK: Custom Endpoints
-
     func addCustomEndpoint(_ endpoint: CustomEndpoint) {
         customEndpoints.append(endpoint)
-        if endpoint.isEnabled {
-            setConnected(true, for: endpoint.providerID)
-        }
+        if endpoint.isEnabled { setConnected(true, for: endpoint.providerID) }
     }
 
     func updateCustomEndpoint(_ endpoint: CustomEndpoint) {
-        if let idx = customEndpoints.firstIndex(where: { $0.id == endpoint.id }) {
-            var merged = endpoint
-            // Check latest stored endpoint in UserDefaults to merge latest readings if mapping hasn't changed
-            let storedList = Self.storedCustomEndpoints(defaults: defaults)
-            if let stored = storedList.first(where: { $0.id == endpoint.id }) {
-                let mappingUnchanged = (stored.usageSource == endpoint.usageSource)
-                    && (stored.usagePreset == endpoint.usagePreset)
-                    && (stored.usageURL == endpoint.usageURL)
-                    && (stored.usageRecordsPath == endpoint.usageRecordsPath)
-                    && (stored.usageModelField == endpoint.usageModelField)
-                    && (stored.usageTokenField == endpoint.usageTokenField)
-                    && (stored.usageModelFilter == endpoint.usageModelFilter)
-                    && (stored.trackingUnit == endpoint.trackingUnit)
-
-                // If mapping is unchanged and user did not explicitly reset or edit readings:
-                // When the editor loaded, it had stored (or earlier) readings. If the user didn't change them
-                // in the editor, we preserve the latest stored readings that might have been sampled in the background.
-                if mappingUnchanged {
-                    if merged.currentTokensUsedM == customEndpoints[idx].currentTokensUsedM {
-                        merged.currentTokensUsedM = stored.currentTokensUsedM
-                    }
-                    if merged.usageHistory == customEndpoints[idx].usageHistory {
-                        merged.usageHistory = stored.usageHistory
-                    }
-                    if merged.currentSpendUSD == customEndpoints[idx].currentSpendUSD {
-                        merged.currentSpendUSD = stored.currentSpendUSD
-                    }
-                }
-            }
-            customEndpoints[idx] = merged
-            setConnected(merged.isEnabled, for: merged.providerID)
+        if let index = customEndpoints.firstIndex(where: { $0.id == endpoint.id }) {
+            customEndpoints[index] = endpoint
+            setConnected(endpoint.isEnabled, for: endpoint.providerID)
         }
     }
 
@@ -981,20 +1118,20 @@ final class Preferences: ObservableObject {
         customEndpoints.removeAll { $0.id == id }
     }
 
-    // MARK: Account names
-
-    func nickname(for providerID: String) -> String? {
-        accountNicknames[providerID]
-    }
-
-    /// Blank, or only spaces, goes back to the provider's own name.
-    func setNickname(_ name: String, for providerID: String) {
-        let trimmed = name.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty {
-            accountNicknames.removeValue(forKey: providerID)
-        } else {
-            accountNicknames[providerID] = trimmed
+    func announcementSettings(for reason: SessionCompletionWatcher.Reason)
+        -> (expand: Bool, duration: TimeInterval, sound: String?) {
+        let isStart = reason == .started
+        let soundEnabled = isStart ? sessionStartSound : sessionEndSound
+        let soundName: String
+        switch reason {
+        case .started: soundName = sessionStartSoundName
+        case .finished: soundName = sessionEndSoundName
+        case .blocked: soundName = sessionBlockedSoundName
         }
+        let sound = soundEnabled && sessionSoundVolume > 0 && SessionChime.url(for: soundName) != nil
+            ? soundName : nil
+        return (isStart ? announceSessionStart : announceSessionEnd,
+                (isStart ? sessionStartPeekDuration : peekDuration).seconds, sound)
     }
 
     // MARK: Threshold alerts
@@ -1011,23 +1148,9 @@ final class Preferences: ObservableObject {
         }
     }
 
-    // MARK: Menu bar
-
-    /// Whether this provider is chosen for the menu bar. Says nothing about
-    /// whether it is read — that is `isConnected`.
-    func isInMenuBar(_ providerID: String) -> Bool {
-        menuBarLimits.isChosen(providerID)
-    }
-
-    /// Put one provider in the menu bar or take it out. `listed` is every
-    /// provider Settings is showing, which the first choice writes down.
-    func setInMenuBar(_ shown: Bool, for providerID: String, among listed: [String]) {
-        menuBarProviders = menuBarLimits.choosing(shown, providerID, among: listed).chosen
-    }
-
     /// Claude and Codex stay on for a first install and for a newly discovered
     /// profile. Everyone else starts off.
-    nonisolated static func isDefaultOnFamily(_ providerID: String) -> Bool {
+    static func isDefaultOnFamily(_ providerID: String) -> Bool {
         ClaudeProfile.isClaude(providerID: providerID)
             || CodexProfile.isCodex(providerID: providerID)
     }
@@ -1046,7 +1169,7 @@ final class Preferences: ObservableObject {
             return connectedProviders.contains(providerID)
         }
         if let hidden = pendingHidden {
-            // Absence from the old off-list means on — for providers that
+            // Absence from the old off-list means on for providers that
             // off-list could have named. MiniMax did not exist then, so
             // missing from it is not a choice to show it.
             if providerID == "minimax" { return false }
@@ -1115,9 +1238,20 @@ final class Preferences: ObservableObject {
         seenProviders = discovered
     }
 
+    /// The fork's saved query catalog owns account choices, including manual
+    /// entries. Mirror it without treating a deleted account as newly discovered.
+    func reconcileCatalog(_ entries: [QueryEntry]) {
+        let ids = Set(entries.map(\.id))
+        let connected = connectedProviders.subtracting(ids)
+            .union(entries.filter(\.enabled).map(\.id))
+        if connected != connectedProviders { connectedProviders = connected }
+        let seen = seenProviders.union(ids)
+        if seen != seenProviders { seenProviders = seen }
+    }
+
     /// What `UsageStore` still treats as the off-list, among ids it knows.
     func disconnectedIDs(among discovered: [String]) -> Set<String> {
-        Set(discovered.filter { !isConnected($0) })
+        Set(discovered.filter { !isConnected($0) }).union(disabledModels)
     }
 
     /// Record a new order, keeping the ids that are not on this Mac today.
@@ -1128,6 +1262,16 @@ final class Preferences: ObservableObject {
     /// returned, for something the user never did.
     func setProviderOrder(_ ids: [String]) {
         providerOrder = ProviderOrder.remember(ids, keeping: providerOrder)
+    }
+
+    @discardableResult
+    func moveCodeSwitchProvider(_ id: String, onto target: String,
+                               placement: CodeSwitchProviderOrder.Placement, visible: [String]) -> Bool {
+        guard let order = CodeSwitchProviderOrder.moving(id, onto: target, placement: placement,
+                                                        visible: visible, remembered: codeSwitchProviderOrder),
+              order != codeSwitchProviderOrder else { return false }
+        codeSwitchProviderOrder = order
+        return true
     }
 
     /// Forget everything this app has stored and quit.
@@ -1141,6 +1285,8 @@ final class Preferences: ObservableObject {
     /// update, and wiping data on every Sparkle update would be catastrophic.
     /// It has to be something the user asks for.
     static func eraseAllData() {
+        try? QueryKeychain().removeAll()
+        try? FileManager.default.removeItem(at: ProviderIcon.directory)
         let bundleID = Bundle.main.bundleIdentifier ?? "com.vinz.codenotch"
         UserDefaults.standard.removePersistentDomain(forName: bundleID)
         UserDefaults.standard.synchronize()

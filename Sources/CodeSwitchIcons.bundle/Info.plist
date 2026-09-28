@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+@name: 联动图标资源包
+@Descripttion: 声明 Code Switch R 共享品牌图标资源。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-08 17:38:00
+@LastEditTime: 2026-09-08 17:38:00
+@FilePath: Sources/CodeSwitchIcons.bundle/Info.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleIdentifier</key><string>com.vinz.codenotch.code-switch-icons</string>
+<key>CFBundleName</key><string>CodeSwitchIcons</string>
+<key>CFBundlePackageType</key><string>BNDL</string>
+</dict></plist>

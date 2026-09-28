@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · PhoneLinkNetwork
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/PhoneLink/PhoneLinkNetwork.swift
+ */
 import Foundation
 import SystemConfiguration
 import Darwin
@@ -38,29 +47,29 @@ enum PhoneLinkNetwork {
 
         return hosts
     }
-    
+
     static func getComputerName() -> String {
         if let name = SCDynamicStoreCopyComputerName(nil, nil) as String? {
             return name
         }
         return Host.current().localizedName ?? "Mac"
     }
-    
+
     static func isPrivateIPv4(_ ip: String) -> Bool {
         let parts = ip.split(separator: ".").compactMap { Int($0) }
         guard parts.count == 4 else { return false }
-        
+
         if parts[0] == 10 { return true }
         if parts[0] == 172 && parts[1] >= 16 && parts[1] <= 31 { return true }
         if parts[0] == 192 && parts[1] == 168 { return true }
         if parts[0] == 169 && parts[1] == 254 { return true } // link-local
         return false
     }
-    
+
     static func isPrivateIP(_ ip: String) -> Bool {
         if isPrivateIPv4(ip) { return true }
         if ip == "127.0.0.1" || ip == "::1" { return true }
-        
+
         // IPv6 ULA (fc00::/7) or link-local (fe80::/10)
         let lower = ip.lowercased()
         if lower.hasPrefix("fc") || lower.hasPrefix("fd") || lower.hasPrefix("fe8") || lower.hasPrefix("fe9") || lower.hasPrefix("fea") || lower.hasPrefix("feb") {

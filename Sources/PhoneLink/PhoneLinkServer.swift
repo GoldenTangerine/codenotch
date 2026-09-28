@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步 · PhoneLinkServer
+ @Descripttion: 保留上游功能实现并兼容本地扩展。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 09:43:04
+ @LastEditTime: 2026-09-14 09:43:04
+ @FilePath: Sources/PhoneLink/PhoneLinkServer.swift
+ */
 import Foundation
 import Network
 import NIOCore
@@ -6,11 +15,11 @@ import NIOPosix
 
 /// Whether phone pairing is offered at all.
 ///
-/// Off until a phone app people can actually install exists: without one the
-/// Phone pane and "Connect Phone…" lead nowhere. While off, the server never
-/// listens, even for someone who switched it on in a development build.
+/// This fork ships the local-network protocol and keeps its pairing UI active.
+/// The upstream app currently sets this to `false` until its companion phone
+/// app ships; retaining `true` preserves the existing Codenotch capability.
 enum PhoneLink {
-    static let isAvailable = false
+    static let isAvailable = true
 }
 
 enum PhoneLinkServerState: Equatable {

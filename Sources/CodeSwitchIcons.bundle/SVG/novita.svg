@@ -1,0 +1,10 @@
+<!--
+@name: novita 品牌图标
+@Descripttion: 来自 LobeHub 图库的供应商品牌 SVG 资源。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-11 11:33:32
+@LastEditTime: 2026-09-11 11:33:32
+@FilePath: Sources/CodeSwitchIcons.bundle/SVG/novita.svg
+-->
+<svg fill="currentColor" fill-rule="evenodd" height="1em" style="flex:none;line-height:1" viewBox="0 0 24 24" width="1em" xmlns="http://www.w3.org/2000/svg"><title>Novita AI</title><path clip-rule="evenodd" d="M9.167 4.17v5.665L0 19.003h9.167v-5.666l5.666 5.666H24L9.167 4.17z"></path></svg>

@@ -1,3 +1,12 @@
+/**
+ @name: 会话与用量展示
+ @Descripttion: 读取本地活动并提供本地化展示文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 23:00:00
+ @LastEditTime: 2026-09-08 23:00:00
+ @FilePath: Sources/Providers/AntigravityActivity.swift
+ */
 import Foundation
 
 /// How much Antigravity has actually been used, counted from its own

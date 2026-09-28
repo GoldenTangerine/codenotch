@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 LMStudioUsage.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/LMStudioUsage.swift
+ */
 import Foundation
 
 /// `GET /api/v1/models`, LM Studio's own listing, recorded from 0.4.24 on

@@ -1,4 +1,14 @@
-//! The tray icon, and the provider marks the settings window shows.
+/**
+ @name: 项目构建与文档
+ @Descripttion: 维护 trayicon.rs 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: windows/codenotch/src/trayicon.rs
+ */
+//! Draws the usage readings into the tray icon itself, so the numbers are visible next to the
+//! clock without opening the notch — and so the notch can be hidden entirely if the user prefers.
 //!
 //! The icon draws no readings: those live in the tray menu, as they do in the Mac's menu bar. What
 //! is left here is the mark itself and the base64/PNG plumbing the settings window needs to show an

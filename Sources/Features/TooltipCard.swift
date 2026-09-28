@@ -1,3 +1,12 @@
+/**
+ @name: 详情提示卡
+ @Descripttion: 绘制用量详情与跟随锚点的提示箭头。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Features/TooltipCard.swift
+ */
 import SwiftUI
 
 /// The regular Liquid Glass material follows the desktop behind it. A dark
@@ -167,12 +176,13 @@ private struct TooltipShell<Content: View>: View {
     let height: CGFloat
     /// Which side of the notch the card is on, so the tail goes on the other one.
     let direction: NotchEdge.TooltipDirection
-    var tailOffset: CGFloat = 0
     @ViewBuilder let content: Content
+    var tailOffset: CGFloat = 0
 
     @Environment(\.codenotchReduceTransparency) private var reduceTransparency
     @Environment(\.notchSurfaceStyle) private var surfaceStyle
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.codenotchHeadlessGlass) private var headlessGlass
 
     /// Reduce transparency means "no see-through chrome", which for this card
     /// is the solid style — the same precedence the Settings window applies to
@@ -240,6 +250,11 @@ private struct TooltipShell<Content: View>: View {
 
     var body: some View {
         stack
+            .environment(\.tooltipSecondaryInk, TooltipGlassContrast.secondaryInk(
+                surfaceStyle: surfaceStyle,
+                colorScheme: colorScheme,
+                reduceTransparency: reduceTransparency
+            ))
             // The background takes the stack's bounds — card plus tail — and is
             // re-solved as `height` animates, so one piece of glass covers both
             // pieces however tall the card is.
@@ -249,14 +264,20 @@ private struct TooltipShell<Content: View>: View {
                 // that, `surfaceFill` has already painted the card opaque.
                 if glassy {
                     if #available(macOS 26.0, *) {
-                        Color.clear
-                            .glassEffect(surfaceStyle.glass, in: TooltipSilhouette(direction: direction,
-                                                                                   tailOffset: clampedTailOffset))
+                        Group {
+                            if headlessGlass {
+                                Color.clear
+                            } else {
+                                Color.clear
+                                    .glassEffect(surfaceStyle.glass, in: TooltipSilhouette(direction: direction,
+                                                                                           tailOffset: tailOffset))
+                            }
+                        }
                             .background {
                                 if let dim = TooltipGlassContrast.dim(surfaceStyle: surfaceStyle,
-                                                                      colorScheme: colorScheme,
-                                                                      reduceTransparency: reduceTransparency) {
-                                    TooltipSilhouette(direction: direction, tailOffset: clampedTailOffset).fill(dim)
+                                                                       colorScheme: colorScheme,
+                                                                       reduceTransparency: reduceTransparency) {
+                                    TooltipSilhouette(direction: direction, tailOffset: tailOffset).fill(dim)
                                 }
                             }
                     }
@@ -300,6 +321,7 @@ private struct TooltipHeader<Mark: View>: View {
                         .foregroundStyle(Palette.textPrimary)
                         // The title names the model; a long note yields before it does.
                         .layoutPriority(1)
+                        .lineLimit(1).minimumScaleFactor(0.7).help(title)
                     if let note {
                         Spacer(minLength: Design.px(20))
                         Text(note)
@@ -429,21 +451,9 @@ private struct LimitWindowRow: View {
     @Environment(\.codenotchAccentColor) private var accentColor
     @Environment(\.usageWatchLimit) private var watchLimit
     @Environment(\.usageCriticalLimit) private var criticalLimit
-    @Environment(\.colorTransitionStyle) private var colorTransitionStyle
     @Environment(\.tooltipSecondaryInk) private var secondaryInk
 
-    private var band: UsageBand {
-        if let override = window.bandOverride { return override }
-        return UsageBand.band(for: window.usedFraction ?? 0, watchLimit: watchLimit, criticalLimit: criticalLimit)
-    }
-    /// Continuous when that style is chosen; a `bandOverride` is a deliberate discrete choice
-    /// from the caller regardless of style, so it stays exactly as `band.color(accent:)` renders it.
-    private var barColor: Color {
-        guard window.bandOverride == nil, colorTransitionStyle == .ramp else {
-            return band.color(accent: accentColor)
-        }
-        return UsageBand.rampColor(for: window.usedFraction ?? 0, watchLimit: watchLimit, accent: accentColor)
-    }
+    private var band: UsageBand { UsageBand.band(for: window.usedFraction ?? 0, watchLimit: watchLimit, criticalLimit: criticalLimit) }
     private var trackWidth: CGFloat { NotchLayout.cardWidth - 2 * NotchLayout.cardPadding - inset }
     private var fillWidth: CGFloat {
         let fraction = CGFloat(min(max(window.usedFraction ?? 0, 0), 1))
@@ -493,10 +503,155 @@ private struct LimitWindowRow: View {
                     .font(Typography.cardBody)
                     .foregroundStyle(Palette.textPrimary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.7).help(window.summary)
                     .padding(.top, NotchLayout.barToUsed)
             }
         }
+    }
+}
+
+private struct TooltipScrollContent<Content: View>: View {
+    let scrolls: Bool
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        if scrolls { ScrollView { content } }
+        else { content }
+    }
+}
+
+private struct CodeSwitchTooltip: View {
+    @Environment(\.tooltipSecondaryInk) private var secondaryInk
+    @Environment(\.codenotchAccentColor) private var accentColor
+    let snapshot: ProviderSnapshot
+    let details: CodeSwitchDetails
+    let now: Date
+    var activity: ActivitySummary? = nil
+    var resetTimeFormat: ResetTimeFormat = .automatic
+    var fullContent = false
+    var showUsagePace = false
+    var dailyBudgetEnabled = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            TooltipHeader(title: snapshot.displayName) {
+                QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph,
+                              isStale: snapshot.status.isStale || !snapshot.hasReading, onDarkBackground: true)
+                    .foregroundStyle(Palette.textPrimary)
+            }
+            TooltipScrollContent(scrolls: !fullContent) {
+                VStack(alignment: .leading, spacing: NotchLayout.blockSpacing) {
+                    if let activity, !activity.sessions.isEmpty {
+                        SessionList(summary: activity, now: now, cap: activity.sessions.count)
+                    }
+                    Text("Code Switch R · \(details.platform)")
+                        .foregroundStyle(secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if details.provider.status == "active" {
+                        HStack(spacing: 4) {
+                            Text("Calling")
+                                .foregroundStyle(accentColor)
+                            Text("·")
+                                .foregroundStyle(secondaryInk)
+                            Text(verbatim: String(details.provider.activeRequests))
+                                .bold()
+                                .monospacedDigit()
+                                .foregroundStyle(Palette.ample)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(details.activityText)
+                    } else {
+                        Text(details.activityText)
+                            .foregroundStyle(Palette.textPrimary)
+                    }
+                    if details.provider.loading {
+                        Text("Loading…").foregroundStyle(secondaryInk)
+                    } else if details.provider.quotas.isEmpty {
+                        Text("No reading").foregroundStyle(secondaryInk)
+                    }
+                    if dailyBudgetEnabled, let budget = CodeSwitchDailyBudget.reading(for: snapshot, now: now) {
+                        CodeSwitchDailyBudgetRow(budget: budget)
+                    }
+                    ForEach(Array(details.provider.quotas.enumerated()), id: \.offset) { _, quota in
+                        if !quota.active && quota.displayKind != "error" && quota.invalidMessage?.isEmpty != false {
+                            Text("\(quota.title): \(L10n.t("Period has not started"))")
+                                .foregroundStyle(secondaryInk)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else if let window = quota.window {
+                            LimitWindowRow(window: window, fidelity: .derived, now: now, resetTimeFormat: resetTimeFormat, showsUsagePace: showUsagePace)
+                        } else {
+                            Text("\(quota.title): \(L10n.t("Quota unavailable"))")
+                                .foregroundStyle(Palette.critical)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if let stats = details.provider.stats {
+                        Divider()
+                        metric(L10n.t("Success rate"), stats.successfulRequests + stats.failedRequests > 0
+                            ? "\(QuotaQuantity.format(min(1, max(0, stats.successRate)) * 100))%" : "—")
+                        metric(L10n.t("Requests"), QuotaQuantity.format(stats.totalRequests))
+                        metric("Tokens", QuotaQuantity.format(stats.inputTokens + stats.outputTokens + stats.cacheReadTokens, compact: true))
+                        metric(L10n.t("Cost"), "$" + QuotaQuantity.format(stats.costTotal))
+                        metric(L10n.t("First token"), stats.avgFirstTokenSec > 0 ? "\(QuotaQuantity.format(stats.avgFirstTokenSec))s" : "—")
+                        metric(L10n.t("Speed"), stats.avgTokensPerSec > 0 ? "\(QuotaQuantity.format(stats.avgTokensPerSec)) t/s" : "—")
+                    }
+                }
+                .font(Typography.cardBody)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, NotchLayout.headerToBlock)
+            }
+        }
+        .frame(height: fullContent ? nil : NotchLayout.cardHeight(windowCount: 0, linked: true) - 2 * NotchLayout.cardPadding)
+    }
+
+    private func metric(_ label: String, _ value: String) -> some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(label).foregroundStyle(secondaryInk)
+            Spacer(minLength: 6)
+            Text(value).foregroundStyle(Palette.textPrimary)
+                .lineLimit(1).minimumScaleFactor(0.7).help(value)
+        }
+    }
+}
+
+struct CodeSwitchDailyBudgetRow: View {
+    @Environment(\.tooltipSecondaryInk) private var secondaryInk
+    let budget: CodeSwitchDailyBudget.Reading
+    @Environment(\.codenotchAccentColor) private var accentColor
+    @Environment(\.usageWatchLimit) private var watchLimit
+    @Environment(\.usageCriticalLimit) private var criticalLimit
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(budget.title).foregroundStyle(Palette.textPrimary)
+                Text("· " + budget.source.title).foregroundStyle(secondaryInk)
+                Spacer(minLength: 4)
+                Text(Percent.text(for: budget.usedFraction) + "%")
+                    .foregroundStyle(Palette.textPrimary).monospacedDigit()
+            }
+            GeometryReader { proxy in
+                Capsule().fill(Palette.barTrack)
+                Capsule().fill(UsageBand.band(for: budget.usedFraction, watchLimit: watchLimit, criticalLimit: criticalLimit).color(accent: accentColor))
+                    .frame(width: proxy.size.width * CGFloat(budget.usedFraction))
+            }
+            .frame(height: 4)
+            HStack(alignment: .firstTextBaseline) {
+                Text(L10n.t("Used today")).foregroundStyle(secondaryInk)
+                Spacer(minLength: 4)
+                Text(budget.amount(budget.todayUsed)).foregroundStyle(Palette.textPrimary)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(L10n.t("Daily available")).foregroundStyle(secondaryInk)
+                Spacer(minLength: 4)
+                Text(budget.amount(budget.available) + " · " + Percent.text(for: budget.remainingFraction) + "%")
+                    .foregroundStyle(Palette.textPrimary)
+            }
+            if budget.sinceObservation {
+                Text(L10n.t("Since recording began")).foregroundStyle(secondaryInk)
+            }
+        }
+        .lineLimit(1).minimumScaleFactor(0.65)
     }
 }
 
@@ -507,15 +662,6 @@ private struct MoneyBreakdownView: View {
     @Environment(\.codenotchAccentColor) private var accentColor
     @Environment(\.usageWatchLimit) private var watchLimit
     @Environment(\.usageCriticalLimit) private var criticalLimit
-    @Environment(\.colorTransitionStyle) private var colorTransitionStyle
-
-    private var barColor: Color {
-        guard colorTransitionStyle == .ramp else {
-            return UsageBand.band(for: money.spentFraction, watchLimit: watchLimit, criticalLimit: criticalLimit)
-                .color(accent: accentColor)
-        }
-        return UsageBand.rampColor(for: money.spentFraction, watchLimit: watchLimit, accent: accentColor)
-    }
 
     private var symbol: String {
         switch money.currency.uppercased() {
@@ -537,7 +683,7 @@ private struct MoneyBreakdownView: View {
             GeometryReader { proxy in
                 HStack(spacing: 0) {
                     Rectangle()
-                        .fill(barColor)
+                        .fill(UsageBand.band(for: money.spentFraction, watchLimit: watchLimit, criticalLimit: criticalLimit).color(accent: accentColor))
                         .frame(width: proxy.size.width * CGFloat(money.spentFraction))
                     Rectangle().fill(Palette.barTrack)
                 }
@@ -574,21 +720,21 @@ private struct MoneyStat: View {
 }
 
 private struct ProviderTooltip: View {
+    @Environment(\.tooltipSecondaryInk) private var secondaryInk
     /// What a local model is doing right now, for the header's note.
     var activityNote: String?
     let snapshot: ProviderSnapshot
     let now: Date
     let resetTimeFormat: ResetTimeFormat
+    var fullContent = false
+    var isRefreshing = false
     let showUsagePace: Bool
     @Environment(\.tooltipSecondaryInk) private var secondaryInk
 
     /// Only worth saying when the numbers are not current. A remembered reading
     /// has to be dated, or it quietly passes itself off as live.
     private var readingAge: String? {
-        guard snapshot.hasReading, let since = snapshot.status.staleSince,
-              since != .distantPast
-        else { return nil }
-        return ElapsedCopy.ago(since: since, now: now)
+        snapshot.refreshNote(isRefreshing: isRefreshing, now: now)
     }
 
     private struct WindowGroup: Identifiable {
@@ -613,12 +759,14 @@ private struct ProviderTooltip: View {
         VStack(alignment: .leading, spacing: 0) {
             TooltipHeader(title: snapshot.kind == .localRuntime
                           ? L10n.t("\(snapshot.localModel?.brand?.displayName ?? snapshot.displayName) · Local")
-                          : L10n.t("\(snapshot.displayName) Usage"),
+                          : snapshot.tooltipTitle,
                           subtitle: snapshot.plan,
                           note: activityNote ?? (snapshot.localModel?.brand != nil ? snapshot.displayName : readingAge)) {
-                ProviderGlyphView(glyph: snapshot.glyph, customIconFilename: snapshot.customIconFilename)
+                QueryIconView(icon: snapshot.icon, fallback: snapshot.glyph,
+                              isStale: snapshot.status.isStale || !snapshot.hasReading, onDarkBackground: true)
                     .foregroundStyle(Palette.textPrimary)
             }
+            .help(snapshot.queryFailure ?? snapshot.displayName)
 
             if let block = snapshot.block {
                 BlockedRow(text: block.summary(now: now))
@@ -978,6 +1126,7 @@ private struct BlockedRow: View {
 // MARK: - Activity
 
 private struct SessionRow: View {
+    @Environment(\.tooltipSecondaryInk) private var secondaryInk
     let session: AgentSession
     let now: Date
     /// Set when rows can be clicked to jump to the session's terminal.
@@ -987,8 +1136,8 @@ private struct SessionRow: View {
 
     private var stateColor: Color {
         switch session.state {
-        case .busy:    return Palette.textPrimary
-        case .waiting: return Palette.watch
+        case .busy:    return accentColor
+        case .waiting: return Palette.activityWaiting
         case .success: return Palette.ample
         case .idle:    return secondaryInk
         }
@@ -1068,12 +1217,22 @@ private struct SessionList: View {
             // are counted rather than drawn: the card is clipped, not scrolled,
             // so anything past the budget silently pushes the title off the top.
             ForEach(Array(shown.enumerated()), id: \.element.id) { index, session in
-                SessionRow(session: session, now: now, onFocus: onFocus)
+                Button { SessionFocus.activate(session: session) } label: {
+                    SessionRow(session: session, now: now)
+                        .contentShape(Rectangle())
+                }
+                    .buttonStyle(.plain)
+                    .disabled(session.processID == nil)
                     .padding(.top, NotchLayout.blockSpacing)
             }
 
             if hidden > 0 {
-                Text(L10n.t("and \(hidden) more"))
+                Menu {
+                    ForEach(Array(ordered.dropFirst(shown.count))) { session in
+                        Button(session.name) { SessionFocus.activate(session: session) }
+                            .disabled(session.processID == nil)
+                    }
+                } label: { Text("and \(hidden) more") }
                     .font(Typography.cardBody)
                     .foregroundStyle(secondaryInk)
                     .padding(.top, NotchLayout.blockSpacing)
@@ -1088,15 +1247,21 @@ struct TooltipCard: View {
     let snapshot: ProviderSnapshot
     var activity: ActivitySummary?
     let now: Date
+    var isRefreshing = false
     /// Which way the card sits from the notch, which follows from the edge.
     var direction: NotchEdge.TooltipDirection = .leading
     /// How many sessions this screen has room to list. Solved from the display
     /// rather than fixed, so a big screen hides nothing.
     var sessionCap: Int = NotchLayout.defaultSessionCap
+    var tailOffset: CGFloat = 0
     var resetTimeFormat: ResetTimeFormat = .automatic
+    var heightMode: TooltipHeightMode = .standard
+    var resolvedHeight: CGFloat?
+    var onHeightChange: ((CGFloat) -> Void)?
+    @State private var naturalHeight: CGFloat = 0
     var deepSeekPricingEnabled: Bool = true
     var deepSeekPricingSchedule: DeepSeekPricing.Schedule = .current
-    var tailOffset: CGFloat = 0
+    var dailyBudgetEnabled = false
     /// A tap on a session row jumps to that session's terminal — nil leaves
     /// the rows as plain text.
     var onFocusSession: ((pid_t) -> Void)? = nil
@@ -1112,7 +1277,7 @@ struct TooltipCard: View {
     /// The same figure the hover region uses, so what is drawn and what is
     /// reachable can never drift apart.
     private var height: CGFloat {
-        NotchLayout.cardHeight(
+        resolvedHeight ?? NotchLayout.cardHeight(
             windowCount: snapshot.windows.count,
             groupCount: snapshot.windowGroupCount,
             moneyWindowCount: snapshot.windows.filter { $0.money != nil }.count,
@@ -1121,9 +1286,10 @@ struct TooltipCard: View {
             sessionCap: sessionCap,
             statusMessage: snapshot.statusMessage,
             blockMessage: snapshot.block?.summary(now: now),
-            hasTokenUsage: snapshot.tokenUsage != nil || snapshot.customUsageHistory != nil,
+            linked: snapshot.linked != nil,
+            hasTokenUsage: snapshot.tokenUsage != nil,
             hasPlan: snapshot.plan != nil,
-            hasResetCredits: snapshot.availableResetCredits(at: now) != nil,
+            hasResetCredits: snapshot.hasAvailableResetCredits,
             localModelName: snapshot.localModel?.name,
             showsLocalPerformance: snapshot.showsLocalPerformance,
                 localLedgerRows: snapshot.localLedgerRowCount,
@@ -1133,42 +1299,67 @@ struct TooltipCard: View {
     }
 
     var body: some View {
-        TooltipShell(height: height, direction: direction, tailOffset: tailOffset) {
-            // Stacked, not replaced in place: during a swap both sets of rows
-            // exist for a moment, and in a ZStack they overlap and dissolve
-            // instead of shoving each other around. Top-aligned so neither
-            // drifts while the card resizes around them.
-            ZStack(alignment: .topLeading) {
-                VStack(alignment: .leading, spacing: 0) {
-                    ProviderTooltip(activityNote: localActivityNote, snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat,
-                                    showUsagePace: showUsagePace)
-                    if let resetCredits = snapshot.availableResetCredits(at: now) {
-                        UsageResetCreditsSection(credits: resetCredits, now: now)
-                    }
-                    if let tokenUsage = snapshot.tokenUsage {
-                        CodexUsageSection(usage: tokenUsage, now: now)
-                    } else if let history = snapshot.customUsageHistory {
-                        CodexUsageSection(usage: history.codexUsage, now: now)
-                    }
-                    if let usageDetail = snapshot.usageDetail, usageDetail.hasUsage {
-                        DeepSeekUsageDetail(detail: usageDetail, now: now,
-                                            schedule: deepSeekPricingSchedule,
-                                            showsPricing: deepSeekPricingEnabled)
-                    }
-                    if let activity, snapshot.localModel == nil {
-                        SessionList(summary: activity, now: now, cap: sessionCap,
-                                    onFocus: onFocusSession)
-                    }
+        TooltipShell(height: height, direction: direction, content: {
+            if heightMode == .full {
+                ScrollView {
+                    rows
+                        .frame(width: NotchLayout.cardWidth - 2 * NotchLayout.cardPadding, alignment: .topLeading)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { measured in
+                            let total = measured + 2 * NotchLayout.cardPadding
+                            naturalHeight = total
+                            onHeightChange?(total)
+                        }
                 }
-                // An identity, so one provider's rows are never interpolated
-                // into another's — that is what slid text through positions
-                // belonging to neither layout. A crossfade rather than an
-                // instant swap, so the change is part of the movement instead
-                // of a cut in the middle of it.
+                .scrollDisabled(naturalHeight <= height)
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(height: max(1, height - 2 * NotchLayout.cardPadding))
                 .id(snapshot.id)
-                .transition(.opacity.animation(NotchMotion.crossfade))
+            } else {
+                // Stacked, not replaced in place: during a swap both sets of rows
+                // exist for a moment, and in a ZStack they overlap and dissolve
+                // instead of shoving each other around. Top-aligned so neither
+                // drifts while the card resizes around them.
+                ZStack(alignment: .topLeading) {
+                    rows
+                    // An identity, so one provider's rows are never interpolated
+                    // into another's — that is what slid text through positions
+                    // belonging to neither layout. A crossfade rather than an
+                    // instant swap, so the change is part of the movement instead
+                    // of a cut in the middle of it.
+                    .id(snapshot.id)
+                    .transition(.opacity.animation(NotchMotion.crossfade))
+                }
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }, tailOffset: tailOffset)
+    }
+
+    private var rows: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let details = snapshot.linked {
+                CodeSwitchTooltip(snapshot: snapshot, details: details, now: now, activity: activity,
+                                  resetTimeFormat: resetTimeFormat, fullContent: heightMode == .full,
+                                  showUsagePace: showUsagePace, dailyBudgetEnabled: dailyBudgetEnabled)
+            } else {
+                ProviderTooltip(activityNote: localActivityNote, snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat,
+                                fullContent: heightMode == .full, isRefreshing: isRefreshing, showUsagePace: showUsagePace)
+                if let resetCredits = snapshot.resetCredits, snapshot.hasAvailableResetCredits {
+                    CodexResetCreditsSection(credits: resetCredits, now: now)
+                }
+                if let tokenUsage = snapshot.tokenUsage {
+                    CodexUsageSection(usage: tokenUsage, now: now)
+                }
+                if let usageDetail = snapshot.usageDetail, usageDetail.hasUsage {
+                    DeepSeekUsageDetail(detail: usageDetail, now: now,
+                                        schedule: deepSeekPricingSchedule,
+                                        showsPricing: deepSeekPricingEnabled)
+                }
+                if let activity, snapshot.localModel == nil {
+                    SessionList(summary: activity, now: now,
+                                cap: heightMode == .full ? activity.sessions.count : sessionCap)
+                }
+            }
         }
     }
 }

@@ -1,3 +1,12 @@
+<!--
+@name: 项目构建与文档
+@Descripttion: 维护 download-macos.svg 的项目实现与上游兼容。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-11 15:51:14
+@LastEditTime: 2026-09-11 15:51:14
+@FilePath: docs/design/download-macos.svg
+-->
 <svg xmlns="http://www.w3.org/2000/svg" width="244" height="56" viewBox="0 0 244 56" role="img" aria-label="Download for macOS">
   <title>Download for macOS</title>
   <!-- The notch's own black, with the ring track as its edge — sampled from

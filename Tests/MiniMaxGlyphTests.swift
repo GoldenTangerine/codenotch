@@ -1,3 +1,12 @@
+/**
+ @name: MiniMax 图标测试
+ @Descripttion: 验证 MiniMax 标志轮廓的几何边界与笔画比例。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-14 17:40:57
+ @LastEditTime: 2026-09-14 17:40:57
+ @FilePath: Tests/MiniMaxGlyphTests.swift
+ */
 import XCTest
 @testable import Codenotch
 

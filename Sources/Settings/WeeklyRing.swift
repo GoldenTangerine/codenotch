@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 WeeklyRing.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Settings/WeeklyRing.swift
+ */
 import Foundation
 
 /// Whether the weekly limit gets a ring of its own, and where it sits.
@@ -35,11 +44,11 @@ enum WeeklyRing: String, CaseIterable, Identifiable {
     var explanation: String {
         switch self {
         case .off:
-            return L10n.t("One ring per provider, showing the headline limit. The weekly allowance stays in the hover card.")
+            return L10n.t("One ring shows the main quota. Other quotas remain in the hover card.")
         case .inside:
-            return L10n.t("A thinner ring for the weekly limit, drawn inside the main one. It shares the gap with the working indicator.")
+            return L10n.t("Shows another quota period inside the main ring. Hidden while the working indicator is active.")
         case .outside:
-            return L10n.t("A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.")
+            return L10n.t("Shows another quota period outside the main ring, such as monthly quota beside weekly quota.")
         }
     }
 

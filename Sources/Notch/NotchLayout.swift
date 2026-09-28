@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏布局尺寸
+ @Descripttion: 计算显示栏及可滚动额度详情的布局尺寸。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:56:06
+ @LastEditTime: 2026-09-08 14:56:06
+ @FilePath: Sources/Notch/NotchLayout.swift
+ */
 import AppKit
 
 /// Every measurement is quoted in design-frame pixels so it can be checked
@@ -17,8 +26,8 @@ enum NotchLayout {
     /// no longer fits a ring, a gap and a line of type. So a horizontal notch
     /// is deeper, and it keeps the frame's margin around the ring to stay
     /// recognisably the same object.
-    static func bodyDepth(for edge: NotchEdge) -> CGFloat {
-        edge.isVertical ? sideBodyDepth : 2 * sideRingMargin + cellExtent
+    static func bodyDepth(for edge: NotchEdge, ringGrowth: CGFloat = 0) -> CGFloat {
+        (edge.isVertical ? sideBodyDepth : 2 * sideRingMargin + cellExtent) + ringGrowth
     }
 
     /// Clear space between the ring and the bezel, from the design frame.
@@ -36,7 +45,7 @@ enum NotchLayout {
     /// and a bar that meets the frame with a raw square edge does not read that
     /// way. Deliberately a fraction of `curlRadius`: enough to round the join,
     /// nowhere near enough to taper the bar the way a full flare would.
-    static let bezelFillet  = Design.px(28)
+    static let bezelFillet  = Design.px(53.2)
     static let cornerRadius = Design.px(78.8)
     static let padTop       = Design.px(69.5)   // body top -> first ring
     static let padBottom    = Design.px(50.1)   // last label -> body bottom
@@ -52,21 +61,21 @@ enum NotchLayout {
 
     // A provider cell
     static let ringDiameter  = Design.px(117)   // 44pt, the design spec's anchor
-
-
-
-    /// The corner the bar turns where it meets the bezel, beside the hardware.
-    /// Derived from the hardware's own height rather than fixed — see
-    /// `splitCornerFraction`.
-    static let splitCornerRadius: CGFloat = 12
-
-
-
-
-
-
-
-
+    static let independentRingGrowth: CGFloat = 10
+    // 复用普通外圈与主轨道之间的净距，避免独立模式额外放大留白。
+    static var independentRingGap: CGFloat {
+        weeklyOutsideRadius - weeklyRingStroke / 2 - ringDiameter / 2
+    }
+    static var independentRingInset: CGFloat {
+        2 * (weeklyRingStroke + independentRingGap) + independentRingStroke / 2
+    }
+    static let independentRingStroke: CGFloat = 4
+    // 按线条边缘平分空隙，补偿每日预算内圈更粗的线宽。
+    static var expandedSecondaryInsideInset: CGFloat {
+        (expandedSecondaryOutsideInset + independentRingInset
+            + (weeklyRingStroke - independentRingStroke) / 2) / 2
+    }
+    static var expandedSecondaryOutsideInset: CGFloat { weeklyRingStroke / 2 }
     static let trackStroke   = Design.px(15.5)
     static let progressStroke = Design.px(8)
     /// A fraction of the circle, not a pixel length. Below it the arc's two
@@ -261,6 +270,15 @@ enum NotchLayout {
     /// Ring plus its percent label.
     static var cellExtent: CGFloat { ringDiameter + ringLabelGap + percentLineHeight }
 
+    static func cellLabelWidth(isLocal: Bool) -> CGFloat {
+        ringDiameter + (isLocal ? 0 : 4)
+    }
+
+    static func cellSize(ringDiameter: CGFloat, isLocal: Bool) -> CGSize {
+        CGSize(width: max(ringDiameter, cellLabelWidth(isLocal: isLocal)),
+               height: ringDiameter + ringLabelGap + percentLineHeight)
+    }
+
     /// What one cell claims along the stack.
     ///
     /// Down a side edge, the ring *and the label underneath it*: both are on
@@ -269,8 +287,8 @@ enum NotchLayout {
     /// figure leaves 27pt of nothing between every pair of rings, on top of the
     /// spacing the frame already puts there — which is what made the top and
     /// bottom bars read as far too spread out.
-    static func cellAlong(for edge: NotchEdge) -> CGFloat {
-        edge.isVertical ? cellExtent : ringDiameter
+    static func cellAlong(for edge: NotchEdge, ringGrowth: CGFloat = 0) -> CGFloat {
+        (edge.isVertical ? cellExtent : ringDiameter) + ringGrowth
     }
 
     /// Ring centre to ring centre.
@@ -306,21 +324,18 @@ enum NotchLayout {
     /// else on the stack at all.
     static func ringCenter(index: Int, edge: NotchEdge = .right,
                            flare: CGFloat = curlRadius,
-                           spacing: CGFloat = cellSpacing,
-                           cellScale: CGFloat = 1) -> CGFloat {
-        let along = cellAlong(for: edge) * cellScale
-        return flare + padStart(for: edge) + (ringDiameter * cellScale) / 2
-            + CGFloat(index) * (along + spacing)
+                           spacing: CGFloat = cellSpacing, ringGrowth: CGFloat = 0) -> CGFloat {
+        flare + padStart(for: edge) + (ringDiameter + ringGrowth) / 2
+            + CGFloat(index) * (cellAlong(for: edge, ringGrowth: ringGrowth) + spacing)
     }
 
     /// Height of the notch body for a given number of provider cells.
     static func bodyLength(cellCount: Int, edge: NotchEdge = .right,
-                           spacing: CGFloat = cellSpacing,
-                           cellScale: CGFloat = 1) -> CGFloat {
+                           spacing: CGFloat = cellSpacing, ringGrowth: CGFloat = 0) -> CGFloat {
         let start = padStart(for: edge), end = padEnd(for: edge)
         guard cellCount > 0 else { return start + end }
         return start
-            + CGFloat(cellCount) * cellAlong(for: edge) * cellScale
+            + CGFloat(cellCount) * cellAlong(for: edge, ringGrowth: ringGrowth)
             + CGFloat(cellCount - 1) * spacing
             + end
     }
@@ -342,8 +357,8 @@ enum NotchLayout {
     /// readings — which is exactly what made the top bar look too wide.
     static func shapeLength(cellCount: Int, edge: NotchEdge = .right,
                             flare: CGFloat = curlRadius,
-                            spacing: CGFloat = cellSpacing) -> CGFloat {
-        bodyLength(cellCount: cellCount, edge: edge, spacing: spacing) + 2 * flare
+                            spacing: CGFloat = cellSpacing, ringGrowth: CGFloat = 0) -> CGFloat {
+        bodyLength(cellCount: cellCount, edge: edge, spacing: spacing, ringGrowth: ringGrowth) + 2 * flare
     }
 
     /// The tooltip's height for a given number of limit windows and live
@@ -369,6 +384,7 @@ enum NotchLayout {
                            sessionCap: Int = defaultSessionCap,
                            statusMessage: String? = nil,
                            blockMessage: String? = nil,
+                           linked: Bool = false,
                            hasTokenUsage: Bool = false,
                            hasPlan: Bool = false,
                            hasResetCredits: Bool = false,
@@ -376,6 +392,7 @@ enum NotchLayout {
                            localLedgerRows: Int = 0,
                            compactRowCount: Int = 0,
                            showsDeepSeekPricing: Bool = true) -> CGFloat {
+        if linked { return cardHeight(windowCount: maxWindowCount) }
         let header = max(glyphSize, cardTitleLineHeight)
             + (hasPlan ? cardBodyLineHeight : 0)
         var height = 2 * cardPadding + header

@@ -1,3 +1,12 @@
+/**
+ @name: AntigravityProvider 本地化
+ @Descripttion: 提供模块功能及可本地化的用户文案。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 22:41:26
+ @LastEditTime: 2026-09-08 22:41:26
+ @FilePath: Sources/Providers/AntigravityProvider.swift
+ */
 import Foundation
 import SQLite3
 import os
@@ -84,8 +93,8 @@ actor AntigravityProvider: UsageProvider {
                 manageURL: URL(string: "https://antigravity.google")
             )
         }
-        
-        if profile.slug == nil && UserDefaults.standard.bool(forKey: "AntigravityEverBridged") {
+
+        if UserDefaults.standard.bool(forKey: "AntigravityEverBridged") {
             return ProviderAccount(
                 label: L10n.t("Local Session"),
                 plan: L10n.t("Active"),
@@ -93,7 +102,7 @@ actor AntigravityProvider: UsageProvider {
                 manageURL: nil
             )
         }
-        
+
         return nil
     }
 
@@ -108,16 +117,15 @@ actor AntigravityProvider: UsageProvider {
         // not need: someone who dismissed the keychain prompt got `accessDenied`
         // and an empty ring, while the server that would have answered sat
         // running on the same machine, never asked.
-        if profile.slug == nil {
-            if let windows = await localQuota(), !windows.isEmpty {
-                everBridged = true
-                UserDefaults.standard.set(true, forKey: "AntigravityEverBridged")
-                
-                return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph,
-                                        fidelity: .official, status: .ok, windows: windows,
-                                        headlineID: resolveHeadlineID(for: windows),
-                                        weeklyID: resolveWeeklyID(for: windows))
-            }
+        if let windows = await localQuota(), !windows.isEmpty {
+            everBridged = true
+            UserDefaults.standard.set(true, forKey: "AntigravityEverBridged")
+
+            return ProviderSnapshot(id: id, displayName: displayName, glyph: glyph,
+                                    fidelity: .official, status: .ok, windows: windows,
+                                    headlineID: resolveHeadlineID(for: windows),
+                                    weeklyID: resolveWeeklyID(for: windows))
+        }
 
             if localQuotaOverride != nil && everBridged {
                 throw UsageProviderError.credentialExpired

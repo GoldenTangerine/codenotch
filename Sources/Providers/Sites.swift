@@ -1,3 +1,12 @@
+/**
+ @name: 上游同步模块
+ @Descripttion: 维护 Sites.swift 的项目实现与上游兼容。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-11 15:51:14
+ @LastEditTime: 2026-09-11 15:51:14
+ @FilePath: Sources/Providers/Sites.swift
+ */
 import Foundation
 
 /// The site-specific halves of `WebSessionProvider`.
@@ -256,13 +265,6 @@ enum Sites {
         // maps this plan page to `analytics/token-plan/individual` — the
         // default `origin/usage` answers 404 here.
         managePath: "home/analytics/token-plan/individual",
-        // Role declarations, not the plan's period: "week" is the id of the one
-        // allowance the Token Plan reports, and a monthly plan reports through
-        // the same window (see `QianwenUsage`). Consumers resolve by id
-        // (`ProviderSnapshot.headline`, `weeklyLimitWindow`/`weeklyWindow`), so
-        // renaming this to match a period would resolve to nothing and draw an
-        // empty ring. The same id in both means the notch draws one ring for
-        // the one allowance rather than the same fact twice.
         headlineID: "week",
         weeklyID: "week",
         parse: { try QianwenUsage.windows(fromJSON: $0) }
@@ -273,25 +275,31 @@ enum Sites {
     /// remains is a www host, so the fetch is absolute and sign-out has to
     /// clear that host as well as the platform one.
     static func minimax(region: MiniMaxRegion) -> WebSessionProvider.Site {
-        let remains = region.remainsURL.absoluteString
-        // Absolute www URL: a relative path would be resolved against the
-        // platform origin the WebView is sitting on, which does not serve
-        // remains. 1004 is MiniMax's missing-cookie code and often rides
+        let usesSameOrigin = region == .international
+        let remains = usesSameOrigin ? region.remainsURL.path : region.remainsURL.absoluteString
+        // China uses the absolute www URL from its platform origin. International
+        // loads www before polling, because its credentialed cross-origin response
+        // uses a wildcard CORS origin; the relative path is same-origin there.
+        // 1004 is MiniMax's missing-cookie code and often rides
         // under HTTP 200, so the envelope has to become 401 or the session
         // stays signed in.
         let readRemains = """
         const response = await fetch('\(remains)', {
-            credentials: 'include',
+            credentials: '\(usesSameOrigin ? "same-origin" : "include")',
             headers: { 'Accept': 'application/json' }
         });
         let status = response.status;
         const body = await response.text();
         try {
             const parsed = JSON.parse(body);
-            const resp = (parsed && parsed.base_resp)
-                || (parsed && parsed.data && parsed.data.base_resp);
-            const code = resp && resp.status_code;
-            if (status === 1004 || Number(code) === 1004) status = 401;
+            const codes = [
+                parsed && parsed.status_code,
+                parsed && parsed.base_resp && parsed.base_resp.status_code,
+                parsed && parsed.data && parsed.data.base_resp && parsed.data.base_resp.status_code
+            ].map(Number);
+            if (status === 429 || codes.includes(429) || codes.includes(2045)) status = 429;
+            else if (status === 1004 || codes.includes(1004)
+                || codes.includes(401) || codes.includes(403)) status = 401;
         } catch (_) {}
         """
         return WebSessionProvider.Site(
@@ -323,6 +331,16 @@ enum Sites {
                 return JSON.stringify({ authenticated: true, fingerprint });
             } catch (_) { return JSON.stringify({ authenticated: false }); }
             """,
+            requestOrigin: usesSameOrigin ? region.websiteOrigin : nil,
+            authFingerprintScript: usesSameOrigin ? """
+            try {
+                const session = localStorage.getItem('access_token');
+                if (!session) return null;
+                const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(session));
+                return Array.from(new Uint8Array(digest))
+                    .map(byte => byte.toString(16).padStart(2, '0')).join('');
+            } catch (_) { return null; }
+            """ : nil,
             associatedHosts: [region.remainsURL.host].compactMap { $0 },
             parse: { try MiniMaxUsage.windows(fromJSON: $0) }
         )

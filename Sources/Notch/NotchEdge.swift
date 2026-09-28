@@ -1,3 +1,12 @@
+/**
+ @name: 显示栏边缘
+ @Descripttion: 定义显示栏朝向与提示卡方向。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-09-08 14:12:37
+ @LastEditTime: 2026-09-08 14:12:37
+ @FilePath: Sources/Notch/NotchEdge.swift
+ */
 import Foundation
 
 /// Which screen edge the notch is welded to.
@@ -7,7 +16,7 @@ import Foundation
 /// the original vertical column. Top and bottom turn the stack on its side —
 /// four cells stacked vertically make the notch 401pt long, and hanging that off
 /// the menu bar would reach a quarter of the way down the screen.
-enum NotchEdge: String, CaseIterable, Identifiable {
+enum NotchEdge: String, CaseIterable, Identifiable, Codable {
     case right
     case left
     case top

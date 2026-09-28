@@ -1,6 +1,15 @@
+<!--
+@name: 项目构建与文档
+@Descripttion: 维护 README.md 的项目实现与上游兼容。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-11 15:51:14
+@LastEditTime: 2026-09-11 15:51:14
+@FilePath: windows/README.md
+-->
 # Codenotch for Windows
 
-A Windows port of [Codenotch](https://github.com/vinzdg/codenotch) — the usage notch that
+A Windows port of [Codenotch](https://github.com/GoldenTangerine/codenotch) — the usage notch that
 sits on the edge of your screen and answers two questions at a glance:
 **how much of my AI allowance is left**, and **is Claude still working**.
 
@@ -17,7 +26,6 @@ documented behaviour and the wire formats.
 | **Codex** | The local Codex sign-in in `~/.codex/auth.json` (read only, never refreshed), falling back to the newest session snapshot | Live primary/secondary windows (5h + weekly on paid plans, a monthly window on free) while Codex is signed in; Spark and Code review appear on the hover card when Codex reports them; otherwise the last snapshot, marked stale by its own timestamp. |
 | **Cursor** | The editor's own session from `state.vscdb` → `cursor.com/api/usage-summary` | Included usage / API usage / on-demand, reset at billing-cycle end. Nothing to sign into: it borrows the editor's session, so there is only ever one account. |
 | **Grok** | The Grok CLI's own session in `~/.grok/auth.json` (read only, never refreshed) → `cli-chat-proxy.grok.com/v1/billing?format=credits`, the endpoint that CLI's own `/usage` asks | The weekly Grok Build allowance, with the account on the hover card. Only a session minted by `auth.x.ai` is used — the file can also hold a customer IdP token meant for that customer's private proxy. A fresh weekly period reads 0 %, not "unmetered". |
-| **OpenCode** | OpenCode's own sign-in, read only: the `opencode-go` key in `~/.local/share/opencode/auth.json` → `opencode.ai/zen/go/v1/usage`, or — since OpenCode 1.18 — the OAuth sign-in in `opencode.db` (`credential` table) → `opencode.ai/inference/go/v1/usage` | The Go plan's 5-hour, weekly and monthly windows. A sign-in without a Go plan shows "No OpenCode Go subscription" instead of a ring; Zen pay-as-you-go credit has no balance or usage API, so it is not shown. |
 | **Antigravity** | Official `agy` CLI `/usage` print when installed; otherwise the existing local `language_server` bridge, Google Cloud Code API, or transcript model count | Official four quota rows (Gemini & Claude/GPT 5h/weekly) without running the full IDE. When CLI is absent, falls back to legacy local bridge/API. |
 | **OpenCode Go** | `GET https://opencode.ai/zen/go/v1/usage` | Reads the `opencode-go` key in OpenCode's `auth.json`, or `OPENCODE_APIKEY` when set. The environment key takes precedence. Shows rolling 5-hour, weekly and monthly usage. This is a separate subscription from the Z.ai GLM Coding Plan; its key must not be sent to Z.ai's monitor endpoint. |
 
@@ -93,44 +101,10 @@ shows an error or the last reading marked stale. Codenotch does not automate sig
 
 ## Install / build
 
-Download [`Codenotch-Setup.exe`](https://github.com/vinzdg/codenotch/releases/latest/download/Codenotch-Setup.exe)
-from the latest release. It installs for the current user without administrator rights, puts
-`codenotch-hook.exe` beside the app where **Install hooks** looks for it, and fetches WebView2 if
-Windows does not already have it. The installer is not code-signed, so SmartScreen stops it the
-first time with *Windows protected your PC*: choose **More info**, then **Run anyway**.
+This fork provides Windows source and an optional NSIS installer configuration.
+Its release workflow currently publishes the macOS DMG only.
 
-### Updates
-
-Codenotch looks for a newer release about twenty seconds after it starts, and again whenever
-**Check for updates** is pressed in Settings → General. The feed is `latest.json` on the newest
-release, written by the Windows Package workflow beside the installer it describes, so publishing
-a release is the whole of shipping an update.
-
-Nothing about this nags. A check that fails — no network, an unreachable feed — leaves the app
-as it was and says so only next to the version. There is no dialogue and no badge.
-
-The download is a minisign-signed archive, and the signature is checked against the public key in
-`tauri.conf.json` before anything is run. This is what stands in for code signing here: the
-installer itself is unsigned, so SmartScreen still warns on a first manual install, but an update
-delivered to an already-installed copy is verified.
-
-Before the first signed release, the key has to exist:
-
-```powershell
-npx --yes @tauri-apps/cli@2.11.4 signer generate -w $env:USERPROFILE\.tauri\codenotch.key
-```
-
-Put the **private** key in the repository secret `TAURI_SIGNING_PRIVATE_KEY` and its password in
-`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, and paste the **public** key into `plugins.updater.pubkey`
-in `codenotch/tauri.conf.json`, replacing `REPLACE_WITH_TAURI_PUBLIC_KEY`. Until that is done the
-app skips the check entirely rather than reporting a failure nobody can act on; the packaging job
-builds an ordinary installer and warns that it made no feed, and a `v*` release fails loudly rather
-than going out with an update path nobody can use.
-
-Keep the private key. Losing it means no installed copy can be updated again, because every one of
-them checks against the public key it shipped with — they would all have to reinstall by hand.
-
-To build from source instead — prerequisites: Rust (MSVC toolchain), WebView2 runtime (ships with Windows 11).
+Build prerequisites: Rust (MSVC toolchain), WebView2 runtime (ships with Windows 11).
 
 ```powershell
 # from this directory (the repo root here; `windows/` inside the upstream repo)
@@ -139,7 +113,7 @@ cargo build --release
 .\target\release\codenotch.exe doctor   # self-diagnosis: credentials, data sources, icons, hooks
 ```
 
-To build the installer the way the Windows Package workflow does:
+To build the installer locally:
 
 ```powershell
 # the hook gets its own target dir, so the bundler never copies it onto itself
@@ -156,15 +130,14 @@ notch shows, its size, the weekly ring, which screen edge it sits on and which s
 start with Windows, the language, Claude Code hooks, reset
 position, and the data folder (`%APPDATA%\codenotch` — logs, persisted readings, icon overrides).
 
-Notch: clicking a ring re-reads that provider, as on the Mac. Right-clicking the notch or its card
-offers **Refresh now**, the provider's usage page (**Open claude.ai**, **Open chatgpt.com**, …) and
-**Quit Codenotch**. Neither click, nor the tray, asks Claude again while its rate-limit wait runs.
+When sign-in or refresh fails, the menu shows the reason alongside any historical readings.
+The icon, menu and hover text share one snapshot per provider on a two-second refresh cycle;
+native updates occur only when their displayed content changes, including secondary limits
+and reset times.
 
 ### Where the notch sits
 
-The notch pins to one edge of one screen. The arc above the pill carries it: hold it, and the four
-places it can go are outlined on the screen; release on one and the notch lands there, centred.
-**Appearance → Show move handle** hides that arc. **Appearance → Edge** picks left, right, top or bottom:
+The notch pins to one edge of one screen. **Appearance → Edge** picks left, right, top or bottom:
 it stands upright on the left and right edges with the hover card opening sideways, and lies flat
 on the top and bottom ones with the card opening below or above. **Appearance → Screen** appears
 once more than one monitor is attached.
@@ -174,21 +147,30 @@ of the screen it was dropped on — across monitors, and across a change of DPI 
 choice is stored as `notch_edge`, `notch_monitor` (the device name, e.g. `\\.\DISPLAY2`) and
 `notch_y` (the position along the edge, 0–1) in `config.json`. A monitor that is no longer
 attached falls back to the primary one, so unplugging a screen cannot strand the notch off-screen;
-**Recentre** centres it on the edge it is on, or on the primary screen's right-hand edge when the screen it was on is gone.
+**Recentre** also puts it back on the primary screen's right-hand edge.
 
-Folded (**Appearance → Show → Show on hover**), the notch rests as a small pill at the edge, in
-**Theme**'s colour, with an edge that shows even against a backdrop of that colour.
-**Appearance → Adaptive pill**, off unless switched on, makes it follow what is behind it instead:
-light over a dark backdrop, black over a light one, the way the iPhone's home indicator does. To tell
-which, Codenotch reads a thin strip of the screen beside the pill twice a second while it is folded,
-and keeps only its average brightness, which is never stored or sent. With the switch off, the notch
-open, or Show set to Always show, nothing is read.
+Tray layouts include two numeric readings, one to five provider bars, or a plain app icon.
+Choose providers and preview the icon in Appearance; failed saves restore the previous selection.
+
+The page checks can run on macOS or Windows with Node.js:
+
+```sh
+node windows/scripts/check-ui-scripts.mjs
+node --test windows/scripts/upstream-sync.test.mjs
+```
+
+Run these from the repository root. The regression tests use a simulated DOM and
+Tauri bridge; Rust builds and real WebView2 interactions still need Windows verification.
+Ukrainian is supported in both settings and usage cards, including automatic language selection.
+Claude token renewal allows up to three attempts per expiry value during an app run, waiting
+10 and then 20 minutes between attempts. A changed expiry starts a new retry budget while
+retaining the cooldown.
 
 ### Icons
 
 Provider marks are the SVGs from [`@lobehub/icons-static-svg`](https://github.com/lobehub/lobe-icons)
 (MIT), embedded unmodified — see `codenotch/glyphs/NOTICE.md`. Drop your own
-`claude|codex|cursor|gemini.svg` (or `.png`) into `%APPDATA%\codenotch\glyphs\` to override.
+`claude|codex|cursor|grok|gemini.svg` (or `.png`) into `%APPDATA%\codenotch\glyphs\` to override.
 The marks remain the trademarks of their owners.
 
 ### Translations
@@ -198,22 +180,19 @@ Three surfaces draw their own text, so each keeps its own table:
 | Surface | Table | Languages today |
 |---|---|---|
 | Tray menu | `codenotch/src/i18n.rs` (`tr`), `codenotch/src/traymenu.rs` (`label`) | en · ru · zh · ja · ko · uk |
-| Hover card | `codenotch/ui/notch.html` (`TEXT`, `PATTERNS`, `UI`) | en · ru · zh |
-| Settings window | `codenotch/ui/settings.html` (`STATIC_TEXT`, `STATUS_TEXT`) | en · ru · zh · ja · ko |
+| Hover card | `codenotch/ui/notch.html` (`TEXT`, `PATTERNS`, `UI`) | en · ru · zh · uk |
+| Settings window | `codenotch/ui/settings.html` (`STATIC_TEXT`, `STATUS_TEXT`) | en · ru · zh · ja · ko · uk |
 
 Help is welcome on the gaps, which fall back to English rather than breaking anything:
 
-- the hover card has no Japanese, Korean or Ukrainian;
-- the settings window has no Ukrainian, although the tray menu and the language picker have had it
-  since Ukrainian was added;
+- the hover card has no Japanese or Korean;
 - Korean has none of the window names the Mac's catalog carries — `Current session`, `Weekly limit`,
   `Monthly limit`, `5-hour Limit`, `Included usage`, `API usage` — because the catalog has no Korean
   to take them from.
 
 Keys are the exact English string. A string the Mac also shows should be taken from
 `Sources/Localizable.xcstrings` rather than translated afresh, so both platforms word it the same
-way. One catalog feeding all three tables is the intended fix; until then a test in `traymenu.rs`
-fails if the menu and the card stop naming the same window.
+way. A test in `traymenu.rs` fails if the menu and the card stop naming the same window.
 
 ## Layout
 

@@ -1,3 +1,10 @@
+# @name: 构建与发布命令
+# @Descripttion: 提供本地构建、测试和 macOS 发布命令。
+# @version: 1.0.0
+# @Author: sm
+# @Date: 2026-09-08 13:45:00
+# @LastEditTime: 2026-09-08 13:45:00
+# @FilePath: Makefile
 # Only if the caller hasn't already chosen a toolchain (`$DEVELOPER_DIR`, or
 # `sudo xcode-select -s`) and the standard path actually exists — exporting a
 # path that isn't there breaks every target with `xcrun: missing DEVELOPER_DIR`
@@ -13,6 +20,22 @@ SCHEME  := Codenotch
 RESOLVED_PACKAGES := $(PROJECT)/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
 ARCH    ?= $(shell uname -m)
 DEST    ?= platform=macOS,arch=$(ARCH)
+
+# Debug ad-hoc signs itself when the maintainer's Developer ID certificate
+# isn't in the keychain, which is every machine but the maintainer's — so a
+# contributor can `make build`/`make test`/`make run` with no Apple account at
+# all, per CONTRIBUTING.md. On the maintainer's own machine this is empty and
+# changes nothing: project.yml's stable identity is what keeps a keychain
+# "Always Allow" grant alive across rebuilds, and forcing ad-hoc there would
+# throw that away and bring the prompt back on every `make run`.
+#
+# The count is 0 when the certificate is absent — grep -c prints a number
+# either way, so comparing against empty never fires.
+
+# Extra build-setting overrides for the release tooling: the tag-triggered
+# GitHub workflow passes MARKETING_VERSION and CURRENT_PROJECT_VERSION in from
+# the tag here, so the version lives in the tag rather than in project.yml.
+XC_FLAGS ?=
 
 # Debug signs itself when the maintainer's Developer ID certificate isn't in
 # the keychain, which is every machine but the maintainer's — so a contributor
@@ -47,10 +70,11 @@ DEV_TEAM := $(if $(DEV_IDENTITY),$(shell security find-certificate -c "$(DEV_IDE
 
 ifeq (,$(HAS_DEVELOPER_ID))
 ifeq (,$(DEV_TEAM))
-DEV_SIGN := CODE_SIGN_IDENTITY="-" DEVELOPMENT_TEAM="" CODE_SIGN_STYLE=Automatic
+# Ad-hoc builds have no Team ID to match Sparkle's upstream signature.
+DEV_SIGN := CODE_SIGN_IDENTITY="-" DEVELOPMENT_TEAM="" CODE_SIGN_STYLE=Automatic ENABLE_HARDENED_RUNTIME=NO
 else
 DEV_SIGN := CODE_SIGN_IDENTITY="Apple Development" CODE_SIGN_STYLE=Manual \
-	DEVELOPMENT_TEAM="$(DEV_TEAM)" PROVISIONING_PROFILE_SPECIFIER=""
+	DEVELOPMENT_TEAM="$(DEV_TEAM)" PROVISIONING_PROFILE_SPECIFIER="" ENABLE_HARDENED_RUNTIME=NO
 endif
 endif
 
@@ -148,7 +172,7 @@ archive: gen
 	@# real one in /Applications. This stops the whole tree being indexed.
 	@touch build/.metadata_never_index
 	xcodebuild -project $(PROJECT) -scheme $(SCHEME) -destination '$(DEST)' \
-		-configuration Release -archivePath $(RELEASE_DIR)/$(APP_NAME).xcarchive archive
+		-configuration Release -archivePath $(RELEASE_DIR)/$(APP_NAME).xcarchive $(XC_FLAGS) archive
 	printf '%s\n' \
 		'<?xml version="1.0" encoding="UTF-8"?>' \
 		'<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
@@ -209,7 +233,8 @@ SPARKLE_BIN = $(shell dirname $$(find $$HOME/Library/Developer/Xcode/DerivedData
 PAGES_DIR := site
 # Where the dmg actually sits. The enclosure URL the appcast advertises has to
 # match it exactly, or an update downloads and then fails to verify.
-DOWNLOAD_PREFIX := https://hivinz.com/
+# Releases serve immutable versioned downloads; site remains the legacy mirror.
+DOWNLOAD_PREFIX = https://github.com/GoldenTangerine/codenotch/releases/download/$(TAG)/
 
 appcast: $(DMG)
 	@test -n "$(SPARKLE_BIN)" || (echo "Sparkle tools not found — run make build first" && exit 1)
@@ -222,7 +247,7 @@ appcast: $(DMG)
 	rm -f $(PAGES_DIR)/appcast.xml
 	cp $(DMG) $(PAGES_DIR)/
 	$(SPARKLE_BIN)/generate_appcast $(PAGES_DIR) --download-url-prefix $(DOWNLOAD_PREFIX)
-	@echo "Publish by committing $(PAGES_DIR)/ and pushing."
+	@echo "Upload the appcast and DMG together with make publish TAG=$(TAG)."
 
 release: notarize verify-release appcast
 	@echo "Notarized: $(DMG)"
@@ -239,12 +264,13 @@ release: notarize verify-release appcast
 VERSION := $(shell awk -F'"' '/MARKETING_VERSION:/ {print $$2}' project.yml)
 TAG     ?= v$(VERSION)
 
-publish: $(DMG)
+publish: appcast
 	@test -n "$(VERSION)" || (echo "No MARKETING_VERSION in project.yml" && exit 1)
 	@# --clobber so re-running after a rebuild replaces the asset instead of
 	@# failing on the name already being taken.
-	gh release upload $(TAG) $(DMG) --clobber
-	@echo "Attached $(DMG) to $(TAG)."
+	gh release upload "$(TAG)" "$(DMG)" "$(PAGES_DIR)/appcast.xml" --repo GoldenTangerine/codenotch --clobber
+	python3 Scripts/promote-release.py "$(TAG)"
+	@echo "Attached $(DMG) and appcast.xml to $(TAG)."
 
 # What Gatekeeper on a customer's Mac will check. `spctl` accepting the app is
 # the actual proof that the download will open without a right-click.
@@ -348,21 +374,10 @@ dmg-ci: build-ci
 	rm -rf $(CI_DIR)/stage
 	mkdir -p $(CI_DIR)/stage
 	cp -R $(CI_APP) $(CI_DIR)/stage/
+	ln -s /Applications $(CI_DIR)/stage/Applications
 	for i in 1 2 3; do \
-		rm -f $(CI_DMG); \
-		rm -f $(CI_DIR)/rw.*.dmg; \
-		hdiutil detach "/Volumes/$(APP_NAME)" -force 2>/dev/null || true; \
-		create-dmg \
-			--volname "$(APP_NAME)" \
-			--window-pos 400 300 \
-			--window-size 604 404 \
-			--icon-size 128 \
-			--icon "$(APP_NAME).app" 150 200 \
-			--app-drop-link 450 200 \
-			--hide-extension "$(APP_NAME).app" \
-			--background "docs/design/dmg-background.png" \
-			--skip-jenkins \
-			$(CI_DMG) $(CI_DIR)/stage && break || sleep 2; \
+		hdiutil create -volname "$(APP_NAME)" -srcfolder $(CI_DIR)/stage \
+			-ov -format UDZO $(CI_DMG) && break || sleep 2; \
 	done
 	rm -rf $(CI_DIR)/stage
 	@echo "Unsigned disk image: $(CI_DMG)"

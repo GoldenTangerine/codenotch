@@ -1,3 +1,12 @@
+<!--
+@name: 上游同步 · phone-link-protocol
+@Descripttion: 保留上游功能实现并兼容本地扩展。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-09-14 09:43:04
+@LastEditTime: 2026-09-14 09:43:04
+@FilePath: docs/phone-link-protocol.md
+-->
 # Codenotch Phone Link — protocol v2
 
 The contract between desktop Codenotch (macOS, Swift) and the Codenotch phone
