@@ -950,6 +950,74 @@ fn set_scale(app: AppHandle, scale: f64) -> f64 {
     value
 }
 
+/// The saved choice as a window theme. `None` means follow Windows.
+pub fn theme_choice(app: &AppHandle) -> Option<tauri::Theme> {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    match c.theme.as_str() {
+        "light" => Some(tauri::Theme::Light),
+        "dark" => Some(tauri::Theme::Dark),
+        _ => None,
+    }
+}
+
+/// Set the page attribute before WebView2 paints its first frame.
+pub fn theme_script(theme: &str) -> String {
+    format!(
+        "window.__CN_THEME__={theme:?};(function a(){{const d=document.documentElement;if(d){{d.dataset.theme=window.__CN_THEME__;}}else{{document.addEventListener('readystatechange',a,{{once:true}});}}}})();"
+    )
+}
+
+pub fn resolved_theme(app: &AppHandle) -> &'static str {
+    match theme_choice(app) {
+        Some(tauri::Theme::Light) => "light",
+        Some(tauri::Theme::Dark) => "dark",
+        _ => match app.get_webview_window("notch").and_then(|w| w.theme().ok()) {
+            Some(tauri::Theme::Light) => "light",
+            _ => "dark",
+        },
+    }
+}
+
+#[tauri::command]
+fn get_theme_resolved(app: AppHandle) -> String {
+    resolved_theme(&app).to_string()
+}
+
+pub fn apply_theme(app: &AppHandle) {
+    let theme = theme_choice(app);
+    for label in ["notch", "settings", dropzones::LABEL] {
+        if let Some(w) = app.get_webview_window(label) {
+            let _ = w.set_theme(theme);
+        }
+    }
+    settings_window::follow_theme(app, theme);
+    let _ = app.emit("theme_resolved", resolved_theme(app));
+}
+
+#[tauri::command]
+fn get_theme(app: AppHandle) -> String {
+    let st = app.state::<AppState>();
+    let c = st.cfg.lock().unwrap();
+    c.theme.clone()
+}
+
+#[tauri::command]
+fn set_theme(app: AppHandle, theme: String) -> String {
+    let value = {
+        let st = app.state::<AppState>();
+        let mut c = st.cfg.lock().unwrap();
+        if ["system", "light", "dark"].contains(&theme.as_str()) {
+            c.theme = theme;
+            config::save(&c);
+        }
+        c.theme.clone()
+    };
+    apply_theme(&app);
+    let _ = app.emit("theme", &value);
+    value
+}
+
 /// Where the weekly limit's ring sits, if it is drawn at all.
 #[tauri::command]
 fn get_weekly_ring(app: AppHandle) -> String {
@@ -1662,6 +1730,9 @@ fn main() {
             set_lang,
             get_scale,
             set_scale,
+            get_theme,
+            set_theme,
+            get_theme_resolved,
             get_weekly_ring,
             set_weekly_ring,
             get_tray_options,
@@ -1691,6 +1762,7 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
             place_notch(&handle);
+            apply_theme(&handle);
             if let Some(w) = handle.get_webview_window("notch") {
                 let _ = w.show();
             }

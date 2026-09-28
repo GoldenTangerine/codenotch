@@ -12,19 +12,48 @@
 <head>
 <meta charset="UTF-8">
 <style>
+  /* The palette. Dark is the notch as it has always been drawn; light is the same shapes in the
+     inks Settings already uses, plus the Mac's own light secondary (#6b6b6b, Palette.textSecondary).
+     Which of the two is drawn is Rust's answer to get_theme_resolved, never a guess made here. */
+  :root{
+    --pill:#000; --edge:#2e2e2e; --rest-edge:#5c5c5c; --card:#0a0a0a; --card-line:#242424; --card-rule:#1e1e1e;
+    --bar:#2d2d2d; --track:#303030; --hole:#2a2a2a;
+    --ample:#00FF88; --watch:#F2FF00; --crit:#FF3F00;
+    --ink:#ffffff; --ink-2:#e8e8ea; --ink-3:#c8c8c8; --ink-4:#b0b0b3; --ink-dim:#808080;
+    --btn:#252525; --btn-line:#555; --btn-hover:#383838; --btn-line-hover:#aaa;
+    --armed:rgba(0,0,0,.72);
+  }
+  /* Rust resolves the choice — Light, Dark, or what Windows is set to — and the page is told, rather
+     than reading prefers-color-scheme: correcting a live window's theme does not reliably reach
+     WebView2's own scheme, which left a dark page under a light Mica. */
+  :root[data-theme="light"]{
+    --pill:#f5f5f7; --edge:#d2d2d7; --rest-edge:#86868b; --card:#ffffff; --card-line:#e4e4e8; --card-rule:#e8e8ec;
+    --bar:rgba(0,0,0,.15); --track:rgba(0,0,0,.16); --hole:#ffffff;
+    /* Palette.ample and .watch carry a light value of their own; .critical is "already 3.5:1 on
+       white", in its words, so it is the one band that does not change. */
+    --ample:#00A356; --watch:#B08800; --crit:#FF3F00;
+    --ink:#1d1d1f; --ink-2:#1d1d1f; --ink-3:#3c3c43; --ink-4:#4a4a4f; --ink-dim:#6b6b6b;
+    --btn:#ffffff; --btn-line:#c6c6cc; --btn-hover:#f0f0f2; --btn-line-hover:#8e8e93;
+    --armed:rgba(255,255,255,.78);
+  }
+  .c-auth{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .c-auth button{font:inherit;font-size:11px;color:var(--ink);background:var(--btn);border:1px solid var(--btn-line);border-radius:7px;padding:6px 9px;cursor:pointer}
+  .c-auth button:hover,.c-auth button:focus-visible{background:var(--btn-hover);border-color:var(--btn-line-hover)}
+  .c-auth button:disabled{opacity:.5;cursor:wait}
+  .c-auth-status{font-size:10px;line-height:1.4;color:var(--ink-3);margin-top:6px;overflow-wrap:anywhere}
   /* Visual reference: upstream docs/specs/2026-08-28-usage-notch-design.md, reproduced for Windows */
   *{box-sizing:border-box} /* content-box padding once pushed the card past the window's left edge */
   html,body{margin:0;padding:0;width:100%;height:100%;background:transparent;overflow:hidden;user-select:none}
-  body{font-family:"Segoe UI",system-ui,sans-serif;color:#fff}
+  body{font-family:"Segoe UI",system-ui,sans-serif;color:var(--ink)}
   #root{position:relative;width:100%;height:100%}
 
   /* The pill on the right edge */
   #pill{
     position:absolute;right:0;top:50%;transform:translateY(-50%);
-    width:70px;padding:18px 0;background:#000;
+    width:70px;padding:18px 0;background:var(--pill);
     border-radius:20px 0 0 20px;
     /* Stays visible on dark wallpapers: a thin stroke plus a faint glow, the only outline when black sits on black */
-    border:1px solid #2e2e2e;border-right:none;
+    border:1px solid var(--edge);border-right:none;
     box-shadow:none;
     display:flex;flex-direction:column;align-items:center;gap:14px;cursor:pointer;
   }
@@ -35,33 +64,46 @@
   #pill::before,#pill::after{
     content:"";position:absolute;right:0;width:var(--fillet);height:var(--fillet);pointer-events:none;
   }
-  #pill{--fillet:26px}
+  /* The Mac's flare radius (38.7 pt against the same 70 pt body), so the settings orb that nests in
+     this pocket can be the Mac's own size */
+  #pill{--fillet:38.7px}
   #pill::before{
     top:calc(-1 * var(--fillet)); /* covers the 1 px stroke along the pill's top edge so there is no seam */
-    background:radial-gradient(circle at 0 0, transparent calc(var(--fillet) - 1.5px), #2e2e2e calc(var(--fillet) - 0.5px), #000 calc(var(--fillet) + 0.5px));
+    background:radial-gradient(circle at 0 0, transparent calc(var(--fillet) - 1.5px), var(--edge) calc(var(--fillet) - 0.5px), var(--pill) calc(var(--fillet) + 0.5px));
   }
   #pill::after{
     bottom:calc(-1 * var(--fillet));
-    background:radial-gradient(circle at 0 100%, transparent calc(var(--fillet) - 1.5px), #2e2e2e calc(var(--fillet) - 0.5px), #000 calc(var(--fillet) + 0.5px));
+    background:radial-gradient(circle at 0 100%, transparent calc(var(--fillet) - 1.5px), var(--edge) calc(var(--fillet) - 0.5px), var(--pill) calc(var(--fillet) + 0.5px));
   }
   .cell{display:flex;flex-direction:column;align-items:center;gap:6px}
-  .ringwrap{position:relative;width:56px;height:56px}
-  .ringwrap > svg.ring{position:absolute;inset:0;overflow:visible} /* pins only the ring itself; an inline logo svg must not match this or it ends up in the top-left corner */
+  /* The ring takes the Mac's own share of the body, NotchLayout.ringDiameter against sideBodyDepth: 44 in
+     70. At 56 it left an outside weekly ring 2.8 px from the screen edge, where the Mac keeps it about 10
+     clear ("far enough in that the bezel is never touched"). The arcs are drawn in a 56-unit viewBox and
+     scale with the ring on their own; the glyphs are sized here in px, so they take the same factor. */
+  :root{--ring:44px;--k:calc(44 / 56)}
+  .ringwrap{position:relative;width:var(--ring);height:var(--ring);transition:transform .3s cubic-bezier(.34,1.4,.64,1)}
+  .ringwrap.pressed{transform:scale(.93)}
+  .ringwrap > svg.ring,.ringwrap > svg.reading,.ringwrap > svg.activity{position:absolute;inset:0;overflow:visible} /* pins only the ring itself; an inline logo svg must not match this or it ends up in the top-left corner */
   .glyph{
     position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
-    font-size:20px;font-weight:700;color:#e8e8ea;letter-spacing:-.5px;
+    font-size:calc(20px * var(--k));font-weight:700;color:var(--ink-2);letter-spacing:-.5px;
   }
-  .glyph.small{font-size:15px}
+  .glyph.small{font-size:calc(15px * var(--k))}
   /* Glyphs: mark = the provider's own brand mark (monochrome, shown white); appicon = the installed app's icon (colour, rounded and shrunk) */
   .glyph img,.glyph svg{display:block;pointer-events:none;user-select:none}
-  .glyph .mark{display:block;width:26px;height:26px;color:#e8e8ea}
-  .glyph .mark svg{width:26px;height:26px;fill:currentColor} /* inline SVG follows currentColor, so it dims together with the cell */
-  .glyph img.png{width:26px;height:26px;object-fit:contain}
-  .glyph img.appicon{width:30px;height:30px;border-radius:8px;object-fit:cover}
-  .c-head .mark{display:inline-block;width:16px;height:16px;color:#e8e8ea;margin-right:2px}
+  .glyph .mark{display:block;width:calc(26px * var(--k));height:calc(26px * var(--k));color:var(--ink-2)}
+  .glyph .mark svg{width:calc(26px * var(--k));height:calc(26px * var(--k));fill:currentColor} /* inline SVG follows currentColor, so it dims together with the cell */
+  .glyph img.png{width:calc(26px * var(--k));height:calc(26px * var(--k));object-fit:contain}
+  .glyph img.appicon{width:calc(30px * var(--k));height:calc(30px * var(--k));border-radius:calc(8px * var(--k));object-fit:cover}
+  .c-head .mark{display:inline-block;width:16px;height:16px;color:var(--ink-2);margin-right:2px}
   .c-head .mark svg{width:16px;height:16px;fill:currentColor}
-  .pct{font-size:15px;font-weight:600;color:#fff;font-variant-numeric:tabular-nums}
+  .pct{font-size:15px;font-weight:600;color:var(--ink);font-variant-numeric:tabular-nums}
   .dim{opacity:.55}
+  /* A stale reading dims the reading only. The track, the week and the glyph are all saying the same
+     old thing, but whether an agent is running right now is current either way, so the activity arc
+     keeps its strength — the Mac puts its own ActivityArc outside the opacity it gives the stale
+     stack (ProviderRing), and TASKS.md says it outright: dimming applies to the usage reading. */
+  .ringwrap.stale > svg.ring,.ringwrap.stale > svg.reading,.ringwrap.stale > .glyph{opacity:.55}
   /* Session arc animation */
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
@@ -78,9 +120,9 @@
     /* Anchored on both sides = fluid width: whatever the WebView's real logical width, the card cannot
        extend past the window's left edge (a fixed max-width got clipped when the DPI disagreed).
        The 246 cap matches the upstream spec. */
-    max-width:246px;margin-left:auto;background:#0a0a0a;border-radius:16px;padding:16px;
+    max-width:246px;margin-left:auto;background:var(--card);border-radius:16px;padding:16px;
     overflow-wrap:anywhere;min-width:0;
-    max-height:calc(100% - 16px);overflow:hidden; /* never taller than the window, however short it is */
+    max-height:calc(100% - 16px);overflow-x:hidden;overflow-y:auto;scrollbar-width:thin; /* actions stay reachable in a tall card */
     display:none;
   }
   #card.show{display:block}
@@ -95,12 +137,12 @@
   #card.show + #tail{display:block}
   .c-head{display:flex;align-items:center;gap:8px;margin-bottom:4px}
   .c-title{font-size:14px;font-weight:700}
-  .c-sub{font-size:11px;color:#808080;margin-bottom:10px}
+  .c-sub{font-size:11px;color:var(--ink-dim);margin-bottom:10px}
   .win{margin-top:10px}
   .w-row{display:flex;justify-content:space-between;align-items:baseline;font-size:12px;flex-wrap:wrap;column-gap:8px}
-  .w-label{color:#e8e8ea;font-weight:600;white-space:nowrap}
-  .w-reset{color:#808080;font-size:11px;white-space:nowrap;margin-left:auto} /* wrap as a whole when it does not fit; never break inside a word */
-  .w-track{height:4px;border-radius:2px;background:#2d2d2d;margin:6px 0 4px;overflow:hidden}
+  .w-label{color:var(--ink-2);font-weight:600;white-space:nowrap}
+  .w-reset{color:var(--ink-dim);font-size:11px;white-space:nowrap;margin-left:auto} /* wrap as a whole when it does not fit; never break inside a word */
+  .w-track{height:4px;border-radius:2px;background:var(--bar);margin:6px 0 4px;overflow:hidden}
   .w-fill{height:100%;border-radius:2px}
   .w-used{font-size:11px;color:#808080}
   .g-head{font-size:12px;font-weight:700;color:#e8e8ea;margin-top:12px}
@@ -159,6 +201,7 @@
   <div id="card"></div>
   <div id="tail"></div>
   <div id="pill"></div><!-- one .cell per provider, stacked vertically (upstream: data-driven, the same layout for 1–5 cells) -->
+  <div id="rest"></div><!-- after the pill, so its outline is drawn over the clipped pill -->
   <div id="notice"></div>
 </div>
 <script>
@@ -166,10 +209,27 @@ const invoke = window.__TAURI__.core.invoke;
 const listen = window.__TAURI__.event.listen;
 
 /* Colour ramp (upstream palette values) */
-const AMPLE='#00FF88', WATCH='#F2FF00', CRIT='#FF3F00';
+let AMPLE='#00FF88', WATCH='#F2FF00', CRIT='#FF3F00';
 // The status arc is neutral on purpose: the ring behind it is coloured by how much of the limit
 // is gone, and a green arc inside it reads as part of that scale. Waiting borrows the warning yellow.
-const TRACK='#303030', INK='#ffffff', DIM='#808080';
+let TRACK='#303030', INK='#ffffff', DIM='#808080', HOLE='#2a2a2a';
+// SVG attributes and inline styles do not resolve CSS custom properties, so read the active palette
+// back before drawing rings and provider dots.
+function readPalette(){
+  const s=getComputedStyle(document.documentElement);
+  const v=(name,fallback)=>s.getPropertyValue(name).trim()||fallback;
+  TRACK=v('--track',TRACK); INK=v('--ink',INK); DIM=v('--ink-dim',DIM); HOLE=v('--hole',HOLE);
+  AMPLE=v('--ample',AMPLE); WATCH=v('--watch',WATCH); CRIT=v('--crit',CRIT);
+}
+readPalette();
+function applyTheme(name){
+  document.documentElement.dataset.theme = name === 'light' ? 'light' : 'dark';
+  readPalette();
+  renderRing();
+  if(card&&card.classList.contains('show')) renderCard();
+}
+invoke('get_theme_resolved').then(applyTheme).catch(()=>{});
+listen('theme_resolved',e=>applyTheme(e.payload)).catch(()=>{});
 const tone=f=> f>=0.8?CRIT : f>=0.5?WATCH : AMPLE;
 // Whole percents, except where rounding would read as nothing used or nothing left, as the Mac's Percent does
 function smallPct(v){
@@ -253,6 +313,10 @@ const RU_TEXT={
 /* Which screen edge the notch is pinned to. Rust owns it (it is what placed the window); the page is
    told so it can mirror or rotate itself to match. 'right' is the default and the pre-edge layout. */
 let notchEdge='right';
+// Kept in sync with the resolved Rust locale; the fallback also lets the
+// formatter tests evaluate this block without a WebView-provided state object.
+let uiLang='en';
+let folded=false;
 function edgeIsVertical(){ return notchEdge==='left'||notchEdge==='right'; }
 function applyEdge(e){
   const next=(e==='left'||e==='top'||e==='bottom')?e:'right';
@@ -370,6 +434,25 @@ const TEXT={
     'needs your input':'等待你的输入',
     'Working in':'工作于',
   },
+  ko:{
+    'Included usage':'포함 사용량','API usage':'API 사용량','On demand':'온디맨드','Usage':'사용량',
+    'Current session':'현재 세션','Weekly (all models)':'주간 (모든 모델)','Weekly (Opus)':'주간 (Opus)',
+    'Weekly (model-scoped)':'주간 (모델별)','Weekly limit':'주간 제한','Weekly Limit':'주간 제한',
+    '5-Hour Limit':'5시간 제한','5-hour Limit':'5시간 제한','Gemini Models':'Gemini 모델','Claude and GPT models':'Claude 및 GPT 모델',
+    'Monthly limit':'월간 제한','Monthly Limit':'월간 제한','Longer window':'장기 사용 기간',
+    'Requests today · no limit published':'오늘 요청 수 · 한도 미공개','Resetting…':'재설정 중…','Resets at':'재설정 시각',
+    'Resets':'재설정','Working':'작업 중','Waiting':'대기 중','Streaming (network)':'스트리밍 중 (네트워크)',
+    'Rate limited, retrying in':'요청 제한, 재시도까지','Rate limited — retrying in':'요청 제한 — 재시도까지',
+    'request today':'오늘 요청','requests today':'오늘 요청','no requests today':'오늘 요청 없음',
+    'Waiting for first reading…':'첫 측정값을 기다리는 중…',
+    'Sign in to Claude Code to see usage.':'사용량을 확인하려면 Claude Code에 로그인하십시오.',
+    'Sign in to Cursor to see usage.':'사용량을 확인하려면 Cursor에 로그인하십시오.',
+    'Sign in to Codex to see usage.':'사용량을 확인하려면 Codex에 로그인하십시오.',
+    'Sign in to Antigravity to see usage.':'사용량을 확인하려면 Antigravity에 로그인하십시오.',
+    'needs your input':'응답을 기다리는 중','Working in':'작업 위치:',
+    'Sign in':'로그인','Signing in...':'로그인 중…','Refresh':'새로 고침',
+    'Browser sign-in through Claude Code':'Claude Code를 통한 브라우저 로그인',
+  },
 };
 // Kept as patterns rather than exact keys: each one carries a number, a plan name or an error
 // the provider wrote, so the whole string can never be a dictionary key.
@@ -476,6 +559,31 @@ const PATTERNS={
     [/Sign in to Cursor \(the editor\) to see usage\./g,'请登录 Cursor（编辑器）以查看用量。'],
     [/Cursor session was rejected — sign in again in the editor/g,'Cursor 会话被拒绝 — 请在编辑器中重新登录'],
   ],
+  ko:[
+    [/^(\d+)m limit$/,'$1분 제한'],[/^(\d+)h limit$/,'$1시간 제한'],[/^(\d+)d limit$/,'$1일 제한'],
+    [/^Rate limited, retrying in (\d+)s$/,'요청 제한, $1초 후 재시도'],
+    [/^Rate limited — retrying in (\d+)s$/,'요청 제한 — $1초 후 재시도'],
+    [/^Unlimited on the (.+) plan — nothing to meter$/,'$1 요금제는 무제한입니다 — 측정할 사용량이 없습니다'],
+    [/^The (.+) plan has nothing for Cursor to meter yet$/,'$1 요금제에는 아직 Cursor가 측정할 사용량이 없습니다'],
+    [/^(.+) · Google publishes no quota for this account$/,'$1 · Google이 이 계정의 할당량을 공개하지 않습니다'],
+    [/^Live read failed \((.+)\)$/,'실시간 조회 실패 ($1)'],
+    [/Weekly \(all models\)/g,'주간 (모든 모델)'],[/Weekly \(Opus\)/g,'주간 (Opus)'],[/Weekly \(model-scoped\)/g,'주간 (모델별)'],
+    [/Weekly limit/g,'주간 제한'],[/Monthly limit/g,'월간 제한'],[/\bWeekly\b/g,'주간'],[/\bMonthly\b/g,'월간'],[/ · via /g,' · 경유: '],
+    [/needs your input/g,'응답을 기다리는 중'],[/^Working in /,'작업 위치: '],
+    [/via Antigravity CLI/g,'Antigravity CLI 경유'],[/via Antigravity/g,'Antigravity 경유'],[/via Google/g,'Google 경유'],
+    [/No Claude Code credential found/g,'Claude Code 자격 증명을 찾을 수 없습니다'],
+    [/Credential expired — run claude once in a terminal to renew it/g,'자격 증명이 만료되었습니다 — 터미널에서 claude를 한 번 실행해 갱신하십시오'],
+    [/Credential rejected \(switched accounts\?\)/g,'자격 증명이 거부되었습니다 (계정을 전환하셨습니까?)'],
+    [/Codex sign-in expired — open Codex once to refresh it/g,'Codex 로그인이 만료되었습니다 — Codex를 한 번 열어 갱신하십시오'],
+    [/Codex rejected its sign-in — sign in to Codex again/g,'Codex 로그인이 거부되었습니다 — Codex에 다시 로그인하십시오'],
+    [/Codex reported no usage windows/g,'Codex가 사용량 집계 기간을 보고하지 않았습니다'],[/Codex has not recorded a usage snapshot yet/g,'Codex가 아직 사용량 스냅샷을 기록하지 않았습니다'],
+    [/from last Codex run/g,'마지막 Codex 실행 기준'],[/Waiting for Antigravity CLI quota/g,'Antigravity CLI 할당량을 기다리는 중'],
+    [/Open Antigravity to read its quota/g,'할당량을 확인하려면 Antigravity를 여십시오'],
+    [/Antigravity's Google session was rejected — sign in again in Antigravity/g,'Antigravity의 Google 세션이 거부되었습니다 — Antigravity에서 다시 로그인하십시오'],
+    [/Antigravity is closed — last reading kept/g,'Antigravity가 닫혀 있습니다 — 마지막 측정값 유지'],
+    [/Sign in to Cursor \(the editor\) to see usage\./g,'사용량을 확인하려면 Cursor 편집기에 로그인하십시오.'],
+    [/Cursor session was rejected — sign in again in the editor/g,'Cursor 세션이 거부되었습니다 — 편집기에서 다시 로그인하십시오'],
+  ],
 };
 // Grammar differs enough that a format string would not carry it — Russian puts the verb last,
 // Chinese puts it after the time — so each language writes its own short functions.
@@ -487,7 +595,7 @@ const UI={
   en:{locale:'en-US',title:n=>n+' Usage',resetting:'Resetting…',resetsIn:m=>`Resets in ${m} min`,
       resetsAt:t=>`Resets at ${t}`,resetsOn:(d,t)=>`Resets ${d} ${t}`,resetsDate:d=>`Resets ${d}`,
       ago:m=>m<60?`${m}m ago`:`${Math.round(m/60)}h ago`,
-      usedLeft:(used,left)=>`${used}% Used · ${left}% left`,andMore:n=>`and ${n} more`},
+      usedLeft:(used,left)=>`${used}% Used · ${left}% left`,andMore:n=>`and ${n} more`,updated:a=>`Updated ${a}`},
   ru:{locale:'ru-RU',title:n=>'Использование '+n,resetting:'Сброс…',resetsIn:m=>`Сброс через ${m} мин`,
       resetsAt:t=>`Сброс в ${t}`,resetsOn:(d,t)=>`Сброс: ${d} ${t}`,resetsDate:d=>`Сброс: ${d}`,
       ago:m=>m<60?`${m} мин назад`:`${Math.round(m/60)} ч назад`,
@@ -495,7 +603,11 @@ const UI={
   zh:{locale:'zh-CN',title:n=>n+' 用量',resetting:'正在重置…',resetsIn:m=>`${m} 分钟后重置`,
       resetsAt:t=>`${t} 重置`,resetsOn:(d,t)=>`${d} ${t} 重置`,resetsDate:d=>`${d} 重置`,
       ago:m=>m<60?`${m} 分钟前`:`${Math.round(m/60)} 小时前`,
-      usedLeft:(used,left)=>`已用 ${used}% · 剩余 ${left}%`,andMore:n=>`另有 ${n} 个`},
+      usedLeft:(used,left)=>`已用 ${used}% · 剩余 ${left}%`,andMore:n=>`另有 ${n} 个`,updated:a=>`更新于${a}`},
+  ko:{locale:'ko-KR',title:n=>n+' 사용량',resetting:'재설정 중…',resetsIn:m=>`${m}분 후 재설정`,
+      resetsAt:t=>`${t}에 재설정`,resetsOn:(d,t)=>`${d} ${t}에 재설정`,resetsDate:d=>`${d}에 재설정`,
+      ago:m=>m<60?`${m}분 전`:`${Math.round(m/60)}시간 전`,
+      usedLeft:(used,left)=>`${used}% 사용 · ${left}% 남음`,andMore:n=>`외 ${n}개`,updated:a=>`${a}에 마지막 업데이트됨`},
 };
 function ui(){return UI[language().toLowerCase().split('-')[0]]||UI.en;}
 function textCopy(value){
@@ -524,7 +636,7 @@ function workState(id){
   return 'idle';
 }
 function glyphHtml(p,small){
-  const g=glyphs[p.id];
+  const g=glyphs[p.base||p.id];
   if(g&&g.kind==='svg'&&g.svg) return `<span class="mark">${g.svg}</span>`;
   if(g&&g.url) return `<img class="${g.kind}" src="${g.url}" alt="${p.name}"${small?' style="width:16px;height:16px;border-radius:4px"':''}>`;
   return small?'':p.glyph; // fallback letter
@@ -537,6 +649,28 @@ function slotFor(id){
   for(const s of notchSlots){ if(s&&s.provider===id) return s; }
   return null;
 }
+// One cell per Claude account. Each account's windows arrive carrying its heading in `group` and,
+// past the default account, an `@slug` id; the cell gets that account's windows under the ids they
+// would have had on their own, so headlineOf and weeklyOf need no rule about accounts. `base` is the
+// provider the cell belongs to (glyph, activity, slot choice); `id` is what makes the cell unique.
+function claudeCells(){
+  const ws=Array.isArray(usage.windows)?usage.windows:[];
+  const accounts=[];
+  for(const w of ws){
+    const g=w.group||'';
+    if(!accounts.some(a=>a.g===g)) accounts.push({g:g,slug:(String(w.id).split('@')[1]||'')});
+  }
+  // One account (or a reading with no headings yet) is the single cell it has always been
+  if(accounts.length<2) return [{id:'claude',base:'claude',name:'Claude',glyph:'C',snap:usage}];
+  return accounts.map(a=>({
+    id:a.slug?'claude@'+a.slug:'claude',
+    base:'claude',
+    name:a.g||'Claude',
+    glyph:'C',
+    snap:Object.assign({},usage,{windows:ws.filter(w=>(w.group||'')===a.g)
+      .map(w=>Object.assign({},w,{id:String(w.id).split('@')[0]}))})
+  }));
+}
 function providers(){
   const list=[{id:'claude',name:'Claude',glyph:'C',snap:usage}];
   if(codexSnap.status!=='absent') list.push({id:'codex',name:'Codex',glyph:'Cx',snap:codexSnap});
@@ -544,7 +678,7 @@ function providers(){
   if(grokSnap.status!=='absent') list.push({id:'grok',name:'Grok',glyph:'Gk',snap:grokSnap});
   if(agSnap.status!=='absent') list.push({id:'gemini',name:'Antigravity',glyph:'Ag',snap:agSnap});
   if(Array.isArray(notchSlots)&&notchSlots.length){
-    const picked=list.filter(p=>!!slotFor(p.id));
+    const picked=list.filter(p=>!!slotFor(p.base));
     // Never leave the notch with nothing in it: an empty result means the choice no longer matches
     // any available provider, so fall back to showing everything rather than an empty pill.
     if(picked.length) return picked;
@@ -565,19 +699,24 @@ function laneIs(w,limit){
   return limit==='weekly'?t.includes('weekly'):['5h','5-hour','five hour','five-hour','hourly','session'].some(k=>t.includes(k));
 }
 // The window a provider's ring shows: the same rule as ring_window in main.rs, which draws the tray
+// BEGIN TESTABLE HEADLINE SELECTOR
 function headlineOf(snap,id){
   const ws=snap.windows; if(!ws.length) return null;
   const byId=x=>ws.find(w=>w.id===x)||null;
   if(id==='claude') return byId('session');
-  if(id==='codex') return ws[0];
+  if(id==='codex') return byId('primary');
   if(id==='cursor') return byId('included')||byId('api');
   if(id==='grok') return byId('credits')||ws[0];
+  if(id==='glm') return byId('session');
+  if(id==='opencode') return byId('rolling');
   const fam=ws.filter(w=>laneFamily(w)===agPrefs.model), lanes=fam.length?fam:ws;
   if(agPrefs.limit!=='automatic'){ const w=tightestOf(lanes.filter(w=>laneIs(w,agPrefs.limit))); if(w) return w; }
   return tightestOf(lanes.filter(w=>w.used<1))||tightestOf(lanes)||lanes[0];
 }
+// END TESTABLE HEADLINE SELECTOR
 // The weekly window each provider reports, or null where there is none: Claude names it seven_day,
 // Codex calls its second window secondary, and Antigravity has one per model family. Cursor has none.
+// BEGIN TESTABLE WEEKLY SELECTOR
 function weeklyOf(snap,id){
   const ws=snap.windows.filter(w=>w.count==null); if(!ws.length) return null;
   const byId=x=>ws.find(w=>w.id===x)||null;
@@ -585,16 +724,27 @@ function weeklyOf(snap,id){
   if(id==='codex') return byId('secondary');
   if(id==='cursor') return null;
   if(id==='grok') return null; // the credits window is already the weekly one
+  if(id==='glm') return byId('weekly');
+  if(id==='opencode') return byId('weekly');
   const fam=ws.filter(w=>laneFamily(w)===agPrefs.model), lanes=fam.length?fam:ws;
   return tightestOf(lanes.filter(w=>laneIs(w,'weekly')));
 }
-function staleOf(snap){ if(snap.status==='stale') return true; return snap.fetched_at>0 && (Date.now()-snap.fetched_at)>5*60*1000; }
+// END TESTABLE WEEKLY SELECTOR
+// 15 minutes, the Mac's `UsageStore.staleAfter`. At 5 a reading went grey between two polls of a
+// provider that is answering perfectly well, which made "stale" mean "recently fetched" rather than
+// "old enough not to trust". A provider that knows its own reading is stale still says so in status.
+function staleOf(snap){ if(snap.status==='stale') return true; return snap.fetched_at>0 && (Date.now()-snap.fetched_at)>15*60*1000; }
 let stateSnap={sessions:[],agg:'idle'};
 
 function svgArc(r,frac,color,width,extra=''){
+  // Nothing at all at zero: a zero-length dash still paints a dot once the caps are round, where the
+  // Mac's `trim(from: 0, to: 0)` draws nothing. A reading small enough that its two caps meet does
+  // draw as a dot, on both platforms — `ProviderRing.sweep` has no floor. Upstream #260 argues that
+  // is wrong, for the local model's arc; if it lands, the same floor belongs here.
+  if(!(frac>0)) return '';
   const C=2*Math.PI*r;
   return `<circle cx="28" cy="28" r="${r}" fill="none" stroke="${color}" stroke-width="${width}"
-    stroke-dasharray="${(C*frac).toFixed(2)} ${C.toFixed(2)}" stroke-linecap="butt"
+    stroke-dasharray="${(C*frac).toFixed(2)} ${C.toFixed(2)}" stroke-linecap="round"
     transform="rotate(-90 28 28)" ${extra}/>`;
 }
 
@@ -602,10 +752,10 @@ function renderRing(){
   document.documentElement.lang=locale();
   const ps=providers();
   // Rebuild the DOM only when the structure changes (never swap the element under the cursor)
-  const want=ps.map(p=>p.id+':'+(glyphs[p.id]?glyphs[p.id].kind:'-')).join(',');
+  const want=ps.map(p=>p.id+':'+(glyphs[p.base]?glyphs[p.base].kind:'-')).join(',');
   if(pill.dataset.cells!==want){
-    pill.innerHTML=ps.map(p=>`<div class="cell" data-p="${p.id}">
-      <div class="ringwrap"><svg class="ring" viewBox="0 0 56 56"></svg><div class="glyph ${(!glyphs[p.id]&&p.glyph.length>1)?'small':''}">${glyphHtml(p)}</div></div>
+    pill.innerHTML=ps.map((p,i)=>`<div class="cell" data-p="${p.id}" style="--i:${i}">
+      <div class="ringwrap"><svg class="ring" viewBox="0 0 56 56"></svg><svg class="reading" viewBox="0 0 56 56"></svg><svg class="activity" viewBox="0 0 56 56"></svg><div class="glyph ${(!glyphs[p.base]&&p.glyph.length>1)?'small':''}">${glyphHtml(p)}</div></div>
       <div class="pct">—</div></div>`).join('');
     pill.dataset.cells=want;
   }
@@ -631,12 +781,19 @@ function renderRing(){
       else if(ws==='attention') inner+=`<g class="arc-pulse"><circle cx="28" cy="28" r="19" fill="none" stroke="${WATCH}" stroke-width="2.5"/></g>`;
     }
     svg.innerHTML=inner;
+    { // thin inner arc: spinning white = working, yellow pulse = waiting on you (one animation for all four, different sources)
+      // Its own layer, so a stale reading can dim around it without dimming it: see `.ringwrap.stale`
+      const ws=workState(p.base);
+      if(ws==='running') activity.innerHTML=`<g class="arc-spin">${svgArc(19,0.28,INK,2.5)}</g>`;
+      else if(ws==='attention') activity.innerHTML=`<g class="arc-pulse"><circle cx="28" cy="28" r="19" fill="none" stroke="${WATCH}" stroke-width="2.5"/></g>`;
+      else activity.innerHTML='';
+    }
     if(p.snap.status==='needsAuth'||p.snap.status==='none') pct.textContent='—';
     else if(h && h.count!=null) pct.textContent='~'+h.count;
     else if(h) pct.textContent=(h.derived?'~':'')+pctText(h.used)+'%';
     else pct.textContent=p.snap.windows.length?'—':'…'; // its declared window is missing: a dash, not a wait
     glyph.classList.toggle('dim', !!(h && h.used>=1));
-    wrap.classList.toggle('dim', staleOf(p.snap));
+    wrap.classList.toggle('stale', staleOf(p.snap));
   }
   reportHot(); // a provider appearing or leaving resizes the pill
 }
@@ -673,9 +830,12 @@ Object.assign(ZH, {"Run grok login to see usage.": "运行 grok login 后查看�
 Object.assign(TEXT.ru, {"Run grok login to see usage.": "Выполните grok login, чтобы увидеть использование.", "Weekly credits": "Недельные кредиты"});
 Object.assign(TEXT.uk, {"Run grok login to see usage.": "Виконайте grok login, щоб побачити використання.", "Weekly credits": "Тижневі кредити"});
 function language(){
-  const lang=stateSnap.lang_resolved||stateSnap.lang||navigator.language||'en';
-  return lang==='auto' ? navigator.language : lang;
+  const snapshot=typeof stateSnap==='object'&&stateSnap?stateSnap:{};
+  const browserLang=typeof navigator!=='undefined'&&navigator.language?navigator.language:'en';
+  const lang=snapshot.lang_resolved||snapshot.lang||uiLang||browserLang;
+  return lang==='auto' ? browserLang : lang;
 }
+function setUiLanguage(lang){ uiLang=lang||'en'; }
 function isChinese(){return language().toLowerCase().startsWith('zh');}
 function locale(){return isChinese()?'zh-CN':({ja:'ja-JP',ko:'ko-KR',ru:'ru-RU',uk:'uk-UA'}[language().toLowerCase().split('-')[0]]||'en-US');}
 function tr(key,args={}){
@@ -730,6 +890,29 @@ const SESSION_ROWS=5;
 function moreRow(n){ return n>0?`<div class="s-more">${ui().andMore(n)}</div>`:''; }
 
 let hoverId='claude';
+let claudeAuth={busy:false,message:''};
+let claudeActionMessage='';
+// CLAUDE_AUTH_ACTIONS_START
+// Only while signed out, where the Mac shows its sign-in line; and only on the default account,
+// since the CLI's login runs without CLAUDE_CONFIG_DIR and would sign in ~/.claude whichever card asked
+function offersClaudeSignIn(p){ return p.id==='claude'&&p.snap.status==='needsAuth'; }
+function claudeAuthHtml(auth, message=''){
+  return `<div class="c-auth"><button id="claude-sign-in" ${auth.busy?'disabled':''}>${esc(textCopy(auth.busy?'Signing in...':'Sign in'))}</button></div><div class="c-auth-status" role="status">${esc(textCopy(message||auth.message||'Browser sign-in through Claude Code'))}</div>`;
+}
+async function signInClaude(){
+  if(claudeAuth.busy) return;
+  claudeActionMessage='';
+  try{
+    claudeAuth={busy:true,message:'Complete sign-in in the browser or terminal window.'};
+    renderCard();
+    await invoke('claude_sign_in');
+  }catch(e){
+    claudeAuth.busy=false;
+    claudeActionMessage=String(e?.message||e);
+  }
+  renderCard();
+}
+// CLAUDE_AUTH_ACTIONS_END
 function renderCard(){
   const c=document.getElementById('card');
   const p=providers().find(x=>x.id===hoverId)||providers()[0];
@@ -765,7 +948,8 @@ function renderCard(){
     if(group) html+=`</div>`;
     if(snap.note) html+=`<div class="c-note">${esc(providerCopy(snap.note))}</div>`;
   }
-  if(p.id==='claude'){ // live sessions (a full list with jump-to-session is a follow-up)
+  if(offersClaudeSignIn(p)) html+=claudeAuthHtml(claudeAuth,claudeActionMessage);
+  if(p.base==='claude'){ // live sessions (a full list with jump-to-session is a follow-up)
     const act=stateSnap.sessions.filter(s=>s.state!=='idle');
     if(act.length){
       html+=`<div class="c-sessions">`;
@@ -851,6 +1035,7 @@ function rectOf(el){const r=el.getBoundingClientRect(),k=window.devicePixelRatio
 /* Rust gates click-through on these, so they are reported whenever the pill or card moves, not only
    when the card opens: a stale pill rectangle is a pill that cannot be clicked. */
 function reportHot(){
+  if(folded){ callq('set_hot',{rects:[wakeRect()],expanded:false,probe:probeRect()}).catch(()=>{}); return; }
   const open=card.classList.contains('show');
   const rects=open?[rectOf(pill),rectOf(tail),rectOf(card)]:[rectOf(pill)];
   callq('set_hot',{rects,expanded:open}).catch(()=>{});
@@ -865,14 +1050,25 @@ function fitZoom(){
   document.documentElement.style.zoom=(Math.abs(z-1)>0.02)?String(z):'';
   return z;
 }
-function reportDpr(){
+// `settled` only from the end of a burst of resizes, which is what a landing waits for (land_on_another_screen)
+function reportDpr(settled){
   const z=fitZoom();
   jslog(`dpr=${window.devicePixelRatio} inner=${innerWidth}x${innerHeight} cssZoom=${z.toFixed(3)}`);
-  callq('report_dpr',{dpr:window.devicePixelRatio||1,w:innerWidth,h:innerHeight}).catch(()=>{});
+  callq('report_dpr',{dpr:window.devicePixelRatio||1,w:innerWidth,h:innerHeight,settled:settled===true}).catch(()=>{});
 }
-reportDpr();
-window.addEventListener('resize',()=>{clearTimeout(window._dprT);window._dprT=setTimeout(()=>{reportDpr();reportHot();},120);});
-matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener('change',reportDpr);
+// Not measured yet: the width to measure against depends on the edge, and only Rust knows it. The
+// ask is at the bottom of this file and answers in a round trip; measuring first would zoom a flat
+// window by 520/360 for that moment.
+window.addEventListener('resize',()=>{clearTimeout(window._dprT);window._dprT=setTimeout(()=>{reportDpr(true);reportHot();},120);});
+matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`).addEventListener('change',()=>reportDpr());
+// A landing on a screen at another scale: empty the page, which leaves the transparent window
+// invisible while it is resized and re-zoomed, and say so once that has painted — hiding the window
+// itself would pause the page, and the re-zoom would then happen in plain view
+listen('notch_landing',()=>{
+  document.documentElement.style.visibility='hidden';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>invoke('notch_hidden').catch(()=>{})));
+}).catch(()=>{});
+listen('notch_reveal',()=>{ document.documentElement.style.visibility=''; }).catch(()=>{});
 
 /* Collapse test: no trust in element-level mouseenter/mouseleave/e.target at all —
    pure geometry: is the cursor (clientX/Y) inside pill rect ∪ card rect ∪ their bounding box?
@@ -893,7 +1089,12 @@ function pointerInHot(x,y){
 }
 let hideLogged=0;
 document.addEventListener('mousemove',e=>{
+  // Folded, the page is sent events only over the pill, so any movement at all is the pointer reaching it
+  if(folded){ pointerIn=true; unfold(); }
   if(dragging)return; // no card while dragging
+  if(carrying) return; // the notch is in hand; the card would only be in the way
+  setHovered(onHandle(e.clientX,e.clientY));
+  if(hovered){ if(card.classList.contains('show')){ clearTimeout(hideTimer); hideCard(); } return; }
   const hot=pointerInHot(e.clientX,e.clientY);
   if(hot){
     clearTimeout(hideTimer);
@@ -911,11 +1112,44 @@ listen('pointer_left',()=>{clearTimeout(hideTimer);hideCard();}).catch(()=>{});
 listen('usage',()=>{if(card.classList.contains('show'))armWatchdog();}).catch(()=>{});
 listen('state',()=>{if(card.classList.contains('show'))armWatchdog();}).catch(()=>{});
 /* The pill can be dragged up and down the right edge. Press and move more than 4 px = drag (handed to Rust,
-   which follows the system cursor; the card is collapsed first); release without moving = click (opens the provider's usage page). */
+   which follows the system cursor; the card is collapsed first); release without moving = click (refetches that ring). */
 let press=null, dragging=false;
-pill.addEventListener('mousedown',e=>{ if(e.button!==0)return; press={x:e.clientX,y:e.clientY,id:cellAt(e.clientX,e.clientY)||hoverId}; });
+/* As on the Mac, a clicked ring presses in until its reading lands, and the reading turns once.
+   Each provider's reading listener below calls settle() for its ring; PRESS_MAX is only the fallback.
+   Rust answers false when no reading is coming (Claude inside its rate-limit wait). */
+const PRESS_MIN=380, PRESS_MAX=6000;
+const refreshing={};
+function refreshRing(id){
+  if(refreshing[id]) return;
+  refreshing[id]={at:Date.now(),timer:setTimeout(()=>settle(id),PRESS_MAX)};
+  renderRing();
+  turnReading(id);
+  // The cell id addresses the DOM, the provider id addresses Rust: a second Claude
+  // account's cell is `claude@work`, which no command answers to.
+  const provider=(providers().find(p=>p.id===id)||{}).base||id;
+  invoke('refresh_ring',{provider}).then(coming=>{if(!coming)settle(id);}).catch(()=>settle(id));
+}
+// The reading has a layer of its own that renders never replace, turned as a whole element so the
+// compositor can run it; it finishes its turn whenever the press lets go
+function turnReading(id){
+  const el=pill.querySelector(`.cell[data-p="${id}"] svg.reading`);
+  if(!el||matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  if(el.getAnimations().some(a=>a.playState==='running')) return;
+  el.animate([{transform:'rotate(0deg)'},{transform:'rotate(360deg)'}],{duration:950,easing:'cubic-bezier(.32,0,.14,1)'});
+}
+function settle(id){
+  const r=refreshing[id]; if(!r) return;
+  clearTimeout(r.timer);
+  const wait=r.at+PRESS_MIN-Date.now();
+  if(wait>0){ r.timer=setTimeout(()=>settle(id),wait); return; }
+  delete refreshing[id];
+  renderRing();
+}
+// Alt+drag, the Mac's ⌥-drag. Without Alt a press on the pill is only ever a click — a ring
+// refreshes (#244) — so one that slips can no longer carry the notch off (#251).
+pill.addEventListener('mousedown',e=>{ if(e.button!==0||folded)return; press={x:e.clientX,y:e.clientY,id:cellAt(e.clientX,e.clientY)||hoverId,alt:e.altKey}; });
 document.addEventListener('mousemove',e=>{
-  if(!press||dragging)return;
+  if(!press||dragging||!press.alt)return;
   if(Math.abs(e.clientY-press.y)>4||Math.abs(e.clientX-press.x)>4){
     dragging=true; clearTimeout(hideTimer); hideCard();
     invoke('drag_begin').catch(err=>{notice(tr('{cmd} failed: {error}',{cmd:'drag_begin',error:err}));dragging=false;});
@@ -923,10 +1157,19 @@ document.addEventListener('mousemove',e=>{
 });
 document.addEventListener('mouseup',e=>{
   if(e.button!==0)return;
-  if(press&&!dragging) invoke('open_provider_page',{provider:press.id}).catch(()=>{});
+  if(press&&!dragging&&press.id) refreshRing(press.id);
   press=null;
 });
-listen('drag_end',()=>{dragging=false;press=null;reportHot();}).catch(()=>{});
+// The Mac's right-click menu, naming the ring or card under the pointer; WebView2's own menu never shows
+document.addEventListener('contextmenu',e=>{
+  e.preventDefault();
+  if(dragging||!pointerInHot(e.clientX,e.clientY)) return;
+  // The command returns once the menu has closed, which is when folding may be thought about again
+  menuOpen=true;
+  invoke('show_notch_menu',{provider:cellAt(e.clientX,e.clientY)||hoverId}).catch(err=>notice('show_notch_menu failed: '+err))
+    .finally(()=>{ menuOpen=false; scheduleFold(); });
+});
+listen('drag_end',()=>{dragging=false;press=null;reportHot();scheduleFold();}).catch(()=>{});
 
 function notice(msg){
   const n=document.getElementById('notice');
@@ -939,8 +1182,8 @@ listen('usage',e=>{usage=e.payload||usage;renderRing();if(card.classList.contain
 listen('state',e=>{stateSnap=e.payload||stateSnap;renderRing();if(card.classList.contains('show'))renderCard();})
   .catch(e=>notice(tr('{cmd} failed: {error}',{cmd:'listen(state)',error:e})));
 listen('notice',e=>notice(e.payload)).catch(()=>{});
-listen('codex',e=>{codexSnap=e.payload||codexSnap;renderRing();if(card.classList.contains('show'))renderCard();}).catch(()=>{});
-listen('cursor',e=>{cursorSnap=e.payload||cursorSnap;renderRing();if(card.classList.contains('show'))renderCard();}).catch(()=>{});
+listen('codex',e=>{codexSnap=e.payload||codexSnap;settle('codex');renderRing();if(card.classList.contains('show'))renderCard();}).catch(()=>{});
+listen('cursor',e=>{cursorSnap=e.payload||cursorSnap;settle('cursor');renderRing();if(card.classList.contains('show'))renderCard();}).catch(()=>{});
 invoke('get_cursor').then(u=>{cursorSnap=u||cursorSnap;renderRing();}).catch(()=>{});
 listen('grok',e=>{grokSnap=e.payload||grokSnap;renderRing();if(card.classList.contains('show'))renderCard();}).catch(()=>{});
 invoke('get_grok').then(u=>{grokSnap=u||grokSnap;renderRing();}).catch(()=>{});
@@ -969,6 +1212,16 @@ invoke('get_codex').then(u=>{codexSnap=u||codexSnap;renderRing();}).catch(()=>{}
 invoke('get_usage').then(u=>{usage=u||usage;renderRing();}).catch(e=>notice(tr('{cmd} failed: {error}',{cmd:'get_usage',error:e})));
 invoke('get_state').then(s=>{stateSnap=s||stateSnap;renderRing();if(card.classList.contains('show'))renderCard();}).catch(()=>{});
 setInterval(renderRing,30_000); // stale state and reset copy move with time
+setInterval(async()=>{
+  if(!claudeAuth.busy&&!(hoverId==='claude'&&card.classList.contains('show'))) return;
+  try{
+    const next=await invoke('get_claude_auth');
+    if(JSON.stringify(next)!==JSON.stringify(claudeAuth)){
+      claudeAuth=next;
+      if(hoverId==='claude'&&card.classList.contains('show')){renderCard();armWatchdog();}
+    }
+  }catch(_){} // Local IPC only; no network requests and no automatic browser launch.
+},2000);
 </script>
 </body>
 </html>

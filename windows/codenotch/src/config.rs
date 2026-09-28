@@ -72,6 +72,9 @@ pub struct Config {
     /// Where the weekly limit gets a ring of its own: "off", "inside" or "outside".
     #[serde(default = "default_weekly_ring")]
     pub weekly_ring: String,
+    /// Which appearance the pages draw in: "system", "light" or "dark".
+    #[serde(default = "default_theme")]
+    pub theme: String,
     /// What the tray icon draws: "off" (the plain mark, the previous behaviour and the default),
     /// "numbers" (up to two readings as digits) or "bars" (a column per reading).
     #[serde(default = "default_tray_mode")]
@@ -152,6 +155,18 @@ fn default_weekly_ring() -> String {
     "off".into()
 }
 
+fn default_theme() -> String {
+    "system".into()
+}
+
+/// Invalid values follow Windows so a hand-edited config cannot disable the rest of the settings.
+pub fn theme_or_system(value: &str) -> String {
+    match value {
+        "light" | "dark" => value.to_string(),
+        _ => default_theme(),
+    }
+}
+
 /// A second arc changes how every reading looks, so an unreadable value means off rather than a
 /// guess at what was meant.
 pub fn weekly_ring_or_off(value: &str) -> String {
@@ -197,6 +212,7 @@ impl Default for Config {
             notch_monitor: None,
             scale: default_scale(),
             weekly_ring: default_weekly_ring(),
+            theme: default_theme(),
             tray_mode: default_tray_mode(),
             tray_providers: default_tray_providers(),
             tray_slots: Vec::new(), // filled in by load(), from tray_providers
@@ -276,6 +292,7 @@ pub fn load() -> Config {
     // The old slider's 40–100 %, or a hand-edited file, lands on one of the three sizes
     cfg.scale = snap_scale(cfg.scale);
     cfg.weekly_ring = weekly_ring_or_off(&cfg.weekly_ring);
+    cfg.theme = theme_or_system(&cfg.theme);
     cfg
 }
 

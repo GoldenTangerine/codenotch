@@ -43,12 +43,33 @@ fn open_now(app: &AppHandle) {
         .decorations(false)
         .shadow(true)
         .center();
+    let theme = crate::theme_choice(app);
+    builder = builder
+        .theme(theme)
+        .initialization_script(crate::theme_script(crate::resolved_theme(app)));
     // Without Mica the window stays opaque and the page draws solid surfaces instead
     if has_mica() {
-        builder = builder.transparent(true).effects(EffectsBuilder::new().effect(Effect::Mica).build());
+        builder = builder.transparent(true).effects(EffectsBuilder::new().effect(mica_for(theme)).build());
     }
     if let Err(e) = builder.build() {
         crate::applog(&format!("settings window: {e}"));
+    }
+}
+
+/// Keeps the Mica material on the same side as the page palette when the user forces an appearance.
+pub fn follow_theme(app: &AppHandle, theme: Option<tauri::Theme>) {
+    let Some(w) = app.get_webview_window(LABEL) else { return };
+    if !has_mica() {
+        return;
+    }
+    let _ = w.set_effects(EffectsBuilder::new().effect(mica_for(theme)).build());
+}
+
+fn mica_for(theme: Option<tauri::Theme>) -> Effect {
+    match theme {
+        Some(tauri::Theme::Light) => Effect::MicaLight,
+        Some(tauri::Theme::Dark) => Effect::MicaDark,
+        _ => Effect::Mica,
     }
 }
 
