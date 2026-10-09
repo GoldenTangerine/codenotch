@@ -33,6 +33,8 @@ struct SettingsOrb: View {
     /// where the two are the same object; back onto the corner when the button
     /// has had to move clear of the bar.
     var arcOffset: CGSize = .zero
+    // 静止半弧的等比缩放，跟随实际绘制的喇叭口；悬停按钮保持原尺寸。
+    var restScale: CGFloat = 1
     /// How many times the gear has been asked to turn. See
     /// `NotchViewModel.settingsSpins`.
     var spins: Int = 0
@@ -112,7 +114,9 @@ struct SettingsOrb: View {
     private func badgeOffset(hovered: Bool) -> CGSize {
         let at = FlareArc.point(0.5, offset: NotchLayout.orbClearance, flare: arcRadius + NotchLayout.orbGap,
                                 centre: .zero, trim: restingTrim, edge: edge)
-        guard hovered else { return CGSize(width: at.x + arcOffset.width, height: at.y + arcOffset.height) }
+        guard hovered else {
+            return CGSize(width: at.x * restScale + arcOffset.width, height: at.y * restScale + arcOffset.height)
+        }
         let reach = max(hypot(at.x, at.y), 0.001)
         let edgeAt = NotchLayout.orbDiameter / 2 * 0.86
         return CGSize(width: at.x / reach * edgeAt, height: at.y / reach * edgeAt)
@@ -193,7 +197,7 @@ struct SettingsOrb: View {
         ZStack {
             restingArc
                 .opacity(isHovered || releasing ? 0 : 1)
-                .scaleEffect(isHovered ? 0.86 : 1)
+                .scaleEffect((isHovered ? 0.86 : 1) * restScale)
                 .offset(arcOffset)
 
             hoverDisc
@@ -205,8 +209,11 @@ struct SettingsOrb: View {
                 if releaseHome {
                     // Going home with the notch folding: into the notch as goo.
                     DiscMerge(merge: release, trim: restingTrim, edge: edge, radius: arcRadius)
+                        .scaleEffect(1 - (1 - restScale) * release)
                 } else {
+                    // 从原尺寸按钮过渡到缩放后的半弧，结束时与静止半弧重合。
                     DiscToArc(progress: release, trim: restingTrim, edge: edge, radius: arcRadius)
+                        .scaleEffect(1 - (1 - restScale) * release)
                 }
             }
 

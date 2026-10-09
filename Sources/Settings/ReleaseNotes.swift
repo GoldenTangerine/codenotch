@@ -40,6 +40,14 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.22.3",
+            headline: L10n.t("Settings arc reads as an arc beside the hardware notch"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Scale the settings arc with the smaller flare instead of squeezing it into a dot")),
+                ReleaseNote.Change(title: L10n.t("Keep the gear button full size while its arc scales"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.22.2",
             headline: L10n.t("Settings arc follows the flare at the top"),
             changes: [

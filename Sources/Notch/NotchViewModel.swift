@@ -689,7 +689,12 @@ final class NotchViewModel: ObservableObject {
     var orbArcRadius: CGFloat {
         orbHugsCorner
             ? NotchLayout.orbConvexArcRadius(corner: drawnCornerRadius, scale: orbScale)
-            : max(0, drawnFlare - NotchLayout.orbGap)
+            : NotchLayout.orbArcRadius
+    }
+
+    // 静止半弧按实际喇叭口等比缩放：直接用小喇叭口减间距会被描边挤成一团，缩放后与外接屏的半弧同形。
+    var orbRestScale: CGFloat {
+        orbHugsCorner ? 1 : drawnFlare / flare
     }
 
     /// Extra length at each end of the body so the notch has something to open

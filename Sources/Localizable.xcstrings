@@ -1,6 +1,39 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Settings arc reads as an arc beside the hardware notch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刘海下的设置半弧恢复正常形状"
+          }
+        }
+      }
+    },
+    "Scale the settings arc with the smaller flare instead of squeezing it into a dot": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "半弧按实际喇叭口等比缩小，不再被挤成一个小黑团"
+          }
+        }
+      }
+    },
+    "Keep the gear button full size while its arc scales": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "齿轮按钮保持原尺寸，收回与拖动时的半弧同步缩放"
+          }
+        }
+      }
+    },
     "Settings arc follows the flare at the top": {
       "extractionState": "manual",
       "localizations": {

@@ -440,6 +440,7 @@ struct CarriedHandle: View {
     let trim: ClosedRange<CGFloat>
     /// The resting arc's radius — see `SettingsOrb.arcRadius`.
     let arcRadius: CGFloat
+    var restScale: CGFloat = 1
     /// From the settings button to where the dots were beside it.
     let gripShift: CGSize
 
@@ -507,12 +508,12 @@ struct CarriedHandle: View {
                 // Taken by ⌥-drag: the arc itself gives way to the dots.
                 GooArc(trim: trim, edge: edge, convex: false, radius: arcRadius, separation: 1)
                     .opacity(1 - Self.step(t / 0.2))
-                    .scaleEffect(1 - 0.4 * Self.step(t / 0.25))
+                    .scaleEffect((1 - 0.4 * Self.step(t / 0.25)) * restScale)
             }
             if carry.landedAt != nil {
                 GooArc(trim: trim, edge: edge, convex: false, radius: arcRadius, separation: 1)
                     .opacity(Self.clamp(arc))
-                    .scaleEffect(0.6 + 0.4 * arc)
+                    .scaleEffect((0.6 + 0.4 * arc) * restScale)
             }
             // The dots, drawn over the button: they cross it only once it has
             // gone, and come back across it before it is back.

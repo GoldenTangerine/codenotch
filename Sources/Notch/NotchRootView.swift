@@ -43,6 +43,7 @@ struct NotchRootView: View {
                                         convex: model.orbHugsCorner,
                                         arcRadius: model.orbArcRadius,
                                         arcOffset: model.orbArcOffset,
+                                        restScale: model.orbRestScale,
                                         spins: model.settingsSpins,
                                         separation: arcSeparation, returning: arcStraight,
                                         quick: arcQuick, badge: model.updatePending)
@@ -113,6 +114,7 @@ struct NotchRootView: View {
                     CarriedHandle(carry: carry, edge: model.edge,
                                   trim: SettingsOrb.restingTrim(for: model.edge, convex: model.orbHugsCorner),
                                   arcRadius: model.orbArcRadiusInOrbSpace,
+                                  restScale: model.orbRestScale,
                                   gripShift: CGSize(width: model.edge.alongDirection.x * model.gripReach,
                                                     height: model.edge.alongDirection.y * model.gripReach))
                         .scaleEffect(model.sizeScale)
