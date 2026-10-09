@@ -12,6 +12,10 @@
 
 ## [未发布]
 
+## [1.22.1] - 2026-10-09
+
+- 修复带实体刘海的 Mac 在关闭双翼布局、胶囊位于顶部时，设置按钮的静止半弧被画到胶囊右下角外侧的问题；恢复为嵌在远端喇叭口凹角内。
+
 ## [1.22.0] - 2026-10-09
 
 - 整合上游 v1.22.0 的供应商开关、DeepSeek、OpenCode、Grok、Antigravity 与 Windows agy 修复；新增 Qoder、Command Code 多账号、Anthropic/Gemini 自定义端点及 llama.cpp 指标。

@@ -40,6 +40,13 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.22.1",
+            headline: L10n.t("Settings arc back in place at the top"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Tuck the settings arc back into the notch's far flare on Macs with a hardware notch"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.22.0",
             headline: L10n.t("Upstream 1.22, native costs and a liquid notch"),
             changes: [

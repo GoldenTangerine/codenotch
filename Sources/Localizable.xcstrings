@@ -1,6 +1,28 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Settings arc back in place at the top": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修复顶部设置按钮半弧位置"
+          }
+        }
+      }
+    },
+    "Tuck the settings arc back into the notch's far flare on Macs with a hardware notch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实体刘海 Mac 上，设置按钮半弧重新嵌回胶囊远端喇叭口"
+          }
+        }
+      }
+    },
     "Upstream 1.22, native costs and a liquid notch": {
       "extractionState": "manual",
       "localizations": {

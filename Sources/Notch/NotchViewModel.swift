@@ -717,7 +717,7 @@ final class NotchViewModel: ObservableObject {
     /// it hugs the bar's own bottom-end corner from outside instead — same
     /// idea, turned inside out. Left where it was it becomes a dot on the
     /// bar's flat edge.
-    var orbHugsCorner: Bool { hardwareNotch != nil && !usesHardwareWings }
+    var orbHugsCorner: Bool { false }
 
     /// How much of its drawn size the settings orb — and the move handle that
     /// mirrors it — keeps.
