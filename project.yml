@@ -24,7 +24,7 @@ settings:
     # Sources/Info.plist reads both from here — hardcoding them there instead
     # silently pins every build to one version, so no customer ever sees an
     # update. Bump CURRENT_PROJECT_VERSION on every release.
-    MARKETING_VERSION: "1.17.1"
+    MARKETING_VERSION: "1.22.0"
     CURRENT_PROJECT_VERSION: "332"
     # Signed with a stable identity on purpose. The app reads Claude Code's
     # OAuth token out of the login keychain, and the keychain's ACL remembers
@@ -111,6 +111,10 @@ targets:
         # build settings keeps one place to bump.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            "100.64.0.0/10":
+              NSExceptionAllowsInsecureHTTPLoads: true
         NSLocalNetworkUsageDescription: "Codenotch answers your phone on this network so it can show your usage."
         # --- Sparkle -------------------------------------------------------
         # Beside the download itself, on this repo's GitHub Pages site.
@@ -128,7 +132,7 @@ targets:
         # shows a "check for updates automatically?" prompt, which is exactly
         # the permission this is meant to avoid.
         SUEnableAutomaticChecks: true
-        SUAutomaticallyUpdate: true
+        SUAutomaticallyUpdate: false
         SUScheduledCheckInterval: 86400
     settings:
       base:

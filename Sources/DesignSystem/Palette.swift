@@ -41,8 +41,26 @@ enum Palette {
     static let amplePair: (dark: UInt32, light: UInt32) = (0x00FF88, 0x00A356)
     static let watchPair: (dark: UInt32, light: UInt32) = (0xF2FF00, 0xB08800)
     /// Already 3.5:1 on white, so the warning colour is the same in both.
-    static let critical      = Color(hex: 0xFF3F00)           // orange
+    static let criticalPair: (dark: UInt32, light: UInt32) = (0xFF3F00, 0xFF3F00)
+
+    static let ample = Color(dark: NSColor(hex: amplePair.dark), light: NSColor(hex: amplePair.light))
+    static let watch = Color(dark: NSColor(hex: watchPair.dark), light: NSColor(hex: watchPair.light))
+    static let critical = Color(dark: NSColor(hex: criticalPair.dark), light: NSColor(hex: criticalPair.light))
     static let activityWaiting = Color(hex: 0xFFB547)
+
+    /// Interpolate appearance-specific sRGB anchors after resolving the active appearance.
+    static func ramp(
+        from: (dark: UInt32, light: UInt32),
+        to: (dark: UInt32, light: UInt32),
+        fraction: Double
+    ) -> Color {
+        let t = min(max(fraction, 0), 1)
+        return Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            return NSColor(hex: isDark ? from.dark : from.light)
+                .blendedByChannel(with: NSColor(hex: isDark ? to.dark : to.light), fraction: t)
+        })
+    }
 
     // Generation-speed bands are independent of cloud quota usage.
     static let generationFast = Color(hex: 0x0A84FF)          // blue

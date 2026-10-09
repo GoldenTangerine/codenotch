@@ -232,76 +232,7 @@ enum CodexStore {
     }
 }
 
-/// One monitor's memory of the two Codex stores, so a tick where neither
-/// database moved costs a handful of `stat`s rather than a SQLite open and
-/// scan — `state_5.sqlite` alone runs to hundreds of megabytes, and the
-/// monitor asks every two seconds.
-///
-/// Codex's writes land in the `-wal` file before the database proper — the
-/// main file's mtime does not move until a checkpoint — so a database counts
-/// as changed when either file's stamp does.
-final class CodexStoreCache: @unchecked Sendable {
-    private struct Stamp: Equatable {
-        let path: String
-        let modified: Date?
-        let size: UInt64
-        let walModified: Date?
-        let walSize: UInt64
-    }
-
-    private let lock = NSLock()
-    private var rolloutStamp: Stamp?
-    private var rollout: (id: String, url: URL)?
-    private var desktopStamp: Stamp?
-    private var desktop: (id: String, title: String, updatedAt: Date)?
-
-    /// `CodexStore.newestRollout`, or the last answer when the store has not
-    /// changed. A cached path whose file has since gone away is asked for
-    /// again — the next row down may still exist.
-    func newestRollout(in store: URL) -> (id: String, url: URL)? {
-        lock.lock()
-        defer { lock.unlock() }
-        let stamp = Self.stamp(of: store)
-        if stamp == rolloutStamp, let rollout,
-           FileManager.default.fileExists(atPath: rollout.url.path) {
-            return rollout
-        }
-        let found = CodexStore.newestRollout(in: store)
-        rolloutStamp = stamp
-        rollout = found
-        return found
-    }
-
-    /// `CodexStore.newestDesktopThread`, or the last answer when the
-    /// catalogue has not changed.
-    func newestDesktopThread(in store: URL) -> (id: String, title: String, updatedAt: Date)? {
-        lock.lock()
-        defer { lock.unlock() }
-        let stamp = Self.stamp(of: store)
-        // nil 也可能来自 SQLITE_BUSY 或临时读取失败，下次轮询必须重试。
-        if stamp == desktopStamp, let desktop { return desktop }
-        let found = CodexStore.newestDesktopThread(in: store)
-        desktopStamp = stamp
-        desktop = found
-        return found
-    }
-
-    /// `(mtime, size)` of the database merged with its `-wal`, either of
-    /// which moves first. A missing file contributes nothing — an absent
-    /// store is also an answer worth remembering rather than re-paying for.
-    private static func stamp(of url: URL) -> Stamp {
-        func pair(_ url: URL) -> (Date?, UInt64) {
-            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-            return (attributes?[.modificationDate] as? Date,
-                    (attributes?[.size] as? NSNumber)?.uint64Value ?? 0)
-        }
-        let db = pair(url)
-        let wal = pair(URL(fileURLWithPath: url.path + "-wal"))
-        // 分开记录数据库与 WAL，避免一边变化被另一边的时间或大小抵消。
-        return Stamp(path: url.path, modified: db.0, size: db.1,
-                     walModified: wal.0, walSize: wal.1)
-    }
-
+extension CodexStore {
     /// The most recently touched threads, with what it takes to name them —
     /// plus every ancestor of a sub-agent among them, so a helper's work can be
     /// credited to the conversation that started it.
@@ -582,16 +513,21 @@ extension CodexThread {
 /// Codex's writes land in the `-wal` file before the database proper — the
 /// main file's mtime does not move until a checkpoint — so a database counts
 /// as changed when either file's stamp does.
-final class CodexStoreCache {
+final class CodexStoreCache: @unchecked Sendable {
     private struct Stamp: Equatable {
+        let path: String
         let modified: Date?
         let size: UInt64
+        let walModified: Date?
+        let walSize: UInt64
     }
 
+    private let lock = NSLock()
     private var rolloutStamp: Stamp?
-    private var rollout: URL?
+    private var rollout: (id: String, url: URL)?
     private var desktopStamp: Stamp?
-    private var desktop: (title: String, updatedAt: Date, threadID: String)?
+    private var desktop: (id: String, title: String, updatedAt: Date)?
+
     private var threadsStamp: Stamp?
     private var threads: [CodexThread] = []
     /// Each rollout's last answer from `CodexRolloutActivity.state`, by path,
@@ -601,10 +537,12 @@ final class CodexStoreCache {
     /// `CodexStore.newestRollout`, or the last answer when the store has not
     /// changed. A cached path whose file has since gone away is asked for
     /// again — the next row down may still exist.
-    func newestRollout(in store: URL) -> URL? {
+    func newestRollout(in store: URL) -> (id: String, url: URL)? {
+        lock.lock()
+        defer { lock.unlock() }
         let stamp = Self.stamp(of: store)
         if stamp == rolloutStamp, let rollout,
-           FileManager.default.fileExists(atPath: rollout.path) {
+           FileManager.default.fileExists(atPath: rollout.url.path) {
             return rollout
         }
         let found = CodexStore.newestRollout(in: store)
@@ -615,13 +553,32 @@ final class CodexStoreCache {
 
     /// `CodexStore.newestDesktopThread`, or the last answer when the
     /// catalogue has not changed.
-    func newestDesktopThread(in store: URL) -> (title: String, updatedAt: Date, threadID: String)? {
+    func newestDesktopThread(in store: URL) -> (id: String, title: String, updatedAt: Date)? {
+        lock.lock()
+        defer { lock.unlock() }
         let stamp = Self.stamp(of: store)
-        if stamp == desktopStamp { return desktop }
+        // nil 也可能来自 SQLITE_BUSY 或临时读取失败，下次轮询必须重试。
+        if stamp == desktopStamp, let desktop { return desktop }
         let found = CodexStore.newestDesktopThread(in: store)
         desktopStamp = stamp
         desktop = found
         return found
+    }
+
+    /// `(mtime, size)` of the database merged with its `-wal`, either of
+    /// which moves first. A missing file contributes nothing — an absent
+    /// store is also an answer worth remembering rather than re-paying for.
+    private static func stamp(of url: URL) -> Stamp {
+        func pair(_ url: URL) -> (Date?, UInt64) {
+            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+            return (attributes?[.modificationDate] as? Date,
+                    (attributes?[.size] as? NSNumber)?.uint64Value ?? 0)
+        }
+        let db = pair(url)
+        let wal = pair(URL(fileURLWithPath: url.path + "-wal"))
+        // 分开记录数据库与 WAL，避免一边变化被另一边的时间或大小抵消。
+        return Stamp(path: url.path, modified: db.0, size: db.1,
+                     walModified: wal.0, walSize: wal.1)
     }
 
     /// `CodexStore.recentThreads`, or the last answer while the store has not
@@ -629,8 +586,10 @@ final class CodexStoreCache {
     /// is decided from its rollout's own stamp on every tick, so holding the
     /// list costs no liveness.
     func recentThreads(in store: URL) -> [CodexThread] {
+        lock.lock()
+        defer { lock.unlock() }
         let stamp = Self.stamp(of: store)
-        if stamp == threadsStamp { return threads }
+        if stamp == threadsStamp, !threads.isEmpty { return threads }
         threads = CodexStore.recentThreads(in: store)
         threadsStamp = stamp
         return threads
@@ -648,6 +607,8 @@ final class CodexStoreCache {
     /// Entries for rollouts no longer asked about are dropped, so a long-lived
     /// app does not hold one per conversation it has ever seen.
     func rolloutState(of url: URL, keeping live: Set<String>) -> CodexRolloutActivity.State? {
+        lock.lock()
+        defer { lock.unlock() }
         let stamp = Self.stamp(ofFile: url)
         if let held = rolloutStates[url.path], held.stamp == stamp {
             return held.state
@@ -658,25 +619,11 @@ final class CodexStoreCache {
         return state
     }
 
-    /// `(mtime, size)` of the database merged with its `-wal`, either of
-    /// which moves first. A missing file contributes nothing — an absent
-    /// store is also an answer worth remembering rather than re-paying for.
-    private static func stamp(of url: URL) -> Stamp {
-        func pair(_ url: URL) -> (Date?, UInt64) {
-            let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-            return (attributes?[.modificationDate] as? Date,
-                    (attributes?[.size] as? NSNumber)?.uint64Value ?? 0)
-        }
-        let db = pair(url)
-        let wal = pair(URL(fileURLWithPath: url.path + "-wal"))
-        return Stamp(modified: [db.0, wal.0].compactMap { $0 }.max(),
-                     size: db.1 + wal.1)
-    }
-
     /// `(mtime, size)` of a plain file — a rollout, which has no `-wal`.
     private static func stamp(ofFile url: URL) -> Stamp {
         let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-        return Stamp(modified: attributes?[.modificationDate] as? Date,
-                     size: (attributes?[.size] as? NSNumber)?.uint64Value ?? 0)
+        return Stamp(path: url.path, modified: attributes?[.modificationDate] as? Date,
+                     size: (attributes?[.size] as? NSNumber)?.uint64Value ?? 0,
+                     walModified: nil, walSize: 0)
     }
 }

@@ -1,4 +1,4 @@
-/**
+/*
 @name: 上游功能同步
 @Descripttion: 提供上游新增功能或对应回归验证。
 @version: 1.0.0
@@ -152,6 +152,18 @@ pub fn ago(since: u64, now: u64, lang: &str) -> String {
 /// starts sending a name nobody has translated prints that name rather than nothing.
 pub fn label(name: &str, lang: &str) -> String {
     let translated = match (lang, name) {
+        ("pt-BR", "Current session") => "Sessão atual",
+        ("pt-BR", "Weekly (all models)") => "Semanal (todos os modelos)",
+        ("pt-BR", "Weekly (Opus)") => "Semanal (Opus)",
+        ("pt-BR", "Weekly (model-scoped)") => "Semanal (por modelo)",
+        ("pt-BR", "Weekly limit" | "Weekly Limit") => "Limite semanal",
+        ("pt-BR", "Monthly limit" | "Monthly Limit") => "Limite mensal",
+        ("pt-BR", "5-hour Limit" | "5-Hour Limit") => "Limite de 5 horas",
+        ("pt-BR", "Included usage") => "Uso incluído",
+        ("pt-BR", "API usage") => "Uso da API",
+        ("pt-BR", "Premium requests") => "Solicitações premium",
+        ("pt-BR", "Chat requests") => "Solicitações de chat",
+        ("pt-BR", "Completions") => "Conclusões de código",
         ("ru", "Current session") => "Текущий сеанс",
         ("ru", "Weekly (all models)") => "Недельный (все модели)",
         ("ru", "Weekly (Opus)") => "Недельный (Opus)",
@@ -161,6 +173,9 @@ pub fn label(name: &str, lang: &str) -> String {
         ("ru", "5-hour Limit" | "5-Hour Limit") => "Лимит на 5 часов",
         ("ru", "Included usage") => "Включённое использование",
         ("ru", "API usage") => "Использование API",
+        ("ru", "Premium requests") => "Премиум-запросы",
+        ("ru", "Chat requests") => "Запросы чата",
+        ("ru", "Completions") => "Автодополнения",
         ("zh", "Current session") => "当前会话",
         ("zh", "Weekly (all models)") => "每周（全部模型）",
         ("zh", "Weekly (Opus)") => "每周（Opus）",
@@ -170,6 +185,21 @@ pub fn label(name: &str, lang: &str) -> String {
         ("zh", "5-hour Limit" | "5-Hour Limit") => "5 小时限额",
         ("zh", "Included usage") => "包含用量",
         ("zh", "API usage") => "API 用量",
+        ("zh", "Premium requests") => "高级请求",
+        ("zh", "Chat requests") => "聊天请求",
+        ("zh", "Completions") => "代码补全",
+        ("zh-Hant", "Current session") => "目前工作階段",
+        ("zh-Hant", "Weekly (all models)") => "每週（全部模型）",
+        ("zh-Hant", "Weekly (Opus)") => "每週（Opus）",
+        ("zh-Hant", "Weekly (model-scoped)") => "每週（指定模型）",
+        ("zh-Hant", "Weekly limit" | "Weekly Limit") => "每週限額",
+        ("zh-Hant", "Monthly limit" | "Monthly Limit") => "每月限額",
+        ("zh-Hant", "5-hour Limit" | "5-Hour Limit") => "5 小時限額",
+        ("zh-Hant", "Included usage") => "包含用量",
+        ("zh-Hant", "API usage") => "API 用量",
+        ("zh-Hant", "Premium requests") => "進階請求",
+        ("zh-Hant", "Chat requests") => "聊天請求",
+        ("zh-Hant", "Completions") => "程式碼補全",
         ("ja", "Current session") => "現在のセッション",
         ("ja", "Weekly (all models)") => "週間 (すべてのモデル)",
         ("ja", "Weekly (Opus)") => "週間 (Opus)",
@@ -179,6 +209,9 @@ pub fn label(name: &str, lang: &str) -> String {
         ("ja", "5-hour Limit" | "5-Hour Limit") => "5 時間の上限",
         ("ja", "Included usage") => "プラン内の使用量",
         ("ja", "API usage") => "API 使用量",
+        ("ja", "Premium requests") => "プレミアムリクエスト",
+        ("ja", "Chat requests") => "チャットリクエスト",
+        ("ja", "Completions") => "コード補完",
         ("uk", "Current session") => "Поточна сесія",
         ("uk", "Weekly (all models)") => "Тижневий (усі моделі)",
         ("uk", "Weekly (Opus)") => "Тижневий (Opus)",
@@ -190,9 +223,21 @@ pub fn label(name: &str, lang: &str) -> String {
         ("uk", "API usage") => "Використання API",
         // Only these three in Korean: the Mac catalog has no Korean, so the names it shares
         // with the card have nothing to take.
+        ("uk", "Premium requests") => "Преміум-запити",
+        ("uk", "Chat requests") => "Запити чату",
+        ("uk", "Completions") => "Автодоповнення",
+        ("ko", "Current session") => "현재 세션",
+        ("ko", "Included usage") => "포함 사용량",
+        ("ko", "API usage") => "API 사용량",
+        ("ko", "Weekly limit" | "Weekly Limit") => "주간 제한",
+        ("ko", "Monthly limit" | "Monthly Limit") => "월간 제한",
+        ("ko", "5-hour Limit" | "5-Hour Limit") => "5시간 제한",
         ("ko", "Weekly (all models)") => "주간 (모든 모델)",
         ("ko", "Weekly (Opus)") => "주간 (Opus)",
         ("ko", "Weekly (model-scoped)") => "주간 (모델별)",
+        ("ko", "Premium requests") => "프리미엄 요청",
+        ("ko", "Chat requests") => "채팅 요청",
+        ("ko", "Completions") => "코드 완성",
         _ => name,
     };
     translated.into()
@@ -440,7 +485,8 @@ mod tests {
     fn the_card_and_the_menu_agree_on_window_names() {
         let page = include_str!("../ui/notch.html");
         for name in ["Current session", "Weekly (all models)", "Weekly (Opus)", "Weekly (model-scoped)",
-                     "Weekly limit", "Monthly limit", "Included usage", "API usage"] {
+                     "Weekly limit", "Monthly limit", "Included usage", "API usage",
+                     "Premium requests", "Chat requests", "Completions"] {
             assert!(page.contains(&format!("'{name}'")), "notch.html no longer names {name:?}");
             assert_ne!(label(name, "ru"), name, "{name:?} lost its Russian here");
         }

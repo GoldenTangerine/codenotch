@@ -83,6 +83,7 @@ final class ThresholdNotifier {
                 providerID: snapshot.id,
                 providerName: snapshot.displayName,
                 windowLabel: headline.label,
+                glyph: snapshot.glyph,
                 usedPercent: usedPercent,
                 resetsAt: headline.resetsAt
             ))
@@ -103,6 +104,7 @@ final class ThresholdNotifier {
             for threshold in [80, 100] where threshold > previous && threshold <= level {
                 deliver(ThresholdAlert(threshold: threshold, providerID: snapshot.id,
                     providerName: snapshot.displayName, windowLabel: window.label,
+                    glyph: snapshot.glyph,
                     usedPercent: usedPercent, resetsAt: window.resetsAt, windowID: window.id))
             }
         }
@@ -172,42 +174,6 @@ enum UsageAlertNotifications {
             // and changes with the language, and an identifier should not.
             let request = UNNotificationRequest(
                 identifier: "\(event.providerID).\(event.windowID ?? "headline").\(event.kind).\(UUID().uuidString)",
-                content: content, trigger: nil)
-            center.add(request)
-        }
-    }
-}
-
-/// The out-of-notch end of the usage reset and limit alerts.
-///
-/// The card in the notch is the primary form; this is what is owed when there
-/// is no notch open to put it in — a hidden notch used to swallow the alert
-/// silently, which for a weekly limit is the one alert worth not missing.
-enum UsageAlertNotifications {
-    static func deliver(_ event: UsageAlertEvent) {
-        let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert]) { granted, _ in
-            guard granted else { return }
-
-            let content = UNMutableNotificationContent()
-            let window = event.windowLabel.lowercased()
-            switch event.kind {
-            case .reset:
-                content.title = L10n.t("\(event.providerName) has reset")
-                content.body = L10n.t("Its \(window) limit is available again.")
-            case .sessionLimitReached, .weeklyLimitReached:
-                content.title = L10n.t("\(event.providerName) limit reached")
-                content.body = event.resetsAt.map {
-                    L10n.t("Its \(window) limit is spent — resets \($0.formatted(date: .omitted, time: .shortened))")
-                } ?? L10n.t("Its \(window) limit is spent.")
-            }
-            // Same threading as the crossing alerts: one pile per provider.
-            content.threadIdentifier = event.providerID
-
-            // The kind rather than the window label: the label is display text
-            // and changes with the language, and an identifier should not.
-            let request = UNNotificationRequest(
-                identifier: "\(event.providerID).\(event.kind).\(Int(Date().timeIntervalSince1970))",
                 content: content, trigger: nil)
             center.add(request)
         }

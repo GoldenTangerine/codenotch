@@ -1,3 +1,12 @@
+/*
+@name: 刘海快捷菜单
+@Descripttion: 提供供应商刷新与退出操作。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-10-09 10:29:38
+@LastEditTime: 2026-10-09 10:29:38
+@FilePath: windows/codenotch/src/notchmenu.rs
+*/
 //! The notch's right-click menu, the Mac's Refresh now and Quit Codenotch. Windows adds the ring's
 //! usage page: a left click used to open it, and a left click now refreshes the ring instead.
 
@@ -83,7 +92,7 @@ fn handle(app: &AppHandle, id: &str) {
         return;
     };
     if let Some(provider) = item.strip_prefix("open:") {
-        crate::open_provider_page(provider);
+        crate::open_provider_page_ref(provider);
         return;
     }
     match item {

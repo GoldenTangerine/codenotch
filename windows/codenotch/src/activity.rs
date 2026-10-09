@@ -1,4 +1,4 @@
-/**
+/*
  @name: 项目构建与文档
  @Descripttion: 维护 activity.rs 的项目实现与上游兼容。
  @version: 1.0.0

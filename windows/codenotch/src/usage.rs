@@ -1,4 +1,4 @@
-/**
+/*
  @name: 上游同步 · usage
  @Descripttion: 保留上游功能实现并兼容本地扩展。
  @version: 1.0.0
@@ -180,10 +180,13 @@ fn persist(s: &UsageSnapshot) {
     }
 }
 
+#[derive(Default)]
 struct Credential {
     token: String,
     /// ms epoch (None = the file names no expiry)
     expires_at: Option<u64>,
+    /// "max" | "pro" | … as the credential names it, for the card's account heading
+    plan: Option<String>,
 }
 
 impl Credential {
@@ -193,10 +196,9 @@ impl Credential {
 }
 
 /// Reads Claude Code's OAuth credential.
-fn read_credentials() -> Option<Credential> {
-    let home = dirs::home_dir()?;
-    for name in [".credentials.json", "credentials.json"] {
-        let p = home.join(".claude").join(name);
+fn read_credentials(dir: &Path) -> Option<Credential> {
+    for name in CRED_NAMES {
+        let p = dir.join(name);
         let Ok(text) = std::fs::read_to_string(&p) else {
             continue;
         };
@@ -205,8 +207,14 @@ fn read_credentials() -> Option<Credential> {
         };
         let oauth = v.get("claudeAiOauth").unwrap_or(&v);
         if let Some(tok) = oauth.get("accessToken").and_then(|x| x.as_str()) {
+            // An empty token is signed out, not expired: fall through to the next
+            // candidate file rather than report a credential that cannot be used.
+            if tok.trim().is_empty() {
+                continue;
+            }
             let expires_at = oauth.get("expiresAt").and_then(|x| x.as_f64()).map(|ms| ms as u64);
-            return Some(Credential { token: tok.to_string(), expires_at });
+            let plan = oauth.get("subscriptionType").and_then(|x| x.as_str()).map(String::from);
+            return Some(Credential { token: tok.to_string(), expires_at, plan });
         }
     }
     None
@@ -218,14 +226,29 @@ pub fn probe_credentials() -> String {
         Some(p) => format!("renews via {}", p.display()),
         None => "no standalone claude CLI found to renew it".into(),
     };
-    match read_credentials() {
-        Some(c) => format!(
-            "credential: found (token {} chars, {}; {cli})",
-            c.token.len(),
-            if c.expired(now_ms()) { "expired" } else { "valid" }
-        ),
-        None => "credential: ~/.claude/.credentials.json not found (needsAuth; the desktop app may use another store — signing in once with the Claude Code CLI creates it)".into(),
+    let list = profiles();
+    if list.is_empty() {
+        return format!("credential: no home directory to read ~/.claude from; {cli}");
     }
+    let lines: Vec<String> = list
+        .iter()
+        .map(|p| match read_credentials(&p.dir) {
+            Some(c) => format!(
+                "credential[{}]: found (token {} chars, {}, plan {})",
+                p.name(),
+                c.token.len(),
+                if c.expired(now_ms()) { "expired" } else { "valid" },
+                c.plan.as_deref().unwrap_or("?")
+            ),
+            None => format!(
+                "credential[{}]: {} not found (needsAuth; the desktop app may use another store — signing in once with the Claude Code CLI creates it)",
+                p.name(),
+                p.dir.join(CRED_NAMES[0]).display()
+            ),
+        })
+        .collect();
+    format!("{}; {cli}", lines.join("
+  "))
 }
 
 // ---------------- token renewal (upstream's ClaudeTokenRefresher) ----------------
@@ -238,7 +261,12 @@ fn is_desktop_owned(p: &std::path::Path) -> bool {
 }
 
 /// The standalone Claude Code command: its own installer's location first, then global npm/pnpm/Volta, then PATH
-fn find_cli() -> Option<std::path::PathBuf> {
+/// Grok 与 Claude 均优先查找 Windows 原生程序，再尝试命令脚本。
+pub(crate) fn command_names(stem: &str) -> Vec<String> {
+    vec![format!("{stem}.exe"), format!("{stem}.cmd")]
+}
+
+pub(crate) fn find_cli() -> Option<std::path::PathBuf> {
     let mut v = Vec::new();
     if let Some(h) = dirs::home_dir() {
         v.push(h.join(".local").join("bin").join("claude.exe"));
@@ -262,7 +290,7 @@ fn find_cli() -> Option<std::path::PathBuf> {
 }
 
 /// Whether a launch is worth making. Pure, so every branch is testable without a clock or a subprocess
-fn should_renew(expires_at: Option<u64>, now: u64, attempted_for: Option<u64>, last_attempt: Option<u64>, attempts: u32) -> bool {
+pub(crate) fn should_renew(expires_at: Option<u64>, now: u64, attempted_for: Option<u64>, last_attempt: Option<u64>, attempts: u32) -> bool {
     // Nothing read yet: never launch on a guess
     let Some(exp) = expires_at else { return false };
     // Plenty of time left — also where launching would do nothing, because the CLI's own gate has not opened
@@ -288,7 +316,7 @@ fn should_renew(expires_at: Option<u64>, now: u64, attempted_for: Option<u64>, l
 
 /// `claude -p` with a null stdin starts up (which is where it renews an aged token), then exits non-zero for want
 /// of a prompt: no conversation, no transcript. Output goes nowhere — a token could in principle be echoed into it.
-fn run_renewal(cli: &std::path::Path) -> std::io::Result<()> {
+fn run_renewal(cli: &std::path::Path, dir: &Path) -> std::io::Result<()> {
     use std::process::{Command, Stdio};
     let mut cmd = Command::new(cli);
     cmd.arg("-p").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
@@ -299,6 +327,8 @@ fn run_renewal(cli: &std::path::Path) -> std::io::Result<()> {
             cmd.env_remove(k.as_ref());
         }
     }
+    // 每个账号只更新自己的凭据，避免继承调用方的账号目录。
+    cmd.env("CLAUDE_CONFIG_DIR", dir);
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -327,7 +357,8 @@ struct Renewer {
 impl Renewer {
     /// Renews if the token is about to expire. Some(true) = the expiry moved; judged on the outcome, never on the
     /// exit status, because refusing the empty prompt is a non-zero exit and a successful renewal at the same time
-    fn maybe_renew(&mut self, cred: &Credential) -> Option<bool> {
+    fn maybe_renew(&mut self, cred: &Credential, dir: &Path, who: &str) -> Option<bool> {
+        let _auth = crate::claude_auth::try_acquire()?;
         let now = now_ms();
         if !should_renew(cred.expires_at, now, self.attempted_for, self.last_attempt, self.attempts) {
             return None;
@@ -336,14 +367,14 @@ impl Renewer {
         self.attempts = if self.attempted_for == cred.expires_at { self.attempts + 1 } else { 1 };
         self.attempted_for = cred.expires_at;
         let Some(cli) = find_cli() else {
-            crate::applog("claude: token about to expire and no standalone claude CLI found to renew it");
+            crate::applog(&format!("claude[{who}]: token about to expire and no standalone claude CLI found to renew it"));
             return Some(false);
         };
-        if let Err(e) = run_renewal(&cli) {
+        if let Err(e) = run_renewal(&cli, dir) {
             crate::applog(&format!("claude: token renewal could not start ({}): {e}", cli.display()));
             return Some(false);
         }
-        let after = read_credentials().and_then(|c| c.expires_at);
+        let after = read_credentials(dir).and_then(|c| c.expires_at);
         let renewed = matches!((after, cred.expires_at), (Some(a), Some(b)) if a > b);
         crate::applog(&if renewed {
             format!("claude: token renewed via {}", cli.display())
@@ -578,6 +609,7 @@ fn poll_account(p: &Profile, acc: &mut Account, group: Option<&str>) {
             acc.backoff_until = 0;
         }
     }
+    // No requests inside the backoff window
     // No requests inside this account's back-off window
     if acc.backoff_until > now_ms() {
         return;
@@ -594,6 +626,7 @@ fn poll_account(p: &Profile, acc: &mut Account, group: Option<&str>) {
         }
         Some(cred) => {
             let token = cred.token;
+            // On 401/403 re-read the credential and retry once (Claude Code may have just refreshed it)
             // On 401 re-read the credential and retry once (Claude Code may have just refreshed it)
             let result = match fetch_once(&token) {
                 Err(FetchErr::NeedsAuth) => match read_credentials(&p.dir) {
@@ -653,84 +686,24 @@ pub fn start(app: AppHandle) {
         for (k, windows) in split_persisted(&persisted, &profiles()) {
             accounts.entry(k).or_default().windows = windows;
         }
-        let mut consecutive_429: u32 = 0;
-        let mut renewer = Renewer::default();
         loop {
-            // Ahead of the back-off: renewing never touches the usage endpoint, and a fresh token deserves a fresh try
-            if let Some(cred) = read_credentials() {
-                if renewer.maybe_renew(&cred) == Some(true) {
-                    consecutive_429 = 0;
-                    set_and_broadcast(&app, |u| u.backoff_until = 0);
-                }
-            }
-            // No requests inside the backoff window
-            let bu = {
-                let st = app.state::<AppState>();
-                let u = st.usage.lock().unwrap();
-                u.backoff_until
-            };
-            let now = now_ms();
-            if bu > now {
-                sleep_interruptible(((bu - now) / 1000).clamp(1, 30));
+            // A sign-in the user started owns the credential until it finishes. Polling through it
+            // reads a file being rewritten and reports a signed-out account mid-login.
+            if crate::claude_auth::state().busy {
+                sleep_interruptible(2);
                 continue;
             }
-            match read_credentials() {
-                None => set_and_broadcast(&app, |u| {
-                    u.status = "needsAuth".into();
-                    u.note = "No Claude Code credential found".into();
-                }),
-                // Expired is not signed out: keep the last reading, dimmed and dated, and send nothing
-                Some(cred) if cred.expired(now_ms()) => set_and_broadcast(&app, |u| {
-                    u.status = if u.windows.is_empty() { "needsAuth" } else { "stale" }.into();
-                    u.note = EXPIRED_NOTE.into();
-                }),
-                Some(cred) => {
-                    let token = cred.token;
-                    // On 401/403 re-read the credential and retry once (Claude Code may have just refreshed it)
-                    let result = match fetch_once(&token) {
-                        Err(FetchErr::NeedsAuth) => match read_credentials() {
-                            Some(c2) if c2.token != token => fetch_once(&c2.token),
-                            _ => Err(FetchErr::NeedsAuth),
-                        },
-                        other => other,
-                    };
-                    let auth_note = "Credential rejected (switched accounts?)";
-                    match result {
-                        Ok(windows) => {
-                            consecutive_429 = 0;
-                            set_and_broadcast(&app, |u| {
-                                u.status = "ok".into();
-                                u.windows = windows;
-                                u.fetched_at = now_ms();
-                                u.note.clear();
-                                u.backoff_until = 0;
-                            });
-                        }
-                        Err(FetchErr::NeedsAuth) => set_and_broadcast(&app, |u| {
-                            u.status = "needsAuth".into();
-                            u.note = auth_note.into();
-                        }),
-                        Err(FetchErr::RateLimited(ra)) => {
-                            consecutive_429 += 1;
-                            let wait = backoff_secs(consecutive_429 - 1, ra);
-                            set_and_broadcast(&app, |u| {
-                                if !u.windows.is_empty() {
-                                    u.status = "stale".into();
-                                }
-                                u.note = format!("Rate limited, retrying in {wait}s");
-                                u.backoff_until = now_ms() + wait * 1000;
-                            });
-                        }
-                        Err(FetchErr::Other(msg)) => set_and_broadcast(&app, |u| {
-                            if u.windows.is_empty() {
-                                u.status = "error".into();
-                            } else {
-                                u.status = "stale".into();
-                            }
-                            u.note = msg;
-                        }),
-                    }
-                }
+            // Re-read the list each tick: an account signed into or removed while this runs needs no restart
+            let order = profiles();
+            let multi = order.len() > 1;
+            for p in &order {
+                let group = if multi {
+                    Some(p.group(read_credentials(&p.dir).and_then(|c| c.plan).as_deref()))
+                } else {
+                    None
+                };
+                let acc = accounts.entry(key(p)).or_default();
+                poll_account(p, acc, group.as_deref());
             }
             accounts.retain(|k, _| order.iter().any(|p| key(p) == *k));
             let snap = aggregate(&order, &accounts);
@@ -811,20 +784,101 @@ mod tests {
     fn live_renewal_runs_the_standalone_cli() {
         let cli = find_cli().expect("a standalone claude CLI");
         assert!(!is_desktop_owned(&cli));
-        let before = read_credentials().and_then(|c| c.expires_at);
+        let dir = dirs::home_dir().unwrap().join(".claude");
+        let before = read_credentials(&dir).and_then(|c| c.expires_at);
         let t = std::time::Instant::now();
-        run_renewal(&cli).expect("spawned");
+        run_renewal(&cli, &dir).expect("spawned");
         assert!(t.elapsed() < Duration::from_secs(RENEW_TIMEOUT_SECS), "returned before the timeout");
-        let after = read_credentials().and_then(|c| c.expires_at);
+        let after = read_credentials(&dir).and_then(|c| c.expires_at);
         assert!(after >= before, "the expiry never moves backwards");
         eprintln!("cli: {}", cli.display());
     }
 
+    fn prof(slug: Option<&str>) -> Profile {
+        Profile {
+            dir: PathBuf::from(match slug {
+                Some(s) => format!("/home/u/.claude-{s}"),
+                None => "/home/u/.claude".to_string(),
+            }),
+            slug: slug.map(String::from),
+        }
+    }
+
+    fn win(id: &str) -> LimitWindow {
+        LimitWindow { id: id.into(), label: "Current session".into(), used: 0.5, ..Default::default() }
+    }
+
+    #[test]
+    fn one_account_reads_exactly_as_before() {
+        let w = decorate(vec![win("session")], &prof(None), None);
+        assert_eq!(w[0].id, "session", "the only account keeps its ids");
+        assert_eq!(w[0].group, None, "and stays ungrouped, so its card is the card that shipped");
+    }
+
+    #[test]
+    fn a_second_account_is_suffixed_and_grouped() {
+        let w = decorate(vec![win("session")], &prof(Some("work")), Some("work · pro"));
+        assert_eq!(w[0].id, "session@work", "so by_id(\"session\") still means the default account");
+        assert_eq!(w[0].group.as_deref(), Some("work · pro"));
+    }
+
+    #[test]
+    fn the_group_pairs_the_name_with_the_plan() {
+        assert_eq!(prof(None).group(Some("max")), "default · max");
+        assert_eq!(prof(Some("work")).group(None), "work");
+        assert_eq!(prof(Some("work")).group(Some("")), "work", "an empty plan adds no separator");
+    }
+
+    #[test]
+    fn persisted_windows_go_back_to_the_account_that_made_them() {
+        let order = vec![prof(None), prof(Some("work"))];
+        let snap = UsageSnapshot {
+            windows: vec![win("session"), win("session@work"), win("weekly@gone")],
+            ..Default::default()
+        };
+        let split = split_persisted(&snap, &order);
+        assert_eq!(split[&key(&order[0])].len(), 1);
+        assert_eq!(split[&key(&order[1])][0].id, "session@work");
+        assert_eq!(split.len(), 2, "windows from an account that is gone are dropped");
+    }
+
+    #[test]
+    fn status_is_the_best_news_any_account_has() {
+        let order = vec![prof(None), prof(Some("work"))];
+        let mut accounts: HashMap<String, Account> = HashMap::new();
+        accounts.insert(
+            key(&order[0]),
+            Account { status: "ok".into(), windows: vec![win("session")], fetched_at: 10, ..Default::default() },
+        );
+        accounts.insert(
+            key(&order[1]),
+            Account {
+                status: "needsAuth".into(),
+                note: "No Claude Code credential found".into(),
+                ..Default::default()
+            },
+        );
+        let snap = aggregate(&order, &accounts);
+        assert_eq!(snap.status, "ok", "a signed-out second account must not dim the first");
+        assert_eq!(snap.windows.len(), 1);
+        assert_eq!(snap.fetched_at, 10);
+        assert!(snap.note.starts_with("work: "), "the note names the account: {}", snap.note);
+    }
+
+    #[test]
+    fn the_soonest_back_off_is_the_one_waited_out() {
+        let order = vec![prof(None), prof(Some("work"))];
+        let mut accounts: HashMap<String, Account> = HashMap::new();
+        accounts.insert(key(&order[0]), Account { backoff_until: 900, ..Default::default() });
+        accounts.insert(key(&order[1]), Account { backoff_until: 300, ..Default::default() });
+        assert_eq!(aggregate(&order, &accounts).backoff_until, 300);
+    }
+
     #[test]
     fn expired_is_judged_against_now() {
-        let c = Credential { token: "t".into(), expires_at: Some(EXP) };
+        let c = Credential { token: "t".into(), expires_at: Some(EXP), ..Default::default() };
         assert!(c.expired(EXP));
         assert!(!c.expired(EXP - 1));
-        assert!(!Credential { token: "t".into(), expires_at: None }.expired(EXP));
+        assert!(!Credential { token: "t".into(), expires_at: None, ..Default::default() }.expired(EXP));
     }
 }

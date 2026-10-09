@@ -35,7 +35,7 @@ extension View {
 /// crossing-and-notification machinery it switches is Notifications' to
 /// explain.
 private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case accounts, codeSwitch, phone, deepseek, ollama, lmstudio, appearance, notifications, general
+    case accounts, codeSwitch, phone, deepseek, ollama, lmstudio, customEndpoints, appearance, notifications, costs, general
 
     /// The sections the sidebar lists; Phone only once pairing is offered.
     static var visible: [SettingsSection] {
@@ -54,6 +54,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .customEndpoints: return L10n.t("Custom Endpoints")
         case .appearance:    return L10n.t("Appearance")
         case .notifications: return L10n.t("Notifications")
+        case .costs:         return L10n.t("Costs")
         case .general:       return L10n.t("General")
         case .codeSwitch: return "Code Switch R"
         }
@@ -81,6 +82,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .customEndpoints: return L10n.t("OpenAI-compatible APIs, local runtimes and custom proxies.")
         case .appearance:    return L10n.t("How the notch looks and where it sits.")
         case .notifications: return L10n.t("What Codenotch tells you, and when.")
+        case .costs:         return L10n.t("What each project spent of each login’s allowance.")
+        case .codeSwitch:    return L10n.t("Linked providers, quotas and activity.")
         case .general:       return L10n.t("Startup, updates and everything else.")
         }
     }
@@ -96,6 +99,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .customEndpoints: return "network"
         case .appearance:    return "paintbrush.fill"
         case .notifications: return "bell.badge.fill"
+        case .costs:         return "chart.bar.fill"
         case .general:       return "gearshape.fill"
         }
     }
@@ -114,6 +118,7 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .customEndpoints: return .indigo
         case .appearance:    return .indigo
         case .notifications: return .red
+        case .costs:         return .mint
         case .general:       return .gray
         }
     }
@@ -159,6 +164,18 @@ private struct VisualEffect: NSViewRepresentable {
 /// The panel's surfaces. Near-black and flat: the window a shade darker than
 /// the sidebar, hairlines instead of shadows, white at stepped opacities for
 /// text rather than system greys that shift with the desktop behind them.
+private struct SidebarIcon: View {
+    let systemName: String
+    let tint: Color
+    var body: some View {
+        Image(systemName: systemName)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 24, height: 24)
+            .background(tint, in: RoundedRectangle(cornerRadius: 5))
+    }
+}
+
 private enum SettingsPalette {
     static let window = Color(red: 0.055, green: 0.055, blue: 0.063)
     static let sidebar = Color(red: 0.086, green: 0.086, blue: 0.094)
@@ -176,6 +193,7 @@ private struct SettingsSidebarRow: View {
     /// Shared by every row, so the selection pill is one shape that slides
     /// from the old row to the new one rather than blinking between them.
     let selectionSpace: Namespace.ID
+    var hasUpdate = false
     var indent = false
     var count: Int? = nil
     var disclosure: Binding<Bool>? = nil
@@ -197,7 +215,12 @@ private struct SettingsSidebarRow: View {
                     .foregroundStyle(.white.opacity(isSelected ? 0.95 : isHovered ? 0.85 : 0.6))
                     // Leans toward the pointer's row a hair, and pops once on selection.
                     .offset(x: isHovered && !isSelected && !reduceMotion ? 1.5 : 0)
-                Text(section.title)
+                HStack(spacing: 6) {
+                    Text(section.title)
+                    if section == .general, hasUpdate {
+                        Circle().fill(.red).frame(width: 6, height: 6)
+                    }
+                }
                     .font(.system(size: 13, weight: isSelected ? .medium : .regular))
                     .foregroundStyle(.white.opacity(isSelected ? 0.95 : isHovered ? 0.92 : 0.78))
                     .lineLimit(1)
@@ -441,6 +464,7 @@ struct SettingsView: View {
     /// effect the next time the edge changed.
     let resetPosition: () -> Void
     let quit: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ObservedObject var updater: Updater
     var ollamaRelay: OllamaActivityRelay? = nil
     var lmstudioMetrics: LMStudioMetrics? = nil
@@ -554,10 +578,20 @@ struct SettingsView: View {
     /// The subject list: a full-height column on a shade lighter than the
     /// pane, the app's own mark and name at its head, plain white symbols
     /// rather than coloured badges, and the selection as a soft grey pill.
+    private var sizeIsDecidedByTheHardware: Bool {
+        preferences.hardwareNotchWings && preferences.notchEdge == .top
+            && NSScreen.screens.contains { $0.hardwareNotch != nil }
+    }
+
     private var sidebar: some View {
         List(SettingsSection.visible, selection: $selection) { section in
             Label {
-                Text(section.title)
+                HStack(spacing: 6) {
+                    Text(section.title)
+                    if section == .general, updater.pending != nil {
+                        Circle().fill(.red).frame(width: 6, height: 6)
+                    }
+                }
             } icon: {
                 SidebarIcon(systemName: section.icon, tint: section.tint)
             }
@@ -580,7 +614,7 @@ struct SettingsView: View {
         .safeAreaInset(edge: .top, spacing: 0) {
             HStack(spacing: 0) {
                 Spacer(minLength: 0)
-                sidebarToggle
+                EmptyView()
             }
             .padding(.trailing, 14)
             .frame(height: SettingsView.headerHeight - SettingsView.sidebarInset)
@@ -634,82 +668,6 @@ struct SettingsView: View {
         .padding(SettingsView.sidebarInset)
     }
 
-            HStack(spacing: 10) {
-                Image(nsImage: NSApp.applicationIconImage)
-                    .resizable()
-                    .interpolation(.high)
-                    .frame(width: 22, height: 22)
-                Text("Codenotch")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
-            }
-            .padding(.horizontal, 18)
-            .padding(.bottom, 16)
-
-            ScrollView {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(SettingsSection.topLevel) { section in
-                        SettingsSidebarRow(
-                            section: section,
-                            isSelected: selection == section,
-                            selectionSpace: selectionSpace,
-                            count: section == .accounts ? connectedCount : nil,
-                            disclosure: section == .accounts ? $accountsExpanded : nil,
-                            select: { selectSection(section) }
-                        )
-                        if section == .accounts, accountsExpanded {
-                            ForEach(SettingsSection.providerPanes) { child in
-                                SettingsSidebarRow(section: child,
-                                                   isSelected: selection == child,
-                                                   selectionSpace: selectionSpace,
-                                                   indent: true,
-                                                   select: { selectSection(child) })
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 10)
-            }
-            .scrollIndicators(.never)
-
-            Spacer(minLength: 0)
-
-            VStack(alignment: .leading, spacing: 6) {
-                SettingsQuitRow(quit: quit)
-                HStack(spacing: 8) {
-                    Text("Codenotch \(updater.currentVersion)")
-                        .font(.system(size: 11, weight: .regular))
-                        .foregroundStyle(.white.opacity(0.32))
-                    Spacer(minLength: 0)
-                    // Only once a check has found a newer version. Sparkle
-                    // downloads it in the background either way; this is for
-                    // someone who would rather have it now than on next launch.
-                    if case .found(let newer) = updater.outcome {
-                        Button(L10n.t("Update")) { updater.checkNow() }
-                            .buttonStyle(SettingsButtonStyle(kind: .prominent, compact: true))
-                            .help(L10n.t("Version \(newer) is available"))
-                            .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                    }
-                }
-                .animation(.easeOut(duration: 0.2), value: updater.outcome)
-                .padding(.horizontal, 10)
-            }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 16)
-        }
-        // Opening a provider's pane from elsewhere must not land on a row
-        // that is folded out of sight.
-        .onChange(of: selection) { section in
-            if section == .accounts { accounts = providers() }
-            if SettingsSection.providerPanes.contains(section) { accountsExpanded = true }
-        }
-        .frame(width: SettingsView.sidebarWidth)
-        .frame(maxHeight: .infinity)
-        .background(SettingsPalette.sidebar)
-        .overlay(alignment: .trailing) {
-            SettingsPalette.hairline.frame(width: 1)
-        }
-    }
 
     /// The pill slides on a spring; the pane itself crossfades on its own.
     private func selectSection(_ section: SettingsSection) {
@@ -780,6 +738,7 @@ struct SettingsView: View {
             CustomEndpointsSettingsView(preferences: preferences)
         case .appearance:    appearancePane
         case .notifications: notificationsPane
+        case .costs:         CostSettingsPane()
         case .general:       generalPane
         case .codeSwitch:
             if let codeSwitch { CodeSwitchSettingsView(preferences: preferences, bridge: codeSwitch) }
@@ -788,6 +747,12 @@ struct SettingsView: View {
 
     private var accountsPane: some View {
         Form {
+            Section("Qoder") {
+                Picker(L10n.t("Region"), selection: $preferences.qoderRegion) {
+                    Text(L10n.t("International")).tag(Sites.QoderRegion.global)
+                    Text(L10n.t("China mainland")).tag(Sites.QoderRegion.china)
+                }
+            }
             if let catalog, let usageStore {
                 QueryManagementView(catalog: catalog, store: usageStore, preferences: preferences)
                 Section(L10n.t("Local models")) {
@@ -1040,7 +1005,7 @@ struct SettingsView: View {
                 // configured — so they stay, and the note below says why the
                 // notch is not moving.
                 if sizeIsDecidedByTheHardware {
-                    Text(L10n.t("On this edge your notch is merged into your Mac's own cutout, and the cutout sets its size. This has no effect here — it is waiting for you to move the notch to another edge."))
+                    Text(L10n.t("Wing layout follows the hardware notch when centered at the top. Size previews use the standard layout."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -1104,6 +1069,9 @@ struct SettingsView: View {
                     Text(L10n.t("Space on each side of the hardware notch when collapsed. Changes preview live."))
                         .font(.caption).foregroundStyle(.secondary)
                     Toggle(L10n.t("Show notch when idle"), isOn: $preferences.showsIdleNotch)
+                    Toggle(L10n.t("Expand beside the camera"), isOn: $preferences.hardwareNotchWings)
+                    Text(L10n.t("Applies when expanded at the top center of a notched display. The collapsed layout stays the same."))
+                        .font(.caption).foregroundStyle(.secondary)
                     Text(L10n.t("When off, idle sides retract. Hover still opens the notch; active calls restore the sides."))
                         .font(.caption).foregroundStyle(.secondary)
                     Picker(L10n.t("Idle notch display"), selection: $preferences.idleBotAppearance.enabled) {
@@ -1242,6 +1210,18 @@ struct SettingsView: View {
 
             Section(L10n.t("Usage Limits")) {
                 VStack(alignment: .leading, spacing: 4) {
+                    Picker(L10n.t("Colour transition"), selection: $preferences.colorTransitionStyle) {
+                        ForEach(ColorTransitionStyle.allCases) { Text($0.title).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(preferences.colorTransitionStyle.explanation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(L10n.t("Watch limit"))
                         Spacer()
@@ -1325,6 +1305,68 @@ struct SettingsView: View {
 
     private func scheduleVolumePreview() {
         volumePreviewScheduler.schedule { previewVolume() }
+    }
+
+    private var menuBarChoices: [MenuBarChoice] {
+        MenuBarChoice.listed(in: usageStore?.snapshots ?? [])
+    }
+
+    /// Limits in the menu bar: the switch, and under it one row for each
+    /// provider the bar can show.
+    ///
+    /// Each of those rows is about the menu bar alone. Whether a provider is
+    /// read at all is its own switch in Accounts, and nothing here touches it.
+    @ViewBuilder
+    private var menuBarLimitRows: some View {
+        Toggle(L10n.t("Show limit information in menu bar"), isOn: $preferences.showsLimitsInMenuBar)
+        Text(L10n.t("Swaps the icon for each chosen provider's five-hour limit — how much is used and how long until it resets."))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+
+        if preferences.showsLimitsInMenuBar {
+            Toggle(L10n.t("Show weekly limit in menu bar"),
+                   isOn: $preferences.showsWeeklyLimitInMenuBar)
+            Text(L10n.t("Adds a compact weekly-usage ring around each chosen provider that publishes it."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            ForEach(menuBarChoices) { choice in
+                Toggle(isOn: Binding(
+                    get: { preferences.isInMenuBar(choice.id) },
+                    set: { preferences.setInMenuBar($0, for: choice.id, among: menuBarChoices.map(\.id)) }
+                )) {
+                    // The mark and name as the Accounts rows draw them, so a
+                    // provider is recognisably the same one in both places.
+                    HStack(spacing: 10) {
+                        ProviderGlyphView(glyph: choice.glyph, size: 16)
+                            .accessibilityHidden(true)
+                        Text(choice.name)
+                    }
+                }
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .help(L10n.t("Shows \(choice.name)'s five-hour limit in the menu bar. Codenotch reads it either way."))
+            }
+
+            Text(menuBarChoices.isEmpty
+                 ? L10n.t("Nothing Codenotch reads has a five-hour limit to show yet. Claude and Codex do — switch one on in Accounts.")
+                 : L10n.t("Leaving a provider out keeps it off the menu bar only — Codenotch still reads it. With none chosen, the icon comes back."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            // Said only once it applies: past two the item keeps each share
+            // and drops the countdowns, and past four it stops, because macOS
+            // hides a status item that does not fit rather than squeezing it.
+            if menuBarChoices.filter({ preferences.isInMenuBar($0.id) }).count > StatusItemSummary.fullEntryLimit {
+                Text(L10n.t("Past two, each shows its share alone and the countdowns move to the tooltip. Past four, the rest are in the menu."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 
     private var notificationsPane: some View {
@@ -1506,6 +1548,20 @@ struct SettingsView: View {
     // like an oversight rather than a section.
     private var generalPane: some View {
         Form {
+            if let version = updater.pending {
+                Section {
+                    HStack {
+                        Text(L10n.t("Update available: \(version)"))
+                        Spacer()
+                        Button(L10n.t("Update")) { updater.reoffer() }
+                    }
+                }
+            }
+            Section(L10n.t("Readings")) {
+                Toggle(L10n.t("Ask the provider every time you look"), isOn: $preferences.asksProviderOnLook)
+                Text(L10n.t("Uses a fresh request when you hover or open the menu. Automatic refresh and rate limits still apply."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             // No title on the group: the pane's own header above already
             // says "General", and repeating it here would say it twice.
             Section {
@@ -1517,7 +1573,7 @@ struct SettingsView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Toggle(L10n.t("Install updates automatically"), isOn: Binding(
+                Toggle(L10n.t("Check for updates automatically"), isOn: Binding(
                     get: { updater.automatic },
                     set: { updater.automatic = $0 }
                 ))
@@ -1529,7 +1585,7 @@ struct SettingsView: View {
                     // a way to switch it off, is the difference between a
                     // background updater and something that looks like it is
                     // hiding.
-                    Text(L10n.t("Version \(updater.currentVersion). Updates install in the background and apply next time Codenotch starts."))
+                    Text(L10n.t("Version \(updater.currentVersion). New updates ask before downloading and installing."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)

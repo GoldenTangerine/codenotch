@@ -129,6 +129,11 @@ enum GLMCredentials {
         return nil
     }
 
+    /// Start Plan detection remains separate until its quota surface is supported.
+    static func isPlanProvider(_ id: String) -> Bool {
+        id.contains("coding-plan")
+    }
+
     /// Whether ZCode has Z.ai's Start Plan switched on (#71).
     ///
     /// Its key is not claimed as a credential: the monitor endpoint the Coding

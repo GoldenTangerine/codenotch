@@ -40,6 +40,17 @@ final class UsageStore: ObservableObject {
     @Published private(set) var providerAccountRevision = 0
 
     private var providers: [UsageProvider]
+    private var customProviders: [UsageProvider] = []
+    var nicknames: [String: String] = [:] {
+        didSet { if nicknames != oldValue { snapshots = snapshots.map(named) } }
+    }
+
+    private func named(_ snapshot: ProviderSnapshot) -> ProviderSnapshot {
+        var snapshot = snapshot
+        snapshot.displayName = nicknames[snapshot.id]
+            ?? providers.first(where: { $0.id == snapshot.id })?.displayName ?? snapshot.displayName
+        return Costs.decorate(snapshot)
+    }
     private var attempts: [String: Date] = [:]
     private var backoffs: [String: Date] = [:]
     private var isReconfiguring = false
@@ -109,6 +120,9 @@ final class UsageStore: ObservableObject {
     /// move while nothing is running, so polling hard through a quiet afternoon
     /// spends rate-limit budget to re-read a number that has not changed.
     var isBusy: () -> Bool = { false }
+    var asksProviderOnLook: () -> Bool = { false }
+    private var lastLook: Date?
+    private var lastWorkFinished: [String: Date] = [:]
 
     private let refreshInterval: TimeInterval
     private let localRefreshInterval: TimeInterval
@@ -180,7 +194,7 @@ final class UsageStore: ObservableObject {
 
     init(
         providers: [UsageProvider],
-        refreshInterval: TimeInterval = 60,
+        refreshInterval: TimeInterval = 30,
         localRefreshInterval: TimeInterval = 1,
         idleRefreshInterval: TimeInterval = 5 * 60,
         staleAfter: TimeInterval = 15 * 60,
@@ -346,7 +360,7 @@ final class UsageStore: ObservableObject {
             idleInterval: idleRefreshInterval,
             resetDue: Self.hasWindowRolledOver(in: snapshots, since: lastAttempt, at: now)
         ) else { return }
-        refreshNow()
+        refreshNow(freshness: isBusy() ? .live : .standard)
     }
 
     /// True when a window's `resetsAt` fell between the last attempt and now.
@@ -381,9 +395,9 @@ final class UsageStore: ObservableObject {
         isBusy || resetDue || sinceLastAttempt >= idleInterval
     }
 
-    func refreshNow() {
+    func refreshNow(freshness: UsageFreshness = .fromSource) {
         if usesConfiguredSchedule {
-            for provider in providers { refresh(providerID: provider.id) }
+            for provider in providers { refresh(providerID: provider.id, freshness: freshness) }
             return
         }
         guard !isRefreshing else {
@@ -393,7 +407,7 @@ final class UsageStore: ObservableObject {
         isRefreshing = true
         lastAttempt = pollingNow()
         refreshTask = Task { [weak self] in
-            await self?.refresh()
+            await self?.refresh(freshness: freshness)
             self?.finish()
         }
         armDeadline()
@@ -460,11 +474,11 @@ final class UsageStore: ObservableObject {
         isRefreshing = false
     }
 
-    func refresh() async {
+    func refresh(freshness: UsageFreshness = .standard) async {
         // The provider tasks below do not inherit this task's cancellation.
         guard !Task.isCancelled else { return }
         let tasks = orderedProviders.filter { !disconnected.contains($0.id) }.map {
-            beginRefresh($0)
+            beginRefresh($0, freshness: freshness)
         }
         for task in tasks { await task.value }
         // Awaiting a full refresh also guarantees that a new store can restore it.
@@ -477,12 +491,37 @@ final class UsageStore: ObservableObject {
     /// reading should not spend every other provider's rate-limit budget, and
     /// Claude's in particular is easy to exhaust.
     @discardableResult
-    func refresh(providerID: String) -> Task<Void, Never>? {
+    func refresh(providerID: String, freshness: UsageFreshness = .fromSource) -> Task<Void, Never>? {
         guard let provider = providers.first(where: { $0.id == providerID }),
               !disconnected.contains(providerID) else { return nil }
         if let task = fetchTasks[providerID] { return task }
         if provider.kind == .usage { lastAttempt = pollingNow() }
-        return beginRefresh(provider, holdIndicator: true)
+        return beginRefresh(provider, freshness: freshness, holdIndicator: true)
+    }
+
+    /// 自动触发遵守条目的刷新开关；手动点击仍可按需查询。
+    private func allowsAutomaticRefresh(_ provider: UsageProvider) -> Bool {
+        guard !disconnected.contains(provider.id), provider.kind == .usage else { return false }
+        guard let configured = provider as? ConfiguredUsageProvider else { return true }
+        return configured.entry.enabled && configured.entry.schedule.enabled
+    }
+
+    func refreshBecauseSomeoneIsLooking() {
+        let now = pollingNow()
+        guard lastLook.map({ now.timeIntervalSince($0) >= 15 }) ?? true else { return }
+        lastLook = now
+        for provider in providers where allowsAutomaticRefresh(provider) {
+            _ = refresh(providerID: provider.id, freshness: asksProviderOnLook() ? .fromSource : .live)
+        }
+    }
+
+    func refreshBecauseWorkFinished(providerID: String) {
+        guard let provider = providers.first(where: { $0.id == providerID }),
+              allowsAutomaticRefresh(provider) else { return }
+        let now = pollingNow()
+        guard lastWorkFinished[providerID].map({ now.timeIntervalSince($0) >= 15 }) ?? true else { return }
+        lastWorkFinished[providerID] = now
+        _ = refresh(providerID: providerID, freshness: .live)
     }
 
     /// A changed account source makes an in-flight response and its archived
@@ -531,7 +570,8 @@ final class UsageStore: ObservableObject {
         _ = beginRefresh(provider)
     }
 
-    private func beginRefresh(_ provider: UsageProvider, holdIndicator: Bool = false) -> Task<Void, Never> {
+    private func beginRefresh(_ provider: UsageProvider, freshness: UsageFreshness = .standard,
+                              holdIndicator: Bool = false) -> Task<Void, Never> {
         if let task = fetchTasks[provider.id] { return task }
         if provider is ConfiguredUsageProvider,
            let until = backoffs[provider.id] ?? archive.loadBackoffUntil(providerID: provider.id), until > pollingNow() {
@@ -548,7 +588,7 @@ final class UsageStore: ObservableObject {
         refreshing.insert(provider.id)
         let task = Task { [weak self] in
             guard let self else { return }
-            if let fresh = await snapshot(from: provider, generation: generation) {
+            if let fresh = await snapshot(from: provider, generation: generation, freshness: freshness) {
                 publish(fresh)
             } else if acceptsResult(from: provider, generation: generation) {
                 snapshots.removeAll { $0.id == provider.id }
@@ -729,12 +769,13 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    private func snapshot(from provider: UsageProvider, generation: Int) async -> ProviderSnapshot? {
+    private func snapshot(from provider: UsageProvider, generation: Int,
+                          freshness: UsageFreshness = .standard) async -> ProviderSnapshot? {
         // A scheduled task can be disconnected before it begins; avoid reading
         // its credential at all, as well as rejecting an obsolete response.
         guard acceptsResult(from: provider, generation: generation) else { return nil }
         do {
-            var fresh = try await provider.fetchSnapshot()
+            var fresh = try await provider.fetchSnapshot(freshness: freshness)
             guard acceptsResult(from: provider, generation: generation) else { return nil }
             if let current = providers.first(where: { $0.id == provider.id }) as? ConfiguredUsageProvider {
                 fresh = current.decorate(fresh)
@@ -913,6 +954,7 @@ final class UsageStore: ObservableObject {
 
     func reconfigure(providers next: [UsageProvider], disconnected nextDisconnected: Set<String>,
                      invalidated: Set<String>) {
+        let next = next.filter { !$0.id.hasPrefix("custom-endpoint-") } + customProviders
         usesConfiguredSchedule = true
         let old = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
         let nextIDs = Set(next.map(\.id))
@@ -922,7 +964,7 @@ final class UsageStore: ObservableObject {
             let after = (provider as? ConfiguredUsageProvider)?.entry
             let queryChanged = before.map { previous in
                 after.map { !previous.sameQuery(as: $0) } ?? true
-            } ?? true
+            } ?? (after != nil || old[provider.id] == nil)
             if queryChanged || before?.enabled != after?.enabled || invalidated.contains(provider.id) {
                 cancelRefresh(providerID: provider.id)
                 attempts[provider.id] = nil
@@ -959,14 +1001,22 @@ final class UsageStore: ObservableObject {
 
     func refreshDue(now: Date? = nil) {
         let now = now ?? pollingNow()
-        for case let provider as ConfiguredUsageProvider in providers where provider.kind == .usage {
-            let schedule = provider.entry.schedule
-            guard provider.entry.enabled, schedule.enabled,
+        for provider in providers where provider.kind == .usage {
+            let configured = provider as? ConfiguredUsageProvider
+            let schedule = configured?.entry.schedule ?? QuerySchedule()
+            guard configured?.entry.enabled != false, schedule.enabled,
                   now.timeIntervalSince(attempts[provider.id] ?? .distantPast) >= schedule.interval(busy: isBusy())
                     || Self.hasWindowRolledOver(in: snapshots.filter { $0.id == provider.id },
                                                since: attempts[provider.id], at: now) else { continue }
-            refresh(providerID: provider.id)
+            refresh(providerID: provider.id, freshness: isBusy() ? .live : .standard)
         }
+    }
+
+    func registerCustomProviders(_ custom: [UsageProvider], invalidated: Set<String>? = nil,
+                                 disconnected: Set<String>? = nil) {
+        let changed = invalidated ?? Set(customProviders.map(\.id)).union(custom.map(\.id))
+        customProviders = custom
+        reconfigure(providers: providers, disconnected: disconnected ?? self.disconnected, invalidated: changed)
     }
 
     private func configuredFailure(provider: UsageProvider, error: Error) -> ProviderSnapshot {

@@ -1,3 +1,12 @@
+/**
+@name: 韩语用量文案回归测试
+@Descripttion: 验证用量格式化保留数字与未知供应商消息。
+@version: 1.0.0
+@Author: sm
+@Date: 2026-10-09 10:35:00
+@LastEditTime: 2026-10-09 10:35:00
+@FilePath: windows/scripts/test-ko-i18n.cjs
+*/
 const {readFileSync} = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -6,7 +15,9 @@ const {test} = require('node:test');
 
 // Exercise the page's actual lookup and formatters without a WebView or Tauri.
 const html = readFileSync(path.join(__dirname, '../codenotch/ui/notch.html'), 'utf8');
-const source = html.slice(html.indexOf("let uiLang='en';"), html.indexOf('function setUiLanguage'));
+const source = "let uiLang='en';\n"
+  + html.slice(html.indexOf('const TEXT='), html.indexOf('// "Is it working?"'))
+  + html.slice(html.indexOf('function language(){'), html.indexOf('function setUiLanguage'));
 function card(lang) {
   return vm.runInNewContext(source + `; uiLang=${JSON.stringify(lang)}; ({textCopy, ui:ui()})`);
 }

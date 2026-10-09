@@ -39,11 +39,15 @@ enum ProviderGlyph: String, Codable, Equatable {
     case copilot
     case kimi
     case kiro
+    case kilo
+    case apify
     case amp
     case minimax
     case ollama
     case ollamaLocal = "ollama-local"
     case lmstudio
+    case llamaCpp = "llamacpp"
+    case qoder
     /// The QianwenAI platform's own console mark, which is a different emblem
     /// from the local Qwen model brand in `.qwen` — a ring wearing this one is
     /// the platform account, not a model.
@@ -84,12 +88,13 @@ enum ProviderGlyph: String, Codable, Equatable {
         case .third:  return 1.0
         case .ollamaLocal: return 0.98
         case .lmstudio: return 0.96
+        case .llamaCpp: return 1.0
         // The one value here measured off a render of the asset file rather
         // than of the app: this mark's ink fills 0.996 of its box, rasterised
         // with `rsvg-convert -w 512`. Claude's outline fills 0.997 at 0.97, so
         // the same scale brings this ink to the same extent.
-        case .qianwenAI: return 0.97
-        case .devin, .qwen, .gemma, .meta, .deepseek, .mistral: return 1.0
+        case .qianwenAI, .qoder: return 0.97
+        case .devin, .qwen, .gemma, .meta, .deepseek, .mistral, .kilo, .apify: return 1.0
         }
     }
 
@@ -105,7 +110,7 @@ enum ProviderGlyph: String, Codable, Equatable {
         // glyph-kimi in the asset catalogue are drawn instead.
         case .glm:    return GlyphOutline.glm
         case .devin, .qwen, .gemma, .meta, .deepseek, .mistral, .lmstudio,
-             .qianwenAI, .amp: return []
+             .qianwenAI, .qoder, .amp, .llamaCpp, .kilo, .apify: return []
         case .grok:   return GlyphOutline.grok
         case .opencode: return GlyphOutline.opencode
         case .commandcode: return GlyphOutline.commandcode

@@ -194,7 +194,6 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
         sessions = []
     }
 
-    private let storeCache = CodexStoreCache()
 
     /// When each row entered the state it is in, by session id. See `settled`.
     private var entered: [String: (state: AgentSession.State, at: Date)] = [:]

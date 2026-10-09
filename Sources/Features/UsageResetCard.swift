@@ -55,6 +55,7 @@ struct UsageResetCard: View {
     }
 
     private var titleText: String {
+        if let title = event.noticeTitle { return title }
         switch event.kind {
         case .reset:
             return L10n.t("\(event.providerName) Reset")
@@ -66,6 +67,7 @@ struct UsageResetCard: View {
     }
 
     private var subtitleText: String {
+        if let subtitle = event.noticeSubtitle { return subtitle }
         switch event.kind {
         case .reset:
             return L10n.t("\(event.windowLabel) limit refreshed")
@@ -84,6 +86,7 @@ struct UsageResetCard: View {
     }
 
     private var statusText: String {
+        if let status = event.noticeStatus { return status }
         switch event.kind {
         case .reset:
             return L10n.t("Quota is available (0% used)")

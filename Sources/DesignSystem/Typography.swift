@@ -1,3 +1,12 @@
+/**
+ @name: 上游功能兼容模块
+ @Descripttion: 实现上游功能及本地兼容行为。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-10-09 09:58:33
+ @LastEditTime: 2026-10-09 09:58:33
+ @FilePath: Sources/DesignSystem/Typography.swift
+ */
 import SwiftUI
 
 /// Sizes are derived from cap heights measured in the design frame, so they
@@ -9,6 +18,16 @@ enum Typography {
     /// "30%/70%": the 5h and weekly readings together, a step smaller so the
     /// pair fits roughly the width one reading used to.
     static let percentPair = Font.system(size: Design.fontSize(capPixels: 22), weight: .semibold)
+
+    /// The one ring's percentage on the other side of the Mac's notch, where it
+    /// has the whole depth to itself rather than a line under the ring: sized
+    /// against the ring beside it, its capitals 40% of the ring's 117px.
+    static let percentAcrossSize = Design.fontSize(capPixels: 47)
+    static let percentAcross = Font.system(size: percentAcrossSize, weight: .semibold)
+
+    /// The pair there, a step smaller as under the ring, so it fits the side.
+    static let percentPairAcrossSize = Design.fontSize(capPixels: 38)
+    static let percentPairAcross = Font.system(size: percentPairAcrossSize, weight: .semibold)
 
     /// "Claude Usage". Cap height 26px.
     static let cardTitle = Font.system(size: Design.fontSize(capPixels: 26), weight: .semibold)

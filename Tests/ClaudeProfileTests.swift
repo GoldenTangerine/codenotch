@@ -341,6 +341,15 @@ final class ClaudeProfileTests: XCTestCase {
         XCTAssertNil(profile.organizationID())
     }
 
+    func testThePlanComesFromTheSameAccountRecordAsTheOrganization() throws {
+        let home = try accountHome(address: "one@example.com")
+        let profile = ClaudeProfile.default(home: home)
+        let data = Data(#"{"oauthAccount":{"emailAddress":"work@example.com","organizationUuid":"org-work","organizationType":"claude_enterprise"}}"#.utf8)
+        try data.write(to: profile.accountFileURL)
+        XCTAssertEqual(profile.organizationID(), "org-work")
+        XCTAssertEqual(profile.organizationPlan(), "enterprise")
+    }
+
     /// A home directory with `.claude/` and a `.claude.json` beside it, as the
     /// default profile expects them.
     private func accountHome(address: String,

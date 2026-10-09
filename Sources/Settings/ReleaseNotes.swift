@@ -40,6 +40,17 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.22.0",
+            headline: L10n.t("Upstream 1.22, native costs and a liquid notch"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Add Qoder, Command Code accounts, Anthropic and Gemini endpoints and llama.cpp metrics from upstream 1.22")),
+                ReleaseNote.Change(title: L10n.t("Estimate native Claude and Codex costs for confirmed accounts while keeping Code Switch R statistics")),
+                ReleaseNote.Change(title: L10n.t("Refresh on hover and when a task ends, with reset countdowns in seconds")),
+                ReleaseNote.Change(title: L10n.t("Drag the notch along the screen edge with a liquid animation; the wing layout stays off by default")),
+                ReleaseNote.Change(title: L10n.t("Show available updates in the notch and check for updates on Windows"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.6.62",
             headline: L10n.t("Quota bars in expanded details"),
             changes: [

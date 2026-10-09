@@ -71,7 +71,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         switch self {
         case .system:
             return L10n.t("Matches the Mac's preferred language.")
-        case .english, .french, .german, .japanese, .brazilianPortuguese, .russian,
+        case .english, .french, .german, .japanese, .korean, .brazilianPortuguese, .russian,
              .simplifiedChinese, .ukrainian:
             return L10n.t("Codenotch uses this language even if the Mac does not.")
         }
@@ -87,6 +87,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         case .french: return ["fr"]
         case .german: return ["de"]
         case .japanese: return ["ja"]
+        case .korean: return ["ko"]
         case .brazilianPortuguese: return ["pt-BR"]
         case .russian: return ["ru"]
         case .simplifiedChinese: return ["zh-Hans"]

@@ -60,6 +60,23 @@ controls preview live on the collapsed bar; its robot and count sit closer
 to the central notch. Negative height offsets shorten the software sides,
 not the physical camera cutout.
 
+The six-dot move handle follows screen edges and corners. Move and Settings
+handles keep separate visibility controls; position editing still supports
+centering and cancellation. **Hardware notch wings** is optional and off by
+default. It applies only while expanded and centered at the top of a notched
+display; collapsed robots and size previews keep the local layout.
+
+**Settings → Costs** enables project estimates per Claude or Codex account.
+Only confirm accounts whose local logs contain exclusively native direct usage.
+Unconfirmed accounts are excluded. **Activity** groups their sessions by project
+and day, week or month; amounts are estimates from token prices or subscription
+allocation, not invoices. Code Switch R keeps its existing separate cost data.
+Turning an account off stops its cost indexing.
+
+Automatic hover and task-completion refreshes respect each account's automatic
+refresh switch and rate-limit backoff. Saved intervals are preserved. Asking the
+provider directly on every look is an optional setting and is off by default.
+
 ## Download
 
 Download this fork from [Releases](https://github.com/GoldenTangerine/codenotch/releases/latest).

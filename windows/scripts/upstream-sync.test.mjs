@@ -25,13 +25,15 @@ async function page(name) {
       },
       get innerHTML() { return this._html; },
       set innerHTML(value) { this._html = String(value); },
-      hidden: false, disabled: false, children: [], listeners: {},
+      hidden: false, disabled: false, listeners: {},
+      get children() { return Array.from({length: 8}, (_, i) => get(`${id}:child:${i}`)); },
+      get parentElement() { return get(`${id}:parent`); },
       classList: { add: x => classes.add(x), remove: x => classes.delete(x),
         contains: x => classes.has(x), toggle: (x, on) => on ? classes.add(x) : classes.delete(x) },
       addEventListener(type, callback) { this.listeners[type] = callback; },
-      setAttribute() {}, getAttribute() { return null; }, hasAttribute() { return false; },
+      setAttribute() {}, removeAttribute() {}, getAttribute() { return null; }, hasAttribute() { return false; },
       appendChild(child) { this.children.push(child); }, remove() {},
-      querySelectorAll() { return []; }, querySelector() { return null; }, closest() { return null; },
+      querySelectorAll() { return []; }, querySelector(selector) { return get(`${id}:${selector}`); }, closest() { return null; },
       getBoundingClientRect() { return { left: 0, top: 0, right: 70, bottom: 200, width: 70, height: 200 }; }
     };
   }
@@ -53,6 +55,7 @@ async function page(name) {
   const context = vm.createContext({ console, document, navigator: { language: 'zh-CN' },
     NodeFilter: { SHOW_TEXT: 4 }, localStorage: { getItem: () => null, setItem() {} },
     setTimeout: () => 0, clearTimeout() {}, setInterval: () => 0, clearInterval() {},
+    ResizeObserver: class { observe() {} disconnect() {} },
     requestAnimationFrame: () => 0, performance: { now: () => 0 },
     getComputedStyle: () => ({ getPropertyValue: () => '' }),
     innerWidth: 360, innerHeight: 520, devicePixelRatio: 1,
@@ -98,4 +101,30 @@ test('Grok uses its credit ring and edge changes preserve card rendering', async
     assert.equal(p.run('edgeIsVertical()'), ['left', 'right'].includes(edge));
   }
   assert.match(p.run('tr("Run grok login to see usage.")'), /运行 grok login/);
+});
+
+test('six-dot movement stays usable with settings hidden on every edge', async () => {
+  const p = await page('notch');
+  for (const edge of ['left', 'right', 'top', 'bottom']) {
+    p.run(`applyEdge(${JSON.stringify(edge)}); applyUiFlags({show_move_handle:true,show_settings_handle:false});`);
+    assert.equal(p.run('gripOut()'), true);
+    assert.equal(p.run('onHandle(gripAt.x,gripAt.y)'), 'grip');
+    assert.equal(p.get('orb').style.display, 'none');
+    assert.equal(p.get('grip').style.display, '');
+    p.run('applyUiFlags({show_move_handle:false,show_settings_handle:true});');
+    assert.equal(p.run('gripOut()'), false);
+    assert.equal(p.run('onHandle(orbAt.x,orbAt.y)'), 'orb');
+  }
+});
+
+test('local tray layouts retain column limits and use their matching preview', async () => {
+  const p = await page('settings');
+  assert.equal(p.run('traySlotsFor("numbers",[{provider:"claude"}]).length'), 2);
+  assert.equal(p.run('traySlotsFor("bars",Array(8).fill({provider:"claude"})).length'), 5);
+  p.responses.set('get_app_icon', () => 'data:image/png;base64,fixture');
+  await p.run('trayConfig={mode:"off",slots:[]}; refreshTrayPreview()');
+  assert.equal(p.get('tray-preview').src, 'data:image/png;base64,fixture');
+  p.responses.set('get_tray_preview', args => 'data:image/png;base64,' + args.cfg.mode);
+  await p.run('trayConfig={mode:"bars",slots:[{provider:"copilot"}]}; refreshTrayPreview()');
+  assert.equal(p.get('tray-preview').src, 'data:image/png;base64,bars');
 });

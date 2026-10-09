@@ -27,6 +27,9 @@ struct UsageAlertEvent: Equatable {
     let currentFraction: Double
     let resetsAt: Date?
     let windowID: String?
+    var noticeTitle: String?
+    var noticeSubtitle: String?
+    var noticeStatus: String?
 
     init(
         kind: UsageAlertKind = .reset,

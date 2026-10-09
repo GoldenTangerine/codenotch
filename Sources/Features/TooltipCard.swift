@@ -451,9 +451,18 @@ private struct LimitWindowRow: View {
     @Environment(\.codenotchAccentColor) private var accentColor
     @Environment(\.usageWatchLimit) private var watchLimit
     @Environment(\.usageCriticalLimit) private var criticalLimit
+    @Environment(\.colorTransitionStyle) private var colorTransitionStyle
     @Environment(\.tooltipSecondaryInk) private var secondaryInk
 
-    private var band: UsageBand { UsageBand.band(for: window.usedFraction ?? 0, watchLimit: watchLimit, criticalLimit: criticalLimit) }
+    private var band: UsageBand {
+        window.bandOverride ?? UsageBand.band(for: window.usedFraction ?? 0, watchLimit: watchLimit, criticalLimit: criticalLimit)
+    }
+    private var barColor: Color {
+        guard window.bandOverride == nil, colorTransitionStyle == .ramp else {
+            return band.color(accent: accentColor)
+        }
+        return UsageBand.rampColor(for: window.usedFraction ?? 0, watchLimit: watchLimit, accent: accentColor)
+    }
     private var trackWidth: CGFloat { NotchLayout.cardWidth - 2 * NotchLayout.cardPadding - inset }
     private var fillWidth: CGFloat {
         let fraction = CGFloat(min(max(window.usedFraction ?? 0, 0), 1))
@@ -662,6 +671,15 @@ private struct MoneyBreakdownView: View {
     @Environment(\.codenotchAccentColor) private var accentColor
     @Environment(\.usageWatchLimit) private var watchLimit
     @Environment(\.usageCriticalLimit) private var criticalLimit
+    @Environment(\.colorTransitionStyle) private var colorTransitionStyle
+
+    private var barColor: Color {
+        guard colorTransitionStyle == .ramp else {
+            return UsageBand.band(for: money.spentFraction, watchLimit: watchLimit, criticalLimit: criticalLimit)
+                .color(accent: accentColor)
+        }
+        return UsageBand.rampColor(for: money.spentFraction, watchLimit: watchLimit, accent: accentColor)
+    }
 
     private var symbol: String {
         switch money.currency.uppercased() {
@@ -683,7 +701,7 @@ private struct MoneyBreakdownView: View {
             GeometryReader { proxy in
                 HStack(spacing: 0) {
                     Rectangle()
-                        .fill(UsageBand.band(for: money.spentFraction, watchLimit: watchLimit, criticalLimit: criticalLimit).color(accent: accentColor))
+                        .fill(barColor)
                         .frame(width: proxy.size.width * CGFloat(money.spentFraction))
                     Rectangle().fill(Palette.barTrack)
                 }
@@ -729,7 +747,6 @@ private struct ProviderTooltip: View {
     var fullContent = false
     var isRefreshing = false
     let showUsagePace: Bool
-    @Environment(\.tooltipSecondaryInk) private var secondaryInk
 
     /// Only worth saying when the numbers are not current. A remembered reading
     /// has to be dated, or it quietly passes itself off as live.
@@ -1132,7 +1149,6 @@ private struct SessionRow: View {
     /// Set when rows can be clicked to jump to the session's terminal.
     var onFocus: ((pid_t) -> Void)? = nil
     @Environment(\.codenotchAccentColor) private var accentColor
-    @Environment(\.tooltipSecondaryInk) private var secondaryInk
 
     private var stateColor: Color {
         switch session.state {
@@ -1253,6 +1269,7 @@ struct TooltipCard: View {
     /// How many sessions this screen has room to list. Solved from the display
     /// rather than fixed, so a big screen hides nothing.
     var sessionCap: Int = NotchLayout.defaultSessionCap
+    var costRows: Int = 0
     var tailOffset: CGFloat = 0
     var resetTimeFormat: ResetTimeFormat = .automatic
     var heightMode: TooltipHeightMode = .standard
@@ -1294,7 +1311,8 @@ struct TooltipCard: View {
             showsLocalPerformance: snapshot.showsLocalPerformance,
                 localLedgerRows: snapshot.localLedgerRowCount,
             compactRowCount: snapshot.compactRowCount,
-            showsDeepSeekPricing: deepSeekPricingEnabled
+            showsDeepSeekPricing: deepSeekPricingEnabled,
+            costRows: costRows
         )
     }
 
@@ -1344,8 +1362,8 @@ struct TooltipCard: View {
             } else {
                 ProviderTooltip(activityNote: localActivityNote, snapshot: snapshot, now: now, resetTimeFormat: resetTimeFormat,
                                 fullContent: heightMode == .full, isRefreshing: isRefreshing, showUsagePace: showUsagePace)
-                if let resetCredits = snapshot.resetCredits, snapshot.hasAvailableResetCredits {
-                    CodexResetCreditsSection(credits: resetCredits, now: now)
+                if let resetCredits = snapshot.availableResetCredits(at: now) {
+                    UsageResetCreditsSection(credits: resetCredits, now: now)
                 }
                 if let tokenUsage = snapshot.tokenUsage {
                     CodexUsageSection(usage: tokenUsage, now: now)
@@ -1358,6 +1376,9 @@ struct TooltipCard: View {
                 if let activity, snapshot.localModel == nil {
                     SessionList(summary: activity, now: now,
                                 cap: heightMode == .full ? activity.sessions.count : sessionCap)
+                }
+                if costRows > 0, let model = CostModels.model(for: snapshot.id) {
+                    CostSection(model: model, rows: heightMode == .full ? CostSection.maxRows : costRows)
                 }
             }
         }

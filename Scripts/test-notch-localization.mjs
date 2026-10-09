@@ -12,7 +12,10 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const html = readFileSync(new URL('../windows/codenotch/ui/notch.html', import.meta.url), 'utf8');
-const russian = html.slice(html.indexOf('const RU_TEXT='), html.indexOf('// "Is it working?"'));
+const russianStart = html.indexOf('const RU_TEXT=');
+const russian = html.slice(russianStart, html.indexOf('\n};', russianStart) + 3)
+  + "\nlet uiLang='en';\n"
+  + html.slice(html.indexOf('const TEXT='), html.indexOf('// "Is it working?"'));
 const translations = html.slice(html.indexOf('const ZH ='), html.indexOf('function resetCopy('));
 assert.ok(russian && translations, 'Page translation entry points must exist');
 const context = vm.createContext({ stateSnap: { lang: 'en' }, navigator: { language: 'en-US' } });
@@ -96,7 +99,7 @@ const langContext = vm.createContext({
   document: {documentElement:{}, createTreeWalker:() => ({nextNode:() => false}), querySelectorAll:() => []},
   renderAll:() => {},
 });
-vm.runInContext(settings.slice(settings.indexOf('const RU_STATIC ='), settings.indexOf('/* ---- small chrome')), langContext);
+vm.runInContext(settings.slice(settings.indexOf('const PT_BR_STATIC ='), settings.indexOf('/* ---- small chrome')), langContext);
 vm.runInContext("setUiLanguage('uk')", langContext);
 assert.equal(vm.runInContext("ui('Accounts','Accounts')", langContext), 'Акаунти');
 vm.runInContext("setUiLanguage('auto')", langContext);

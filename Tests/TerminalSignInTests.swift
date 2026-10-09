@@ -1,3 +1,12 @@
+/**
+ @name: 终端登录回归
+ @Descripttion: 验证登录入口和多账号命令的安装检测。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-10-09 10:30:00
+ @LastEditTime: 2026-10-09 10:30:00
+ @FilePath: Tests/TerminalSignInTests.swift
+ */
 import XCTest
 @testable import Codenotch
 
@@ -34,6 +43,14 @@ final class TerminalSignInTests: XCTestCase {
     func testAnEnvironmentPrefixDoesNotHideTheProgram() {
         XCTAssertTrue(TerminalCommand.isInstalled(command: "CLAUDE_CONFIG_DIR=/tmp/x true login"))
         XCTAssertFalse(TerminalCommand.isInstalled(command: "ONLY=assignments"))
+    }
+
+    func testAQuotedProfileHomeDoesNotHideTheProgram() {
+        XCTAssertTrue(TerminalCommand.isInstalled(command: "HOME='/tmp/work profile' true login"))
+        let profile = CommandCodeProfile(slug: "team's work", configDirectory:
+            URL(fileURLWithPath: "/tmp/.commandcode-team's work"))
+        XCTAssertEqual(TerminalCommand.executableName(in: profile.signInCommand), "commandcode")
+        XCTAssertNil(TerminalCommand.executableName(in: "HOME='/tmp/unclosed profile"))
     }
 
     func testTheRouteStillSaysWhereToSwitchAndWhatSignOutLeaves() {

@@ -1,4 +1,4 @@
-/**
+/*
  @name: 上游功能同步模块
  @Descripttion: 维护 state.rs 的上游功能与本地兼容。
  @version: 1.0.0

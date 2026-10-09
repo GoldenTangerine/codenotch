@@ -59,12 +59,16 @@ final class ConfiguredUsageProvider: UsageProvider {
     }
 
     func fetchSnapshot() async throws -> ProviderSnapshot {
+        try await fetchSnapshot(freshness: .standard)
+    }
+
+    func fetchSnapshot(freshness: UsageFreshness) async throws -> ProviderSnapshot {
         try entry.validate()
         return try await QueryDeadline.run(seconds: entry.timeout) { [self] in
             try Task.checkCancellation()
             if entry.usesLocalAccount {
                 guard let automatic else { throw QueryError.invalid("The local provider is unavailable.") }
-                return decorate(try await automatic.fetchSnapshot())
+                return decorate(try await automatic.fetchSnapshot(freshness: freshness))
             }
             // Credential APIs may block before any network request starts.
             // Include that time and stop a late read from launching a new query.

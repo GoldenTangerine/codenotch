@@ -1,3 +1,12 @@
+/**
+ @name: Claude 会话归属
+ @Descripttion: 按账号分配会话并兼容同账号的圆环显隐。
+ @version: 1.0.0
+ @Author: sm
+ @Date: 2026-10-09 11:30:00
+ @LastEditTime: 2026-10-09 11:30:00
+ @FilePath: Sources/Sessions/ClaudeSessionOwnership.swift
+ */
 import Foundation
 
 /// Which Claude profile a session belongs to, on a machine with more than one.
@@ -38,6 +47,8 @@ struct ClaudeSessionOwnership {
     let transcripts: [String: ClaudeTranscriptReader]
     /// The join between a desktop session and its account.
     let index: ClaudeDesktopSessionIndex
+    /// A hidden profile can hand its session only to a visible copy of the same account.
+    var isShown: (URL) -> Bool = { _ in true }
 
     init(own: URL,
          directories: [URL],
@@ -54,12 +65,22 @@ struct ClaudeSessionOwnership {
     /// Whether this profile is the one that should draw `record`, found in
     /// `directory`.
     func claims(_ record: ClaudeSessionRecord, foundIn directory: URL) -> Bool {
+        let owner = owner(of: record, foundIn: directory)
+        guard !isShown(owner), let account = accounts[owner.path],
+              let stand = directories.first(where: {
+                  $0.path != owner.path && accounts[$0.path] == account && isShown($0)
+              })
+        else { return owner.path == own.path }
+        return stand.path == own.path
+    }
+
+    private func owner(of record: ClaudeSessionRecord, foundIn directory: URL) -> URL {
         guard record.isDesktopHosted,
               let host = record.hostSessionID,
               let account = index.account(forHostSession: host),
               let target = directories.first(where: { accounts[$0.path] == account })
-        else { return directory.path == own.path }
-        return target.path == own.path
+        else { return directory }
+        return target
     }
 
     func reader(for directory: URL) -> ClaudeTranscriptReader? {

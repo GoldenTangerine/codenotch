@@ -198,6 +198,24 @@ struct LimitWindow: Identifiable, Codable, Equatable {
         self.prefersUsedText = prefersUsedText
     }
 
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(id: try c.decode(String.self, forKey: .id),
+                  group: try c.decodeIfPresent(String.self, forKey: .group),
+                  label: try c.decode(String.self, forKey: .label),
+                  usedFraction: try c.decodeIfPresent(Double.self, forKey: .usedFraction),
+                  remaining: try c.decodeIfPresent(Int.self, forKey: .remaining),
+                  used: try c.decodeIfPresent(Int.self, forKey: .used),
+                  usedText: try c.decodeIfPresent(String.self, forKey: .usedText),
+                  detail: try c.decodeIfPresent(String.self, forKey: .detail),
+                  money: try c.decodeIfPresent(UsageMoneyBreakdown.self, forKey: .money),
+                  resetsAt: try c.decodeIfPresent(Date.self, forKey: .resetsAt),
+                  quantity: try c.decodeIfPresent(QuotaQuantity.self, forKey: .quantity),
+                  duration: try c.decodeIfPresent(TimeInterval.self, forKey: .duration),
+                  bandOverride: try c.decodeIfPresent(UsageBand.self, forKey: .bandOverride),
+                  prefersUsedText: try c.decodeIfPresent(Bool.self, forKey: .prefersUsedText) ?? false)
+    }
+
     var isFiveHour: Bool {
         guard let duration else { return false }
         return abs(duration - 5 * 3600) < 60
@@ -354,14 +372,18 @@ struct ProviderSnapshot: Identifiable, Equatable {
 
     /// Unused rate-limit resets on this Codex account, listed by the same
     /// backend as usage.
-    var resetCredits: CodexResetCredits? = nil
+    var resetCredits: UsageResetCredits? = nil
 
     /// Whether the Codex tooltip has a reset-credit section to draw.
     ///
     /// The endpoint can successfully return an empty result. That is data,
     /// but it is not useful card content and must not reserve layout space.
     var hasAvailableResetCredits: Bool {
-        (resetCredits?.availableCount ?? 0) > 0
+        availableResetCredits(at: Date()) != nil
+    }
+    func availableResetCredits(at now: Date) -> UsageResetCredits? {
+        guard let credits = resetCredits?.unexpired(at: now), credits.availableCount > 0 else { return nil }
+        return credits
     }
     /// Provider-owned online usage detail, such as DeepSeek's API key/model
     /// breakdown and daily token/cost series.
@@ -411,16 +433,6 @@ struct ProviderSnapshot: Identifiable, Equatable {
     /// exists alongside their own five-hour figure.
     var weeklyLimitWindow: LimitWindow? {
         guard let weeklyID else { return nil }
-        return windows.first { $0.id == weeklyID }
-    }
-
-    var fiveHourWindow: LimitWindow? {
-        if let headline, headline.isFiveHour { return headline }
-        return windows.first { $0.isFiveHour && $0.group == nil }
-    }
-
-    var weeklyLimitWindow: LimitWindow? {
-        guard let weeklyID, weeklyID != headlineID else { return nil }
         return windows.first { $0.id == weeklyID }
     }
 
@@ -534,6 +546,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
         case "cursor":     return L10n.t("Sign in to Cursor in the editor", locale: locale)
         case "codex":      return L10n.t("Sign in to Codex to read your usage", locale: locale)
         case "deepseek":   return L10n.t("Sign in to DeepSeek Platform to read your usage", locale: locale)
+        case "qoder": return L10n.t("Sign in to Qoder to read your credit usage", locale: locale)
         case "qianwenai":  return L10n.t("Sign in to QianwenAI to read your Token Plan usage", locale: locale)
         case _ where CodexProfile.slug(fromProviderID: id) != nil:
             let slug = CodexProfile.slug(fromProviderID: id)!
@@ -546,6 +559,9 @@ struct ProviderSnapshot: Identifiable, Equatable {
         case "copilot":    return L10n.t("Sign in with GitHub CLI to read your Copilot usage", locale: locale)
         case "opencode":   return L10n.t("Connect the Go plan in OpenCode to read your usage", locale: locale)
         case "commandcode": return L10n.t("Sign in with the Command Code app to read your usage", locale: locale)
+        case _ where CommandCodeProfile.slug(fromProviderID: id) != nil:
+            let slug = CommandCodeProfile.slug(fromProviderID: id)!
+            return L10n.t("Sign in to Command Code in ~/.commandcode-\(slug) to read your usage", locale: locale)
         case "kiro":       return L10n.t("Sign in with kiro-cli to read your usage", locale: locale)
         // Two Ollamas, and they are stuck for different reasons: the hosted
         // one wants a key, the local one wants the daemon running.

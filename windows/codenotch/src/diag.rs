@@ -1,4 +1,4 @@
-/**
+/*
  @name: 上游同步 · diag
  @Descripttion: 保留上游功能实现并兼容本地扩展。
  @version: 1.0.0

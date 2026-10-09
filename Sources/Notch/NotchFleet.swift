@@ -109,6 +109,7 @@ final class NotchFleet {
     /// One choice for the whole fleet, like the edge and the size: a weekly
     /// ring on one display and not another would read as a bug.
     private var weeklyRing: WeeklyRing = .off
+    private var hardwareNotchWings = false
     private var independentInnerRing = false
     private var topAvoidanceAdjustment: CGFloat = 0
     private var ringEdgeAdjustment: CGFloat = 0
@@ -122,7 +123,10 @@ final class NotchFleet {
     private var showsSettingsHandle = false
     private var watchLimit: Double = 0.50
     private var criticalLimit: Double = 0.70
+    private var colorTransitionStyle: ColorTransitionStyle = .hardStep
     private var weeklyRingDashed = false
+    private var showsNotchReadings = true
+    private var weeklyReading = false
     private var foldsForFullScreen = true
     private var surfaceStyle: NotchSurfaceStyle = .glass
     private var deepSeekPricingEnabled = true
@@ -137,8 +141,38 @@ final class NotchFleet {
 
     /// Hooked up by the app delegate; driven by the notch's own chrome.
     var onRefresh: (() -> Void)?
+    /// Every notch reports a look through the same closure: the store spaces
+    /// them, so two screens' notches opening together are one fetch.
+    var onLook: (() -> Void)?
     var onRefreshProvider: ((String) async -> Void)?
     var onOpenSettings: (() -> Void)?
+    var onToggleKeepOpen: (() -> Void)? {
+        didSet {
+            for controller in controllers.values { controller.onToggleKeepOpen = onToggleKeepOpen }
+        }
+    }
+    /// The notch's answer to an update it offered.
+    var onUpdateChoice: ((UpdateChoice) -> Void)?
+    private var updatePrompt: UpdatePrompt?
+
+    private var updatePending = false
+
+    /// A newer version waiting — see `NotchViewModel.updatePending`.
+    func apply(updatePending: Bool) {
+        self.updatePending = updatePending
+        for controller in controllers.values {
+            controller.model.updatePending = updatePending
+        }
+    }
+
+    /// An update to offer in the notch, or how its install is going; nil once
+    /// answered or done.
+    func apply(updatePrompt: UpdatePrompt?) {
+        self.updatePrompt = updatePrompt
+        for controller in controllers.values {
+            controller.apply(updatePrompt: updatePrompt)
+        }
+    }
     var onFocusSession: ((pid_t) -> Void)?
     var signInItems: [(title: String, action: () -> Void)] = []
     /// An ⌥-drag on any one panel settled at a new offset. Persisting it is
@@ -278,10 +312,33 @@ final class NotchFleet {
         }
     }
 
+    func apply(hardwareNotchWings: Bool) {
+        self.hardwareNotchWings = hardwareNotchWings
+        for model in models { model.hardwareNotchWings = hardwareNotchWings }
+        for controller in controllers.values { controller.relocate() }
+    }
+
     func apply(weeklyRing: WeeklyRing) {
         self.weeklyRing = weeklyRing
         for controller in controllers.values {
             controller.model.weeklyRing = weeklyRing
+        }
+    }
+
+    func apply(showsNotchReadings: Bool) {
+        self.showsNotchReadings = showsNotchReadings
+        for controller in controllers.values { controller.model.showsNotchReadings = showsNotchReadings }
+    }
+
+    func apply(weeklyReading: Bool) {
+        self.weeklyReading = weeklyReading
+        for controller in controllers.values { controller.model.weeklyReading = weeklyReading }
+    }
+
+    func apply(colorTransitionStyle: ColorTransitionStyle) {
+        self.colorTransitionStyle = colorTransitionStyle
+        for controller in controllers.values {
+            controller.model.colorTransitionStyle = colorTransitionStyle
         }
     }
 
@@ -493,18 +550,6 @@ final class NotchFleet {
         return shown
     }
 
-    /// Shows a usage reset notification modal on every panel.
-    /// Returns whether at least one notch had somewhere to show the card. With
-    /// every notch hidden the alert would otherwise vanish without a trace.
-    @discardableResult
-    func showResetAlert(_ event: UsageResetEvent, duration: TimeInterval = 5.0) -> Bool {
-        var shown = false
-        for controller in controllers.values {
-            shown = controller.showResetAlert(event, duration: duration) || shown
-        }
-        return shown
-    }
-
     func setRefreshing(_ ids: Set<String>) {
         self.refreshing = ids
         for model in models {
@@ -648,10 +693,14 @@ final class NotchFleet {
         controller.model.notchTriggerHeight = notchTriggerHeight
         controller.apply(notchHoverDelay: notchHoverDelay)
         controller.model.weeklyRing = weeklyRing
+        controller.model.hardwareNotchWings = hardwareNotchWings
+        controller.model.showsNotchReadings = showsNotchReadings
+        controller.model.weeklyReading = weeklyReading
         controller.model.independentInnerRing = independentInnerRing
         controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
         controller.model.watchLimit = watchLimit
         controller.model.criticalLimit = criticalLimit
+        controller.model.colorTransitionStyle = colorTransitionStyle
         controller.model.weeklyRingDashed = weeklyRingDashed
         controller.model.showsMoveHandle = showsMoveHandle
         controller.model.showsSettingsHandle = showsSettingsHandle
@@ -659,10 +708,15 @@ final class NotchFleet {
         controller.model.deepSeekPricingEnabled = deepSeekPricingEnabled
         controller.model.deepSeekPricingSchedule = deepSeekPricingSchedule
         controller.onRefresh = onRefresh
+        controller.onLook = { [weak self] in self?.onLook?() }
         controller.onRefreshProvider = onRefreshProvider
         controller.onOpenSettings = onOpenSettings
+        controller.onToggleKeepOpen = onToggleKeepOpen
         controller.model.onOpenSettings = onOpenSettings
         controller.model.onFocusSession = onFocusSession
+        controller.model.onUpdateChoice = { [weak self] in self?.onUpdateChoice?($0) }
+        controller.apply(updatePrompt: updatePrompt)
+        controller.model.updatePending = updatePending
         controller.onReposition = onReposition
         controller.onMoveToEdge = onMoveToEdge
         controller.signInItems = signInItems

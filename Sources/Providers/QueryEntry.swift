@@ -17,7 +17,7 @@ enum QueryMode: String, Codable, CaseIterable {
 
 struct QuerySchedule: Codable, Equatable {
     var enabled = true
-    var activeSeconds: Double = 60
+    var activeSeconds: Double = 30
     var idleSeconds: Double = 300
 
     func interval(busy: Bool) -> TimeInterval { max(1, busy ? activeSeconds : idleSeconds) }
@@ -185,9 +185,11 @@ final class QueryCatalog: ObservableObject {
             // Import newly supported sources once; a later deletion must stay deleted.
             let key = "upstreamAutomaticProviders.v1"
             let known = Set(defaults.stringArray(forKey: key) ?? [])
-            let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio", "kimi", "kiro", "minimax"]
+            let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio", "kimi", "kiro", "minimax", "qoder"]
             for provider in providers where !known.contains(provider.id)
-                && (introduced.contains(provider.id) || CodexProfile.slug(fromProviderID: provider.id) != nil) {
+                && (introduced.contains(provider.id) || CodexProfile.slug(fromProviderID: provider.id) != nil
+                    || CommandCodeProfile.slug(fromProviderID: provider.id) != nil
+                    || AntigravityProfile.slug(fromProviderID: provider.id) != nil) {
                 // A manually configured entry may already use this native id.
                 // Keep that user-owned query instead of adding a second row for
                 // the same account when the built-in provider is introduced.

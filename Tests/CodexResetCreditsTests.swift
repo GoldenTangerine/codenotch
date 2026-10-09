@@ -75,6 +75,18 @@ final class CodexResetCreditsTests: XCTestCase {
         XCTAssertLessThan(result.credits.count, result.availableCount)
     }
 
+    func testExpiredCreditsPreserveAnUnlistedBalanceAndLegacyName() {
+        let now = utcDate(year: 2026, month: 10, day: 9)
+        let oldName = CodexResetCredits(availableCount: 5, credits: [
+            .init(id: "expired", status: "available", expiresAt: now.addingTimeInterval(-1)),
+            .init(id: "future", status: "available", expiresAt: now.addingTimeInterval(60))
+        ], checkedAt: now)
+        let shared: UsageResetCredits = oldName.unexpired(at: now)
+        XCTAssertEqual(shared.availableCount, 4)
+        XCTAssertEqual(shared.available.map(\.id), ["future"])
+        XCTAssertEqual(shared.checkedAt, now)
+    }
+
     /// The reset-credit block is extra card, so the hover region has to grow
     /// with it or the pointer falls out of a card it is still over.
     func testTheCardGrowsWhenResetCreditsAreShown() {

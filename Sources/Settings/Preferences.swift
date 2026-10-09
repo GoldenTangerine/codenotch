@@ -77,6 +77,18 @@ final class Preferences: ObservableObject {
     @Published var tooltipHeightMode: TooltipHeightMode {
         didSet { defaults.set(tooltipHeightMode.rawValue, forKey: "tooltipHeightMode") }
     }
+    @Published var qoderRegion: Sites.QoderRegion {
+        didSet { defaults.set(qoderRegion.rawValue, forKey: "qoderRegion") }
+    }
+
+    @Published var asksProviderOnLook: Bool {
+        didSet { defaults.set(asksProviderOnLook, forKey: "asksProviderOnLook") }
+    }
+
+    @Published var hardwareNotchWings: Bool {
+        didSet { defaults.set(hardwareNotchWings, forKey: "hardwareNotchWings") }
+    }
+
     @Published var codeSwitchEnabled: Bool {
         didSet { defaults.set(codeSwitchEnabled, forKey: "codeSwitchEnabled") }
     }
@@ -158,6 +170,19 @@ final class Preferences: ObservableObject {
 
     @Published var customEndpoints: [CustomEndpoint] {
         didSet {
+            let stored = Self.storedCustomEndpoints(defaults: defaults)
+            // 数组写入包含未编辑的端点，必须一并保留它们在后台产生的新采样。
+            let mergedEndpoints = customEndpoints.map { endpoint in
+                guard let previous = oldValue.first(where: { $0.id == endpoint.id }),
+                      let latest = stored.first(where: { $0.id == endpoint.id }),
+                      Self.sameEndpointUsageSource(endpoint, latest) else { return endpoint }
+                var merged = endpoint
+                if endpoint.currentTokensUsedM == previous.currentTokensUsedM { merged.currentTokensUsedM = latest.currentTokensUsedM }
+                if endpoint.usageHistory == previous.usageHistory { merged.usageHistory = latest.usageHistory }
+                if endpoint.currentSpendUSD == previous.currentSpendUSD { merged.currentSpendUSD = latest.currentSpendUSD }
+                return merged
+            }
+            if mergedEndpoints != customEndpoints { customEndpoints = mergedEndpoints }
             if let data = try? JSONEncoder().encode(customEndpoints) {
                 defaults.set(data, forKey: Keys.customEndpoints)
             }
@@ -422,6 +447,14 @@ final class Preferences: ObservableObject {
     }
 
     /// Whether the weekly limit gets a ring of its own, and where it sits.
+    @Published var showsNotchReadings: Bool {
+        didSet { defaults.set(showsNotchReadings, forKey: "showsNotchReadings") }
+    }
+    @Published var weeklyReading: Bool {
+        didSet { defaults.set(weeklyReading, forKey: "weeklyReading") }
+    }
+    func nickname(for providerID: String) -> String? { accountNicknames[providerID] }
+
     @Published var weeklyRingDashed: Bool {
         didSet { defaults.set(weeklyRingDashed, forKey: Keys.weeklyRingDashed) }
     }
@@ -469,6 +502,11 @@ final class Preferences: ObservableObject {
         }
     }
 
+    /// Use the original discrete bands or a continuous green-to-red ramp.
+    @Published var colorTransitionStyle: ColorTransitionStyle {
+        didSet { defaults.set(colorTransitionStyle.rawValue, forKey: Keys.colorTransitionStyle) }
+    }
+
     func resetUsageLimits() {
         watchLimit = 0.01
         criticalLimit = 0.70
@@ -488,6 +526,52 @@ final class Preferences: ObservableObject {
     }
 
     /// Where the app itself shows up: Dock, menu bar, or nowhere.
+    /// Where every notification goes: the notch, or a banner. One choice for
+    /// all of them; which events notify stays a switch per event.
+    @Published var notificationChannel: NotificationChannel {
+        didSet { defaults.set(notificationChannel.rawValue, forKey: Keys.notificationChannel) }
+    }
+
+    /// Whether the menu bar item shows five-hour limits instead of its icon.
+    ///
+    /// Off unless switched on. The item is the way into an app that has left
+    /// the Dock, and an update that swapped it for a readout several times as
+    /// wide — pushing everything beside it along, and on a notched MacBook
+    /// perhaps off the bar altogether — would be a change nobody asked for.
+    @Published var showsLimitsInMenuBar: Bool {
+        didSet { defaults.set(showsLimitsInMenuBar, forKey: Keys.showsLimitsInMenuBar) }
+    }
+
+    /// Whether providers with a weekly allowance add its compact ring to the
+    /// existing limit readout. Off by default so upgrades keep the exact menu
+    /// bar width and appearance they had before this setting existed.
+    @Published var showsWeeklyLimitInMenuBar: Bool {
+        didSet { defaults.set(showsWeeklyLimitInMenuBar, forKey: Keys.showsWeeklyLimitInMenuBar) }
+    }
+
+    /// The providers the menu bar summarises when it does, as ids. Nil until
+    /// the first choice — see `MenuBarLimits` for what that reads as. From
+    /// then on it is the ones that are on, so a provider that turns up later
+    /// stays out of the bar until someone puts it there.
+    ///
+    /// Never written alongside `connectedProviders`: one is what the menu bar
+    /// shows, the other what Codenotch reads, and `MenuBarLimits` says why the
+    /// two stay apart.
+    @Published private(set) var menuBarProviders: Set<String>? {
+        didSet {
+            if let menuBarProviders {
+                defaults.set(menuBarProviders.sorted(), forKey: Keys.menuBarProviders)
+            } else {
+                defaults.removeObject(forKey: Keys.menuBarProviders)
+            }
+        }
+    }
+
+    /// Both halves of the menu bar choice, the way the status item takes them.
+    var menuBarLimits: MenuBarLimits {
+        MenuBarLimits(isOn: showsLimitsInMenuBar, chosen: menuBarProviders)
+    }
+
     @Published var appPresence: AppPresence {
         didSet { defaults.set(appPresence.rawValue, forKey: Keys.presence) }
     }
@@ -703,6 +787,7 @@ final class Preferences: ObservableObject {
         static let notchSurfaceStyle = "notchSurfaceStyle"
         static let watchLimit = "watchLimit"
         static let criticalLimit = "criticalLimit"
+        static let colorTransitionStyle = "colorTransitionStyle"
         static let lastSeenVersion = "lastSeenVersion"
         static let order = "providerOrder"
         static let announceSessionEnd = "announceSessionEnd"
@@ -801,6 +886,38 @@ final class Preferences: ObservableObject {
         return endpoints
     }
 
+    private static func sameEndpointUsageSource(_ a: CustomEndpoint, _ b: CustomEndpoint) -> Bool {
+        a.baseURL == b.baseURL && a.apiType == b.apiType && a.headerKey == b.headerKey
+            && a.usageSource == b.usageSource && a.usagePreset == b.usagePreset
+            && a.usageURL == b.usageURL && a.usageRecordsPath == b.usageRecordsPath
+            && a.usageModelField == b.usageModelField && a.usageTokenField == b.usageTokenField
+            && a.usageModelFilter == b.usageModelFilter && a.usageAuthentication == b.usageAuthentication
+            && a.trackingUnit == b.trackingUnit
+    }
+
+    static func updateStoredCustomEndpoint(
+        _ endpoint: CustomEndpoint,
+        defaults: UserDefaults = .standard
+    ) {
+        var endpoints = storedCustomEndpoints(defaults: defaults)
+        guard let index = endpoints.firstIndex(where: { $0.id == endpoint.id }) else { return }
+        // 采样结束时用户可能已编辑或停用端点，只回填同一查询来源的读数。
+        let latest = endpoints[index]
+        guard latest.isEnabled, latest.baseURL == endpoint.baseURL,
+              latest.apiType == endpoint.apiType, latest.headerKey == endpoint.headerKey,
+              latest.usageSource == endpoint.usageSource, latest.usagePreset == endpoint.usagePreset,
+              latest.usageURL == endpoint.usageURL, latest.usageRecordsPath == endpoint.usageRecordsPath,
+              latest.usageModelField == endpoint.usageModelField, latest.usageTokenField == endpoint.usageTokenField,
+              latest.usageModelFilter == endpoint.usageModelFilter,
+              latest.usageAuthentication == endpoint.usageAuthentication,
+              latest.trackingUnit == endpoint.trackingUnit else { return }
+        endpoints[index].currentTokensUsedM = endpoint.currentTokensUsedM
+        endpoints[index].usageHistory = endpoint.usageHistory
+        if let data = try? JSONEncoder().encode(endpoints) {
+            defaults.set(data, forKey: Keys.customEndpoints)
+        }
+    }
+
     /// True the very first time this copy runs, and never again.
     ///
     /// Deliberately *not* inferred from "there are no readings yet" — that is
@@ -842,6 +959,9 @@ final class Preferences: ObservableObject {
         self.tooltipHeightMode = defaults.string(forKey: "tooltipHeightMode")
             .flatMap(TooltipHeightMode.init(rawValue:)) ?? .standard
         self.defaults = defaults
+        self.qoderRegion = defaults.string(forKey: "qoderRegion").flatMap(Sites.QoderRegion.init(rawValue:)) ?? .global
+        self.asksProviderOnLook = defaults.bool(forKey: "asksProviderOnLook")
+        self.hardwareNotchWings = defaults.bool(forKey: "hardwareNotchWings")
         self.codeSwitchEnabled = defaults.object(forKey: "codeSwitchEnabled") as? Bool ?? true
         self.codeSwitchDisplayMode = defaults.string(forKey: "codeSwitchDisplayMode")
             .flatMap(CodeSwitchDisplayMode.init(rawValue:)) ?? .tray
@@ -1019,6 +1139,8 @@ final class Preferences: ObservableObject {
         // Follow the Mac unless the user explicitly chooses a Codenotch colour.
         // Off by default: an extra arc in a 44pt circle is a change to how
         // every reading looks, and nobody asked for it on their behalf.
+        self.showsNotchReadings = defaults.object(forKey: "showsNotchReadings") as? Bool ?? true
+        self.weeklyReading = defaults.object(forKey: "weeklyReading") as? Bool ?? false
         self.weeklyRingDashed = defaults.object(forKey: Keys.weeklyRingDashed) as? Bool ?? false
 
         self.weeklyRing = defaults.string(forKey: Keys.weeklyRing)
@@ -1049,6 +1171,8 @@ final class Preferences: ObservableObject {
         let critical = min(max(storedCriticalLimit.isFinite ? storedCriticalLimit : 0.70, 0.02), 1.0)
         self.criticalLimit = critical
         self.watchLimit = min(max(storedWatchLimit.isFinite ? storedWatchLimit : 0.50, 0.01), critical - 0.01)
+        self.colorTransitionStyle = defaults.string(forKey: Keys.colorTransitionStyle)
+            .flatMap(ColorTransitionStyle.init(rawValue:)) ?? .hardStep
         // Absent means never chosen, which is follow-the-Mac.
         let language = defaults.string(forKey: L10n.languageDefaultsKey)
             .flatMap(AppLanguage.init(rawValue:)) ?? self.appliedLanguage
@@ -1102,9 +1226,41 @@ final class Preferences: ObservableObject {
     }
 
     func updateCustomEndpoint(_ endpoint: CustomEndpoint) {
-        if let index = customEndpoints.firstIndex(where: { $0.id == endpoint.id }) {
-            customEndpoints[index] = endpoint
-            setConnected(endpoint.isEnabled, for: endpoint.providerID)
+        if let idx = customEndpoints.firstIndex(where: { $0.id == endpoint.id }) {
+            var merged = endpoint
+            // Check latest stored endpoint in UserDefaults to merge latest readings if mapping hasn't changed
+            let storedList = Self.storedCustomEndpoints(defaults: defaults)
+            if let stored = storedList.first(where: { $0.id == endpoint.id }) {
+                let mappingUnchanged = (stored.baseURL == endpoint.baseURL)
+                    && (stored.apiType == endpoint.apiType)
+                    && (stored.headerKey == endpoint.headerKey)
+                    && (stored.usageAuthentication == endpoint.usageAuthentication)
+                    && (stored.usageSource == endpoint.usageSource)
+                    && (stored.usagePreset == endpoint.usagePreset)
+                    && (stored.usageURL == endpoint.usageURL)
+                    && (stored.usageRecordsPath == endpoint.usageRecordsPath)
+                    && (stored.usageModelField == endpoint.usageModelField)
+                    && (stored.usageTokenField == endpoint.usageTokenField)
+                    && (stored.usageModelFilter == endpoint.usageModelFilter)
+                    && (stored.trackingUnit == endpoint.trackingUnit)
+
+                // If mapping is unchanged and user did not explicitly reset or edit readings:
+                // When the editor loaded, it had stored (or earlier) readings. If the user didn't change them
+                // in the editor, we preserve the latest stored readings that might have been sampled in the background.
+                if mappingUnchanged {
+                    if merged.currentTokensUsedM == customEndpoints[idx].currentTokensUsedM {
+                        merged.currentTokensUsedM = stored.currentTokensUsedM
+                    }
+                    if merged.usageHistory == customEndpoints[idx].usageHistory {
+                        merged.usageHistory = stored.usageHistory
+                    }
+                    if merged.currentSpendUSD == customEndpoints[idx].currentSpendUSD {
+                        merged.currentSpendUSD = stored.currentSpendUSD
+                    }
+                }
+            }
+            customEndpoints[idx] = merged
+            setConnected(merged.isEnabled, for: merged.providerID)
         }
     }
 
@@ -1240,6 +1396,20 @@ final class Preferences: ObservableObject {
 
     /// The fork's saved query catalog owns account choices, including manual
     /// entries. Mirror it without treating a deleted account as newly discovered.
+    // MARK: Menu bar
+
+    /// Whether this provider is chosen for the menu bar. Says nothing about
+    /// whether it is read — that is `isConnected`.
+    func isInMenuBar(_ providerID: String) -> Bool {
+        menuBarLimits.isChosen(providerID)
+    }
+
+    /// Put one provider in the menu bar or take it out. `listed` is every
+    /// provider Settings is showing, which the first choice writes down.
+    func setInMenuBar(_ shown: Bool, for providerID: String, among listed: [String]) {
+        menuBarProviders = menuBarLimits.choosing(shown, providerID, among: listed).chosen
+    }
+
     func reconcileCatalog(_ entries: [QueryEntry]) {
         let ids = Set(entries.map(\.id))
         let connected = connectedProviders.subtracting(ids)

@@ -39,11 +39,14 @@ struct NotchRootView: View {
                 // the end of the shape, tucked into the corner the far flare
                 // makes.
                 if model.showsSettingsHandle {
-                    SettingsOrb(isHovered: model.isHoveringSettings, edge: model.edge,
+                    SettingsOrb(isHovered: model.isHoveringSettings || model.isHoveringMove, edge: model.edge,
                                         convex: model.orbHugsCorner,
                                         arcRadius: model.orbArcRadius,
                                         arcOffset: model.orbArcOffset,
-                                        spins: model.settingsSpins)
+                                        spins: model.settingsSpins,
+                                        separation: arcSeparation, returning: arcStraight,
+                                        quick: arcQuick, badge: model.updatePending)
+                            .animation(motion(arcMotion), value: arcSeparation)
                             // A second route to the same action the panel's own
                             // `mouseDown` override reaches for — see
                             // `NotchViewModel.onOpenSettings`. Both still depend
@@ -76,6 +79,7 @@ struct NotchRootView: View {
                             // sees the arc leave by.
                             .opacity(model.isExpanded ? 1 : 0)
                             .animation(motion(orbMotion), value: model.isExpanded)
+                            .opacity(carriesHandles ? 0 : 1)
 
                 }
 
@@ -83,22 +87,51 @@ struct NotchRootView: View {
                 // of the stack. Same construction, same reasons — see the
                 // comments on the orb above; only the placement differs.
                 if model.showsMoveHandle {
-                    MoveHandle(isHovered: model.isHoveringMove || model.isMoving,
-                               isArmed: model.isMoving,
-                               edge: model.edge,
-                               convex: model.orbHugsCorner,
-                               arcRadius: model.orbArcRadius,
-                               arcOffset: model.moveArcOffset,
-                               spins: model.moveSpins)
-                        .contentShape(Circle())
-                        .scaleEffect(model.sizeScale)
-                        .position(moveCentre(place))
-                        .scaleEffect(model.isExpanded ? 1 : model.orbMergeScale)
-                        .opacity(model.isExpanded ? 1 : 0)
-                        .animation(motion(orbMotion), value: model.isExpanded)
+                    Group {
+                        if model.showsSettingsHandle {
+                            MoveGrip(separation: model.gripRevealed ? 1 : 0,
+                                     hover: model.isHoveringMove ? 1 : 0,
+                                     edge: model.edge, reach: model.gripReach,
+                                     direction: model.edge.alongDirection)
+                                .scaleEffect(model.sizeScale)
+                                .position(orbCentre(place))
+                        } else {
+                            GripMark(edge: model.edge, squeeze: model.isMoving ? 0.8 : 0,
+                                     dotScale: model.isHoveringMove ? 1.3 : 1)
+                                .scaleEffect(model.sizeScale)
+                                .position(moveCentre(place))
+                        }
+                    }
+                    .animation(motion(.spring(response: 0.42, dampingFraction: 0.8)), value: model.gripRevealed)
+                    .animation(motion(.spring(response: 0.22, dampingFraction: 0.55)), value: model.isHoveringMove)
+                    .opacity(model.isExpanded ? 1 : 0)
+                    .opacity(carriesHandles ? 0 : 1)
+                    .allowsHitTesting(false)
                 }
 
-                if let resetEvent = model.activeResetAlert,
+                if carriesHandles, let carry = model.carry, model.isExpanded {
+                    CarriedHandle(carry: carry, edge: model.edge,
+                                  trim: SettingsOrb.restingTrim(for: model.edge, convex: model.orbHugsCorner),
+                                  arcRadius: model.orbArcRadiusInOrbSpace,
+                                  gripShift: CGSize(width: model.edge.alongDirection.x * model.gripReach,
+                                                    height: model.edge.alongDirection.y * model.gripReach))
+                        .scaleEffect(model.sizeScale)
+                        .position(orbCentre(place))
+                }
+
+                if let prompt = model.updatePrompt, model.isExpanded {
+                    // An update offered, or installing — ahead of anything
+                    // else the notch would show here, until it is answered.
+                    UpdateCard(prompt: prompt,
+                               direction: model.edge.tooltipDirection,
+                               tailOffset: model.notchMiddleAlong - updateCardAlong,
+                               onChoice: { model.onUpdateChoice?($0) })
+                        .position(updateCardCentre(place))
+                        .transition(.opacity.combined(with: .offset(
+                            x: model.edge.outward.x * Design.px(24),
+                            y: model.edge.outward.y * Design.px(24)
+                        )))
+                } else if let resetEvent = model.activeResetAlert,
                    model.isExpanded,
                    model.hoveredIndex == nil {
                     let index = model.resetAlertIndex(for: resetEvent) ?? 0
@@ -128,6 +161,7 @@ struct NotchRootView: View {
                         isRefreshing: model.refreshing.contains(snapshot.id),
                         direction: model.edge.tooltipDirection,
                         sessionCap: model.sessionCap,
+                        costRows: model.costRows(for: snapshot),
                         tailOffset: model.tooltipTailOffset(index: index, snapshot: snapshot),
                         resetTimeFormat: model.resetTimeFormat,
                         heightMode: model.tooltipHeightMode,
@@ -172,6 +206,30 @@ struct NotchRootView: View {
         .environment(\.weeklyRingDashed, model.weeklyRingDashed)
         .environment(\.usageWatchLimit, model.watchLimit)
         .environment(\.usageCriticalLimit, model.criticalLimit)
+        .environment(\.colorTransitionStyle, model.colorTransitionStyle)
+        .onAppear { arcSeparation = arcsOut ? 1 : 0 }
+        .onChange(of: arcsOut) { _, open in
+            // Both ways as motion, from wherever it is: out as the notch opens,
+            // back into the black as it folds. Put back on a timer once the
+            // fold had finished instead, a hover inside that time found the
+            // arc still out and it simply appeared — and one landing on the
+            // reset itself jumped.
+            if open {
+                // Caught on its way back in, it comes straight back out the
+                // way it was going in — the long pull out a fresh one takes
+                // would start from where it is not.
+                arcStraight = arcHome.map { Date().timeIntervalSince($0) < Self.arcReturn } ?? false
+                arcQuick = false
+                arcSeparation = 1
+            } else {
+                arcHome = Date()
+                arcStraight = true
+                // Still open, in the moment before it folds: home the goo way,
+                // into a notch that is there. Folding already: the quick way.
+                arcQuick = !model.isExpanded
+                arcSeparation = 0
+            }
+        }
     }
 
     /// Opening and closing are not mirror images. Appearing, the arc waits its
@@ -184,9 +242,53 @@ struct NotchRootView: View {
             : NotchMotion.merge
     }
 
-    private func notch(_ place: NotchPlacement) -> some View {
-        let shape = SideNotchShape(edge: model.edge, joining: model.joinedNotch)
-        let alongOffset = model.slack + model.shapeLength * model.sizeScale / 2 - place.panelLength / 2
+    /// **How far the handles' arcs have come away from the notch**, 0 to 1.
+    ///
+    /// Opening, each arc does not just appear beside its flare: it is pushed
+    /// out of the notch as a drop on a neck of goo, lets go, and unrolls into
+    /// the arc — see `GooArc`. Folding, it goes back in, on the fold's own
+    /// motion, so the next opening always starts from where it really is.
+    @State private var arcSeparation: CGFloat = 1
+    /// Whether the arc is taking the straight way — going back in, or coming
+    /// back out having been caught going in — rather than a fresh pop out.
+    @State private var arcStraight = false
+    /// When it last started back in.
+    @State private var arcHome: Date?
+    /// Whether it is going back in with the notch already folding — see
+    /// `GooArc.quick`.
+    @State private var arcQuick = false
+    /// Whether the arcs are out: the notch open, and not about to fold.
+    private var arcsOut: Bool { model.isExpanded && !model.handlesTuckedAway }
+    private var carriesHandles: Bool {
+        model.carry != nil && model.showsSettingsHandle && model.showsMoveHandle && !reduceMotion
+    }
+
+    /// The arc's timing, whichever way it is going.
+    private var arcMotion: Animation {
+        guard arcsOut else {
+            return .easeInOut(duration: arcQuick ? Self.arcQuickReturn : Self.arcReturn)
+        }
+        return arcStraight ? .easeOut(duration: 0.35) : Self.arcDivide.delay(Self.arcDivides)
+    }
+
+    /// When the arcs start dividing, into the notch's unfold: once it is open
+    /// and its flares are where the arcs push out through them.
+    static let arcDivides: TimeInterval = 0.34
+    /// **Hiding, how long the arc takes to go back in** the goo way — rolled up
+    /// into a drop, reached for by a neck, and drawn back into the flare — in
+    /// the moment the notch waits before folding, so it is in before it does.
+    static let arcReturn: TimeInterval = 0.4
+    /// And the quick way, when the notch is folding already.
+    static let arcQuickReturn: TimeInterval = 0.26
+
+    /// Taken evenly enough to watch the neck draw out and let go; the pull
+    /// past its place and the spring back are in the arc's own path — see
+    /// `GooArc` — where a spring here spent the stretch in its first instant.
+    static let arcDivide = Animation.timingCurve(0.35, 0, 0.25, 1, duration: 0.95)
+
+    private func notch(_ place: NotchPlacement, wing: NotchViewModel.Wing) -> some View {
+        let shape = model.notchShape(for: wing)
+        let alongOffset = model.usesHardwareWings ? 0 : model.slack + model.shapeLength * model.sizeScale / 2 - place.panelLength / 2
         // Glass is for the open notch only. Folded, the pill has to read as
         // part of the bezel — and as the hardware notch itself on a MacBook —
         // so it stays black; and glass under a `.statusBar` panel at rest
@@ -248,13 +350,15 @@ struct NotchRootView: View {
             // mid-flight; the crossfade rides on the unfold animation already
             // on the root. The band above them is opaque in every state and
             // takes no part in it.
-            .frame(width: model.notchSize.width, height: model.notchSize.height)
+            .frame(width: model.usesHardwareWings ? copySize(wing).width : model.notchSize.width,
+                   height: model.usesHardwareWings ? copySize(wing).height : model.notchSize.height)
             // Aligned to the corner where the stack starts *and* the bezel is,
             // then pushed clear of any hardware notch. Centring the contents in
             // a shape that had been made deeper is what put the top of every
             // ring inside the hole in the display.
             .overlay(alignment: contentAlignment) {
-                cells.padding(bezelSide, model.contentInset)
+                if wing.carriesCells { cells.padding(bezelSide, model.contentInset) }
+                else if model.readsAcrossHardware { hardwareReading }
             }
             .overlay {
                 if model.showsCollapsedSummary, let provider = model.collapsedProvider,
@@ -266,7 +370,7 @@ struct NotchRootView: View {
             // the cells simply sit on top of a shrinking shape and appear to
             // slide out of the end of it; clipped, they are swallowed by the
             // outline as it closes, which is what a notch should do.
-            .clipShape(SideNotchShape(edge: model.edge, joining: model.joinedNotch))
+            .clipShape(shape)
             .overlay {
                 if model.isEditingPosition {
                     SideNotchShape(edge: model.edge, joining: model.joinedNotch)
@@ -297,8 +401,8 @@ struct NotchRootView: View {
             // panel; a pair straddles the hole, each held against the wall it
             // is joined to — see `NotchViewModel.wings`.
             .position(place.point(
-                along: wing.lead + wing.length / 2,
-                across: wing.depth / 2
+                along: model.usesHardwareWings ? wing.lead + wing.length / 2 : place.panelLength / 2,
+                across: model.notchDepth / 2
             ))
             // 窗口为详情卡预留空间；显示栏沿边位置必须与命中区域使用同一锚点。
             .offset(x: model.edge.isVertical ? 0 : alongOffset,
@@ -327,6 +431,21 @@ struct NotchRootView: View {
 
     /// The bezel side as a scaling anchor: the edge the notch is welded to
     /// stays put while everything else moves toward or away from it.
+    private var hardwareReading: some View {
+        Group {
+            if model.showsNotchReadings, let snapshot = model.snapshots.first {
+                Text(ProviderCell(snapshot: snapshot, weeklyRing: model.weeklyRing,
+                    codeSwitchQuotaRatiosEnabled: model.codeSwitchQuotaRatiosEnabled,
+                    independentInnerRing: model.independentInnerRing,
+                    showsWeeklyReading: model.weeklyReading, now: model.now).displayedReadingText)
+                    .font(Typography.percent)
+                    .foregroundStyle(Palette.textPrimary)
+                    .lineLimit(1).minimumScaleFactor(0.5)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
     private var bezelAnchor: UnitPoint {
         switch model.edge {
         case .right:  return .trailing
@@ -339,7 +458,7 @@ struct NotchRootView: View {
     /// How far the shape may overhang the screen edge. Small enough that the
     /// notch is not visibly shallower for it, large enough to swallow a
     /// rounding error at any size.
-    private static let bezelBleed = SideNotchShape.bezelBleed
+    static let bezelBleed = SideNotchShape.bezelBleed
 
     private func collapsedActivity(_ provider: NotchViewModel.CollapsedProvider,
                                    hardware: HardwareNotch) -> some View {
@@ -406,6 +525,8 @@ struct NotchRootView: View {
                 codeSwitchQuotaRatiosEnabled: model.codeSwitchQuotaRatiosEnabled,
                 independentInnerRing: model.independentInnerRing,
                 cellRingDiameter: model.cellRingDiameter,
+                showsReading: model.showsCellReading,
+                showsWeeklyReading: model.weeklyReading,
                 now: model.now
             )
                 // Pinned to what the cell claims along the stack, or the drawn
@@ -453,6 +574,15 @@ struct NotchRootView: View {
         case .left:   return .topLeading
         case .top:    return .topLeading
         case .bottom: return .bottomLeading
+        }
+    }
+
+    private var bezelSide: Edge.Set {
+        switch model.edge {
+        case .right: return .trailing
+        case .left: return .leading
+        case .top: return .top
+        case .bottom: return .bottom
         }
     }
 
@@ -521,13 +651,19 @@ struct NotchRootView: View {
         )
     }
 
-    private func resetCardCentre(_ place: NotchPlacement, index: Int) -> CGPoint {
-        let card = model.edge.isVertical ? NotchLayout.cardWidth : UsageResetCard.cardHeight
-        let cardAlong = model.edge.isVertical ? UsageResetCard.cardHeight : NotchLayout.cardWidth
-        return place.point(
-            along: model.tooltipAlong(index: index, length: cardAlong),
-            across: model.tooltipInset + (NotchLayout.tailLength + card) / 2
-        )
+    /// Where the update card is centred along the notch: on its middle, kept
+    /// on the screen.
+    private var updateCardAlong: CGFloat {
+        let size = UpdateCard.size(for: model.edge.tooltipDirection)
+        return model.cardAlong(centredOn: model.notchMiddleAlong,
+                               length: model.edge.isVertical ? size.height : size.width)
+    }
+
+    private func updateCardCentre(_ place: NotchPlacement) -> CGPoint {
+        let size = UpdateCard.size(for: model.edge.tooltipDirection)
+        let across = model.edge.isVertical ? size.width : size.height
+        return place.point(along: updateCardAlong,
+                           across: model.tooltipInset + (NotchLayout.tailLength + across) / 2)
     }
 
     private func resetCardCentre(_ place: NotchPlacement, index: Int) -> CGPoint {
@@ -538,6 +674,7 @@ struct NotchRootView: View {
             across: model.tooltipInset + (NotchLayout.tailLength + card) / 2
         )
     }
+
 }
 
 /// **The strand between a dragged notch and the display's hole**, drawn in the
@@ -631,7 +768,7 @@ struct GooNeck: Shape {
 
     /// `SideNotchShape.fluidTurn` at the notch's own ramp, from the tip — along
     /// the bar, then down — normalised to land on (1, 1).
-    private static let flareWalk: [(u: CGFloat, v: CGFloat, heading: CGFloat)] = {
+    static let flareWalk: [(u: CGFloat, v: CGFloat, heading: CGFloat)] = {
         let p: CGFloat = 0.5, steps = 96
         let bend = (CGFloat.pi / 2) / (1 - p)
         var heading: CGFloat = 0, u: CGFloat = 0, v: CGFloat = 0

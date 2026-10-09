@@ -419,6 +419,20 @@ final class ClaudeSessionOwnershipTests: XCTestCase {
         XCTAssertFalse(ownership(of: work).claims(record, foundIn: personal))
     }
 
+    func testAHiddenProfileHandsSessionsOnlyToTheSameAccount() throws {
+        let record = try record(pid: 12, entrypoint: "cli", host: nil)
+        var sameAccount = ClaudeSessionOwnership(
+            own: work, directories: [personal, work],
+            accounts: [personal.path: personalAccount, work.path: personalAccount],
+            transcripts: [:], index: index())
+        sameAccount.isShown = { [work = work!] in $0 == work }
+        XCTAssertTrue(sameAccount.claims(record, foundIn: personal))
+
+        var differentAccount = ownership(of: work)
+        differentAccount.isShown = { [work = work!] in $0 == work }
+        XCTAssertFalse(differentAccount.claims(record, foundIn: personal))
+    }
+
     /// Nothing is dropped for want of an answer: a session on the wrong ring is
     /// a bug, a session on no ring at all is a worse one.
     func testAnUnresolvableSessionIsLeftWhereItWas() throws {

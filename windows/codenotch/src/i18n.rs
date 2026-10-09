@@ -1,4 +1,4 @@
-/**
+/*
  @name: 项目构建与文档
  @Descripttion: 维护 i18n.rs 的项目实现与上游兼容。
  @version: 1.0.0
@@ -29,6 +29,42 @@ pub fn resolve_auto() -> &'static str {
         }
     }
     "en"
+}
+
+/// Traditional regions must be matched before the leftover `zh*` fallback —
+/// `starts_with("zh")` used to send zh-TW/zh-HK to Simplified.
+fn language_from_windows_locale(name: &str) -> Option<&'static str> {
+    let name = name.to_ascii_lowercase();
+    if name.starts_with("zh-tw")
+        || name.starts_with("zh-hant")
+        || name.starts_with("zh-hk")
+        || name.starts_with("zh-mo")
+    {
+        return Some("zh-Hant");
+    }
+    if name.starts_with("zh-cn")
+        || name.starts_with("zh-hans")
+        || name.starts_with("zh-sg")
+        || name.starts_with("zh")
+    {
+        return Some("zh");
+    }
+    if name.starts_with("ja") {
+        return Some("ja");
+    }
+    if name.starts_with("ko") {
+        return Some("ko");
+    }
+    if name.starts_with("pt-br") {
+        return Some("pt-BR");
+    }
+    if name.starts_with("ru") {
+        return Some("ru");
+    }
+    if name.starts_with("uk") {
+        return Some("uk");
+    }
+    None
 }
 
 /// Whether the region settings write times on a 24-hour clock. The page can't tell: WebView2's
