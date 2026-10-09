@@ -40,6 +40,14 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.22.4",
+            headline: L10n.t("Gear clear of the notch, dragging follows the pointer"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Move the hovered gear clear of the bar beside a hardware notch")),
+                ReleaseNote.Change(title: L10n.t("Dragging keeps the notch under the pointer on the nearest edge"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.22.3",
             headline: L10n.t("Settings arc reads as an arc beside the hardware notch"),
             changes: [

@@ -45,8 +45,9 @@ final class NotchWindowController {
     private weak var previousKeyWindow: NSWindow?
     private var previousApplication: NSRunningApplication?
     private var dragStart: CGPoint?
-    /// Screen points keep the grab stable when joining hardware changes the bar's length.
-    private var dragGrabOffset: CGFloat = 0
+    /// 抓取点：条身内记半长比例，手柄上记离手柄的距离，拖动中按当前条身还原，合并或离开实体刘海时手柄仍停在鼠标下。
+    private struct DragGrab { var share: CGFloat = 0; var beyond: CGFloat = 0 }
+    private var dragGrab = DragGrab()
     private var didDrag = false
     private var accumulatedScroll: CGFloat = 0
 
@@ -600,7 +601,7 @@ final class NotchWindowController {
         isOptionDragging = true
         dragStart = mouseLocation()
         let local = localCursor(in: panel.frame)
-        dragGrabOffset = placement.along(of: local) - model.notchMiddleAlong
+        dragGrab = grab(at: placement.along(of: local) - model.notchMiddleAlong)
         beginBorderTravel(at: mouseLocation())
         model.carry = Carry(at: Date(), fromHover: false)
     }
@@ -1364,11 +1365,11 @@ final class NotchWindowController {
 
     /// Both entry points share the same event stream, including Escape and mouse-up.
     private func beginMove(at local: CGPoint) {
-        let grab = placement.along(of: local) - model.cellWing.lead - model.shapeLength * model.sizeScale / 2
+        let grabbed = grab(at: placement.along(of: local) - model.cellWing.lead - model.shapeLength * model.sizeScale / 2)
         beginPositionEditing()
         guard model.isEditingPosition else { return }
         dragStart = mouseLocation()
-        dragGrabOffset = grab
+        dragGrab = grabbed
         beginBorderTravel(at: mouseLocation())
         model.carry = Carry(at: Date(), fromHover: true)
     }
@@ -1727,7 +1728,7 @@ final class NotchWindowController {
         panel.isEditingPosition = true
         // 双翼在编辑时回到本地布局，窗口和命中区域必须一起切换。
         relocate()
-        dragGrabOffset = 0
+        dragGrab = DragGrab()
         NSCursor.openHand.push()
         panel.makeKey()
         updateInteractiveRects()
@@ -1781,8 +1782,8 @@ final class NotchWindowController {
         case .leftMouseDown:
             guard let panel, isInLiveRegion(localCursor(in: panel.frame)) else { return false }
             dragStart = mouseLocation()
-            dragGrabOffset = placement.along(of: localCursor(in: panel.frame)) - model.slack
-                - model.shapeLength * model.sizeScale / 2
+            dragGrab = grab(at: placement.along(of: localCursor(in: panel.frame)) - model.slack
+                - model.shapeLength * model.sizeScale / 2)
             didDrag = false
             beginBorderTravel(at: mouseLocation())
             NSCursor.closedHand.set()
@@ -1833,34 +1834,26 @@ final class NotchWindowController {
 
     }
 
-    enum Reading: Equatable {
-        case edge(NotchEdge)
-        case corner(BorderTrack.Corner)
-    }
-
     static let cornerReach: CGFloat = 160
 
-    static func reading(of point: CGPoint, on track: BorderTrack, nearest: NotchEdge) -> Reading {
+    /// 鼠标在边框轨道上的位置：投影到最近的边，鼠标走到哪条边胶囊就跟到哪条边。
+    /// 靠近转角时渐变为顺着拐角滑过去，离开转角区时正好回到投影，两段衔接处不跳，也不累积偏移。
+    static func follow(_ point: CGPoint, on track: BorderTrack, nearest: NotchEdge) -> CGFloat {
+        let projected = track.position(on: nearest, of: point)
         for corner in BorderTrack.Corner.allCases {
             let (before, after) = BorderTrack.edges(of: corner)
-            if distance(to: before, of: point, on: track) < cornerReach,
-               distance(to: after, of: point, on: track) < cornerReach {
-                return .corner(corner)
-            }
+            let toBefore = distance(to: before, of: point, on: track)
+            let toAfter = distance(to: after, of: point, on: track)
+            guard toBefore < cornerReach, toAfter < cornerReach else { continue }
+            let turning = track.position(of: corner) + toBefore - toAfter
+            var gap = projected - turning
+            if gap > track.perimeter / 2 { gap -= track.perimeter }
+            if gap < -track.perimeter / 2 { gap += track.perimeter }
+            // 平方渐变：贴近转角时几乎完全顺着拐角走，对角线两侧换边的跳变也更小。
+            let share = max(toBefore, toAfter) / cornerReach
+            return track.wrapped(turning + gap * share * share)
         }
-        return .edge(nearest)
-    }
-
-    static func place(of point: CGPoint, on track: BorderTrack, by reading: Reading) -> CGFloat {
-        switch reading {
-        case .edge(let edge):
-            return track.position(on: edge, of: point)
-        case .corner(let corner):
-            let (before, after) = BorderTrack.edges(of: corner)
-            return track.wrapped(track.position(of: corner)
-                                 + distance(to: before, of: point, on: track)
-                                 - distance(to: after, of: point, on: track))
-        }
+        return projected
     }
 
     /// How far a point in the screen's top-left-origin space is from `edge`.
@@ -1873,24 +1866,28 @@ final class NotchWindowController {
         }
     }
 
-    /// How the pointer's place is being read right now.
-    private var travelReading: Reading?
     private var travelScreen: NSScreen?
-    private var borderGrip: CGFloat = 0
     private var passage: CornerPassageOverlay?
+
+    /// 把抓取点相对条身中心的距离拆成比例或越过手柄的距离。
+    private func grab(at offset: CGFloat) -> DragGrab {
+        let half = model.shapeLength * model.sizeScale / 2
+        guard half > 0 else { return DragGrab() }
+        let sign: CGFloat = offset < 0 ? -1 : 1
+        guard abs(offset) > half else { return DragGrab(share: offset / half) }
+        let handle = (model.orbAlong - model.shapeLength / 2) * model.sizeScale
+        return DragGrab(share: sign, beyond: sign * (abs(offset) - handle))
+    }
+
+    /// 按不合并刘海时的条身换算：合并时本就固定居中，吸附判断也不会随条身伸缩来回跳。
+    private var liveDragGrab: CGFloat {
+        let half = (model.shapeLength - 2 * model.endSpread) * model.sizeScale / 2
+        return dragGrab.share * half + dragGrab.beyond
+    }
 
     private func beginBorderTravel(at point: CGPoint) {
         endBorderTravel()
-        guard let screen = NSScreen.notchScreen(at: point) else { return }
-        travelScreen = screen
-        let frame = screen.visibleFrame
-        let track = BorderTrack(width: frame.width, height: frame.height)
-        let local = CGPoint(x: point.x - frame.minX, y: frame.maxY - point.y)
-        let reading = Self.reading(of: local, on: track, nearest: model.edge)
-        travelReading = reading
-        let forward: CGFloat = model.edge == .top || model.edge == .right ? 1 : -1
-        borderGrip = track.position(on: model.edge, of: local)
-            - Self.place(of: local, on: track, by: reading) - forward * dragGrabOffset
+        travelScreen = NSScreen.notchScreen(at: point)
     }
 
     private func borderPosition(at point: CGPoint, on screen: NSScreen, nearest: NotchEdge) -> CGFloat {
@@ -1898,24 +1895,17 @@ final class NotchWindowController {
         let frame = screen.visibleFrame
         let track = BorderTrack(width: frame.width, height: frame.height)
         let local = CGPoint(x: point.x - frame.minX, y: frame.maxY - point.y)
-        let next = Self.reading(of: local, on: track, nearest: nearest)
-        if let previous = travelReading, previous != next {
-            var delta = Self.place(of: local, on: track, by: previous)
-                - Self.place(of: local, on: track, by: next)
-            if delta > track.perimeter / 2 { delta -= track.perimeter }
-            if delta < -track.perimeter / 2 { delta += track.perimeter }
-            borderGrip += delta
-        }
-        travelReading = next
-        return track.wrapped(Self.place(of: local, on: track, by: next) + borderGrip)
+        let place = Self.follow(local, on: track, nearest: nearest)
+        // 抓取点沿条身方向换算到轨道方向：上、右边与轨道同向，下、左边相反。
+        let edge = track.place(at: place).edge
+        let forward: CGFloat = edge == .top || edge == .right ? 1 : -1
+        return track.wrapped(place - forward * liveDragGrab)
     }
 
     private func endBorderTravel() {
         passage?.hide()
         passage = nil
         travelScreen = nil
-        travelReading = nil
-        borderGrip = 0
         panel?.alphaValue = 1
     }
 

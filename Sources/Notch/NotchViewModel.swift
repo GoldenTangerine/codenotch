@@ -697,6 +697,11 @@ final class NotchViewModel: ObservableObject {
         orbHugsCorner ? 1 : drawnFlare / flare
     }
 
+    // 喇叭口小于齿轮按钮时，按钮按标准喇叭口的相对位置移到胶囊外侧，避免悬停时与胶囊重叠；半弧仍留在实际喇叭口内。
+    private var orbShift: CGFloat {
+        orbHugsCorner ? 0 : flare - drawnFlare
+    }
+
     /// Extra length at each end of the body so the notch has something to open
     /// out *into*.
     ///
@@ -751,7 +756,7 @@ final class NotchViewModel: ObservableObject {
     var orbAlong: CGFloat {
         // Never into the hole: on the left of it, the settings handle hangs
         // off the copy's *leading* tip, which is its outer one there.
-        guard orbHugsCorner else { return shapeLength }
+        guard orbHugsCorner else { return shapeLength + orbShift }
         return cornerCentreAlong
             + NotchLayout.orbCornerOffset(corner: drawnCornerRadius, scale: orbScale)
     }
@@ -803,7 +808,7 @@ final class NotchViewModel: ObservableObject {
 
     var orbInset: CGFloat {
         // 喇叭口始终贴屏幕边缘绘制，不随 contentInset（顶部刘海高度 + 避让值）下移。
-        guard orbHugsCorner else { return drawnFlare }
+        guard orbHugsCorner else { return drawnFlare + orbShift }
         return contentInset + bodyDepth
             - drawnCornerRadius + NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
     }
@@ -826,7 +831,11 @@ final class NotchViewModel: ObservableObject {
     }
 
     var orbArcOffset: CGSize {
-        guard orbHugsCorner else { return .zero }
+        guard orbHugsCorner else {
+            // 半弧从按钮退回实际喇叭口圆心：沿条身后退、朝屏幕边缘上移各 orbShift。
+            return CGSize(width: orbShift * (edge.outward.x - edge.alongDirection.x),
+                          height: orbShift * (edge.outward.y - edge.alongDirection.y))
+        }
         let inward = CGPoint(x: -edge.outward.x, y: -edge.outward.y)
         let back = -NotchLayout.orbCornerOffset(corner: drawnCornerRadius, scale: orbScale)
         return CGSize(width: back * (edge.alongDirection.x + inward.x),
@@ -857,7 +866,10 @@ final class NotchViewModel: ObservableObject {
     var orbHandlePoints: [CGPoint] {
         guard showsSettingsHandle else { return [] }
         let button = CGPoint(x: orbAlong, y: orbInset)
-        guard orbHugsCorner else { return [button] }
+        guard orbHugsCorner else {
+            // 按钮移出喇叭口时，留在喇叭口内的半弧也要能唤醒按钮。
+            return orbShift > 0 ? [CGPoint(x: shapeLength, y: drawnFlare), button] : [button]
+        }
 
         let offset = NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
         let arcCentre = CGPoint(x: orbAlong - offset, y: orbInset - offset)

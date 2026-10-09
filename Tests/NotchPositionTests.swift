@@ -183,6 +183,19 @@ final class NotchPositionTests: XCTestCase {
             XCTAssertEqual(layout.frame.maxX, screen.visibleFrameValue.maxX)
         }
     }
+
+    // 拖动跟随：直边上取投影，内部上下移动会换到最近的边，离开转角区时位置连续。
+    @MainActor
+    func testDragFollowsThePointerToTheNearestEdge() {
+        let track = BorderTrack(width: 1600, height: 900)
+        let reach = NotchWindowController.cornerReach
+        XCTAssertEqual(NotchWindowController.follow(CGPoint(x: 800, y: 300), on: track, nearest: .top), 800)
+        XCTAssertEqual(NotchWindowController.follow(CGPoint(x: 1500, y: 600), on: track, nearest: .right), 1600 + 600)
+        XCTAssertEqual(NotchWindowController.follow(CGPoint(x: 100, y: 600), on: track, nearest: .left),
+                       track.perimeter - 600)
+        let inside = NotchWindowController.follow(CGPoint(x: 1600 - 40, y: reach - 0.01), on: track, nearest: .right)
+        XCTAssertEqual(inside, 1600 + reach, accuracy: 0.1)
+    }
 }
 
 @MainActor

@@ -210,10 +210,12 @@ struct SettingsOrb: View {
                     // Going home with the notch folding: into the notch as goo.
                     DiscMerge(merge: release, trim: restingTrim, edge: edge, radius: arcRadius)
                         .scaleEffect(1 - (1 - restScale) * release)
+                        .offset(x: arcOffset.width * release, y: arcOffset.height * release)
                 } else {
                     // 从原尺寸按钮过渡到缩放后的半弧，结束时与静止半弧重合。
                     DiscToArc(progress: release, trim: restingTrim, edge: edge, radius: arcRadius)
                         .scaleEffect(1 - (1 - restScale) * release)
+                        .offset(x: arcOffset.width * release, y: arcOffset.height * release)
                 }
             }
 

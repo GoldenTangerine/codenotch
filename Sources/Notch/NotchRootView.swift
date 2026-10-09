@@ -115,6 +115,7 @@ struct NotchRootView: View {
                                   trim: SettingsOrb.restingTrim(for: model.edge, convex: model.orbHugsCorner),
                                   arcRadius: model.orbArcRadiusInOrbSpace,
                                   restScale: model.orbRestScale,
+                                  arcOffset: model.orbArcOffsetInOrbSpace,
                                   gripShift: CGSize(width: model.edge.alongDirection.x * model.gripReach,
                                                     height: model.edge.alongDirection.y * model.gripReach))
                         .scaleEffect(model.sizeScale)

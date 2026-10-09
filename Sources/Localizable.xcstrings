@@ -1,6 +1,39 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Gear clear of the notch, dragging follows the pointer": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "齿轮不再压住胶囊，拖动紧跟鼠标"
+          }
+        }
+      }
+    },
+    "Move the hovered gear clear of the bar beside a hardware notch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "与实体刘海合并时，悬停齿轮移到胶囊外侧，不再与胶囊重叠"
+          }
+        }
+      }
+    },
+    "Dragging keeps the notch under the pointer on the nearest edge": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖动时胶囊始终落在离鼠标最近的边并对准鼠标，不再逐渐错位"
+          }
+        }
+      }
+    },
     "Settings arc reads as an arc beside the hardware notch": {
       "extractionState": "manual",
       "localizations": {
