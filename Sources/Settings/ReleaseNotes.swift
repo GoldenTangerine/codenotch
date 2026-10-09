@@ -40,6 +40,14 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.22.2",
+            headline: L10n.t("Settings arc follows the flare at the top"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Keep the settings arc on the flare at the screen edge instead of below the hardware notch")),
+                ReleaseNote.Change(title: L10n.t("Size the settings arc to the flare actually drawn beside a hardware notch"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.22.1",
             headline: L10n.t("Settings arc back in place at the top"),
             changes: [

@@ -659,6 +659,13 @@ final class NotchViewModel: ObservableObject {
     /// How much of each end of the bar the flare actually takes.
     var flare: CGFloat { NotchLayout.curlRadius }
 
+    // 末端喇叭口实际绘制的半径：与实体刘海合并时 SideNotchShape 改用 bezelFillet 并受条身深度约束，设置半弧跟随此值。
+    var drawnFlare: CGFloat {
+        guard joinedNotch != nil else { return flare }
+        let corner = min(drawnCornerRadius, notchDepth / 2)
+        return max(0, min(NotchLayout.bezelFillet, notchDepth - corner))
+    }
+
     /// The corner the shape actually draws at its far end.
     ///
     /// Not always `cornerRadius`: a bar drawn as the hardware notch caps it at
@@ -682,7 +689,7 @@ final class NotchViewModel: ObservableObject {
     var orbArcRadius: CGFloat {
         orbHugsCorner
             ? NotchLayout.orbConvexArcRadius(corner: drawnCornerRadius, scale: orbScale)
-            : NotchLayout.orbArcRadius
+            : max(0, drawnFlare - NotchLayout.orbGap)
     }
 
     /// Extra length at each end of the body so the notch has something to open
@@ -790,7 +797,8 @@ final class NotchViewModel: ObservableObject {
     }
 
     var orbInset: CGFloat {
-        guard orbHugsCorner else { return contentInset + NotchLayout.orbInsetFromEdge }
+        // 喇叭口始终贴屏幕边缘绘制，不随 contentInset（顶部刘海高度 + 避让值）下移。
+        guard orbHugsCorner else { return drawnFlare }
         return contentInset + bodyDepth
             - drawnCornerRadius + NotchLayout.orbCornerOffset(corner: drawnCornerRadius)
     }

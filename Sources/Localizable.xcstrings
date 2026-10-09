@@ -1,6 +1,39 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Settings arc follows the flare at the top": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "顶部设置半弧贴合喇叭口"
+          }
+        }
+      }
+    },
+    "Keep the settings arc on the flare at the screen edge instead of below the hardware notch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设置按钮半弧贴屏幕边缘的喇叭口定位，不再被刘海高度下推"
+          }
+        }
+      }
+    },
+    "Size the settings arc to the flare actually drawn beside a hardware notch": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "与实体刘海合并时，半弧大小跟随实际绘制的喇叭口"
+          }
+        }
+      }
+    },
     "Settings arc back in place at the top": {
       "extractionState": "manual",
       "localizations": {
