@@ -3,12 +3,12 @@
     <channel>
         <title>Codenotch</title>
         <item>
-            <title>1.22.3</title>
-            <pubDate>Fri, 09 Oct 2026 08:39:01 +0000</pubDate>
-            <sparkle:version>750</sparkle:version>
-            <sparkle:shortVersionString>1.22.3</sparkle:shortVersionString>
+            <title>1.22.4</title>
+            <pubDate>Fri, 09 Oct 2026 09:09:25 +0000</pubDate>
+            <sparkle:version>751</sparkle:version>
+            <sparkle:shortVersionString>1.22.4</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
-            <enclosure url="https://github.com/GoldenTangerine/codenotch/releases/download/v1.22.3/Codenotch.dmg" length="19600004" type="application/octet-stream" sparkle:edSignature="ox23R+iezf2wfaN7V7mKyeEBSwM9LDXdynjO+KXKtTK9i/2Uf9GLw/P1Gk0UljyQWnHSb3sXIhoyPX+5PAtyAA=="/>
+            <enclosure url="https://github.com/GoldenTangerine/codenotch/releases/download/v1.22.4/Codenotch.dmg" length="19619735" type="application/octet-stream" sparkle:edSignature="kFmErrDkvh2Xp93CSjTDLjhBuMN+FV8RGYl2iGtMUE5rHB9h9r+FcqacfPX5rUOk4cgwrbceWCvROr5MCfiSBw=="/>
         </item>
     </channel>
 </rss>
