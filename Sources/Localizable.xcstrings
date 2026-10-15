@@ -1,6 +1,72 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Upstream 1.23, remaining mode and a Dock style": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "同步上游 1.23：剩余量显示与 Dock 风格"
+          }
+        }
+      }
+    },
+    "Show what is left instead of used, shut both rings when a window is spent, and auto-order or hide spent accounts on this Mac": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可显示剩余量；任一窗口耗尽时关闭双环；本机账号可按剩余量排序或隐藏已耗尽账号"
+          }
+        }
+      }
+    },
+    "Add a Dock style that floats the notch as glass on the left, right and bottom edges": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增 Dock 风格，在左、右、下边缘以悬浮玻璃板显示"
+          }
+        }
+      }
+    },
+    "Add oMLX, Muse, Grok Bot and Claude or Codex accounts on servers over SSH": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增 oMLX、Muse、Grok Bot，以及通过 SSH 读取服务器上的 Claude 和 Codex 账号"
+          }
+        }
+      }
+    },
+    "Show OpenCode activity on custom endpoints and an optional breathing working indicator": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义端点可显示 OpenCode 活动，新增可选的呼吸工作指示"
+          }
+        }
+      }
+    },
+    "Merge concurrent Claude requests within your query interval, and fold the Windows notch for full-screen apps": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude 并发请求在查询周期内合并；Windows 全屏应用时收起刘海"
+          }
+        }
+      }
+    },
     "Gear clear of the notch, dragging follows the pointer": {
       "extractionState": "manual",
       "localizations": {
@@ -66178,6 +66244,1184 @@
           "stringUnit": {
             "state": "translated",
             "value": "在顶部居中时，双翼布局适配硬件刘海。调整尺寸时使用标准布局预览。"
+          }
+        }
+      }
+    },
+    "A floating slab of clear glass, like the Dock. Always dark. On the top edge it stays a notch.": {
+      "extractionState": "manual",
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dock のように浮かぶ透明なガラスの板。常にダークです。上端ではノッチのままです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "像程序坞一样悬浮的透明玻璃板。始终是深色。在顶部边缘仍是刘海。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "像程式塢一樣懸浮的透明玻璃板。始終是深色。在頂部邊緣仍是瀏海。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Парящая пластина прозрачного стекла, как Dock. Всегда тёмная. У верхнего края остаётся панелью."
+          }
+        },
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine schwebende Platte aus klarem Glas, wie das Dock. Immer dunkel. Am oberen Rand bleibt sie eine Notch."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Плаваюча пластина прозорого скла, як Dock. Завжди темна. Біля верхнього краю залишається вирізом."
+          }
+        },
+        "ko": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dock처럼 떠 있는 투명한 유리 판입니다. 항상 어둡게 표시합니다. 위쪽 가장자리에서는 노치로 유지됩니다."
+          }
+        },
+        "uz": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dock kabi suzib turuvchi shaffof shisha plastina. Doimo qorongʻi. Yuqori chetda notch boʻlib qoladi."
+          }
+        },
+        "id": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lempeng kaca bening yang melayang, seperti Dock. Selalu gelap. Di tepi atas tetap menjadi notch."
+          }
+        },
+        "tr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dock gibi yüzen, şeffaf camdan bir levha. Her zaman koyu. Üst kenarda çentik olarak kalır."
+          }
+        }
+      }
+    },
+    "Working indicator": {
+      "extractionState": "manual",
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indicador de trabalho"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Індикатор роботи"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作指示器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作指示器"
+          }
+        }
+      }
+    },
+    "Spinning arc": {
+      "extractionState": "manual",
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arco giratório"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Дуга, що обертається"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "旋转弧线"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "旋轉弧線"
+          }
+        }
+      }
+    },
+    "Breathing disc": {
+      "extractionState": "manual",
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disco pulsante"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пульсуючий диск"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "呼吸圆盘"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "呼吸圓盤"
+          }
+        }
+      }
+    },
+    "A thin white arc turns inside the ring while an agent works; queued requests become a ring of dots.": {
+      "extractionState": "manual",
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um arco branco fino gira dentro do anel enquanto um agente trabalha; pedidos na fila viram um anel de pontos."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тонка біла дуга обертається всередині кільця, поки агент працює; запити в черзі стають кільцем із крапок."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理工作时，一条细白弧线在圆环内旋转；排队的请求显示为一圈圆点。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理工作時，一條細白弧線在圓環內旋轉；排隊的請求顯示為一圈圓點。"
+          }
+        }
+      }
+    },
+    "A disc in the provider's brand colour breathes under its mark while an agent works, faster when requests are queued.": {
+      "extractionState": "manual",
+      "localizations": {
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um disco na cor da marca do provedor pulsa sob o seu símbolo enquanto um agente trabalha, mais rápido quando há pedidos na fila."
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Диск у фірмовому кольорі провайдера пульсує під його знаком, поки агент працює, швидше — коли є запити в черзі."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理工作时，供应商品牌色的圆盘在其标志下方呼吸；有排队请求时更快。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "代理工作時，供應商品牌色的圓盤在其標誌下方呼吸；有排隊請求時更快。"
+          }
+        }
+      }
+    },
+    "On pace for %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hochgerechnet %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projection : %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このペースで %@"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No ritmo atual: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按当前速度：%@"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按目前速度：%@"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "При таком темпе: %@"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "За такого темпу: %@"
+          }
+        }
+      }
+    },
+    "On pace to run out %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufgebraucht voraussichtlich %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Épuisé vers le %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このペースでは %@ に上限"
+          }
+        },
+        "pt-BR": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Esgota por volta de %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预计 %@ 用完"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預計 %@ 用完"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закончится около %@"
+          }
+        },
+        "uk": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закінчиться близько %@"
+          }
+        }
+      }
+    },
+    "Answer required": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要回答"
+          }
+        }
+      }
+    },
+    "Approval required": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要批准"
+          }
+        }
+      }
+    },
+    "OpenCode activity": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenCode 活动"
+          }
+        }
+      }
+    },
+    "OpenCode provider ID (optional)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenCode 供应商 ID（可选）"
+          }
+        }
+      }
+    },
+    "Use the provider key from OpenCode settings. Activity is matched to this provider and the selected model. Leave empty to disable.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填写 OpenCode 设置中的供应商键名，活动按此供应商和所选模型匹配。留空则停用。"
+          }
+        }
+      }
+    },
+    "Install OpenCode bridge": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装 OpenCode 桥接插件"
+          }
+        }
+      }
+    },
+    "Bridge installed. Restart OpenCode, then save this endpoint.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "桥接插件已安装。请重启 OpenCode，然后保存此端点。"
+          }
+        }
+      }
+    },
+    "Could not install the bridge.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法安装桥接插件。"
+          }
+        }
+      }
+    },
+    "Off-peak all day on Chinese public holidays": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中国法定节假日全天按空闲时段计价"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中國法定節假日全天按離峰時段計價"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中国の法定休日は終日オフピーク"
+          }
+        }
+      }
+    },
+    "Holiday dates follow the State Council's notices via holiday-cn, checked once a day.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "节假日日期依据国务院放假通知，由 holiday-cn 提供，每天检查一次。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "節假日日期依據國務院放假通知，由 holiday-cn 提供，每天檢查一次。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "休日の日付は国務院の通知に基づき holiday-cn から取得し、1 日 1 回確認します。"
+          }
+        }
+      }
+    },
+    "No dates for %lld yet, so only the rule above applies.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚无 %lld 年的节假日数据，暂时只按上面的规则计算。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "尚無 %lld 年的節假日資料，暫時只按上面的規則計算。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld 年の休日データはまだないため、上記のルールのみを適用します。"
+          }
+        }
+      }
+    },
+    "Known years: %@.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已有年份：%@。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已有年份：%@。"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取得済みの年：%@。"
+          }
+        }
+      }
+    },
+    "Sign in to Claude Code on %@ to read this account's usage": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 %@ 上登录 Claude Code 以读取此账号的用量"
+          }
+        }
+      }
+    },
+    "Sign in to Grok Bot in the app": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Grok Bot 应用中登录"
+          }
+        }
+      }
+    },
+    "Sign in to Codex on %@ to read this account's usage": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 %@ 上登录 Codex 以读取此账号的用量"
+          }
+        }
+      }
+    },
+    "Start oMLX's server to monitor your local models": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启动 oMLX 服务器以监控本地模型"
+          }
+        }
+      }
+    },
+    "ssh to %@ timed out": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ssh 连接 %@ 超时"
+          }
+        }
+      }
+    },
+    "Sign in to Claude Code on %@ — ssh there and run `claude`. SSH key auth must already work; this never asks for a password.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 %@ 上登录 Claude Code：通过 ssh 登录该服务器并运行 `claude`。必须已配置好 SSH 密钥认证，这里不会询问密码。"
+          }
+        }
+      }
+    },
+    "Sign in to Codex on %@ — ssh there and run `codex`. SSH key auth must already work; this never asks for a password.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 %@ 上登录 Codex：通过 ssh 登录该服务器并运行 `codex`。必须已配置好 SSH 密钥认证，这里不会询问密码。"
+          }
+        }
+      }
+    },
+    "Grok Bot has nothing metered on this account yet": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此账号在 Grok Bot 上还没有计量用量"
+          }
+        }
+      }
+    },
+    "Install Grok Bot and sign in — the notch reads the weekly usage it keeps on this Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "安装 Grok Bot 并登录，刘海会读取它在这台 Mac 上保存的每周用量。"
+          }
+        }
+      }
+    },
+    "Run `muse login` in Terminal — it signs in through your browser, and the notch reads its login and its logs.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在终端运行 `muse login`，它会通过浏览器登录，刘海随后读取其登录信息和日志。"
+          }
+        }
+      }
+    },
+    "SSH to %@ timed out after %llds — the server may be down, the port wrong, or a firewall in the way.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SSH 连接 %@ 在 %lld 秒后超时，可能是服务器未运行、端口错误或被防火墙拦截。"
+          }
+        }
+      }
+    },
+    "The probe failed on the server: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器上的检测失败：%@"
+          }
+        }
+      }
+    },
+    "Connected, but the probe came back unreadable — the remote shell may print login noise that broke the parse. Run `ssh %@ true` in Terminal to see what it says.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接，但检测结果无法解析，远程 shell 可能输出了登录信息干扰解析。请在终端运行 `ssh %@ true` 查看输出。"
+          }
+        }
+      }
+    },
+    "Couldn't resolve '%@'. Check the hostname for typos.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法解析“%@”，请检查主机名是否拼写正确。"
+          }
+        }
+      }
+    },
+    "SSH rejected the login at %@. Key auth must work without a password: run `ssh %@ true` in Terminal — if it asks for a password, add your key with `ssh-copy-id %@` or point Identity file at it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SSH 拒绝登录 %@。密钥认证必须无需密码即可使用：请在终端运行 `ssh %@ true`，如果要求输入密码，请用 `ssh-copy-id %@` 添加密钥，或在“身份文件”中指定密钥。"
+          }
+        }
+      }
+    },
+    "No answer from %@:%lld. The server may be down, the port wrong, or a firewall in the way.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@:%lld 无响应，可能是服务器未运行、端口错误或被防火墙拦截。"
+          }
+        }
+      }
+    },
+    "Nothing is listening on %@:%lld — sshd may be down or the port wrong.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@:%lld 上没有服务在监听，可能是 sshd 未运行或端口错误。"
+          }
+        }
+      }
+    },
+    "SSH refused the host key for %@. If the server was reinstalled, drop the stale key with `ssh-keygen -R %@` and retry.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SSH 拒绝了 %@ 的主机密钥。如果服务器已重装，请用 `ssh-keygen -R %@` 删除旧密钥后重试。"
+          }
+        }
+      }
+    },
+    "SSH to %@ failed: %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SSH 连接 %@ 失败：%@"
+          }
+        }
+      }
+    },
+    "Connected to %@ (%@) but found no %@ token. Looked in: %@. Sign in on the server first — `ssh %@`, then run `%@`.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接 %@（%@），但未找到 %@ 令牌。已检查：%@。请先在服务器上登录：`ssh %@`，然后运行 `%@`。"
+          }
+        }
+      }
+    },
+    "oMLX": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oMLX"
+          }
+        }
+      }
+    },
+    "Monitor oMLX": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "监控 oMLX"
+          }
+        }
+      }
+    },
+    "Open oMLX": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 oMLX"
+          }
+        }
+      }
+    },
+    "oMLX server address": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "oMLX 服务器地址"
+          }
+        }
+      }
+    },
+    "Checking oMLX…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检查 oMLX…"
+          }
+        }
+      }
+    },
+    "Connecting to oMLX…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在连接 oMLX…"
+          }
+        }
+      }
+    },
+    "Reading oMLX's server log…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在读取 oMLX 服务器日志…"
+          }
+        }
+      }
+    },
+    "Activity, speed and tokens": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "活动、速度和 Token"
+          }
+        }
+      }
+    },
+    "Loaded models appear in Accounts → Connected and are checked every second. Embedding, reranker and audio models are not shown. The API key is read from ~/.omlx/settings.json (or OMLX_API_KEY); speed and tokens come from ~/.omlx/logs.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已加载的模型显示在“账户 → 已连接”中，每秒检查一次。不显示嵌入、重排序和音频模型。API 密钥读取自 ~/.omlx/settings.json（或 OMLX_API_KEY），速度和 Token 来自 ~/.omlx/logs。"
+          }
+        }
+      }
+    },
+    "What a model is doing comes from oMLX's admin activity endpoint, polled several times a second. Speed and token counts are read from ~/.omlx/logs; only the numbers are kept, never a prompt or a reply.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型当前状态来自 oMLX 的管理活动接口，每秒轮询数次。速度和 Token 数读取自 ~/.omlx/logs，只保留数字，不保存提示词或回复。"
+          }
+        }
+      }
+    },
+    "Models loaded in oMLX on this Mac.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台 Mac 上 oMLX 已加载的模型。"
+          }
+        }
+      }
+    },
+    "Remote Hosts": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "远程主机"
+          }
+        }
+      }
+    },
+    "Claude and Codex accounts on servers you reach over SSH.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过 SSH 访问的服务器上的 Claude 和 Codex 账号。"
+          }
+        }
+      }
+    },
+    "Add Server": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加服务器"
+          }
+        }
+      }
+    },
+    "SSH key auth must already work — polls run on a timer and never stop at a password prompt.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "必须已配置好 SSH 密钥认证：查询按计时器运行，不会停下来等待输入密码。"
+          }
+        }
+      }
+    },
+    "No servers yet. Add one above and its ring appears in the notch.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有服务器。在上方添加后，其圆环会出现在刘海中。"
+          }
+        }
+      }
+    },
+    "Account": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "账号"
+          }
+        }
+      }
+    },
+    "Work GPU": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作 GPU"
+          }
+        }
+      }
+    },
+    "Host": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "主机"
+          }
+        }
+      }
+    },
+    "gpu.example.com": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gpu.example.com"
+          }
+        }
+      }
+    },
+    "User": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用户"
+          }
+        }
+      }
+    },
+    "armin": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "armin"
+          }
+        }
+      }
+    },
+    "Port": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "端口"
+          }
+        }
+      }
+    },
+    "Identity file": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "身份文件"
+          }
+        }
+      }
+    },
+    "Optional — ~/.ssh/id_ed25519": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选，例如 ~/.ssh/id_ed25519"
+          }
+        }
+      }
+    },
+    "Probing the server…": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检测服务器…"
+          }
+        }
+      }
+    },
+    "Needs a host and user": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要填写主机和用户"
+          }
+        }
+      }
+    },
+    "Verified · %@ · token found (%@)": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已验证 · %@ · 已找到令牌（%@）"
+          }
+        }
+      }
+    },
+    "Auto-order based on remaining usage": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按剩余用量自动排序"
+          }
+        }
+      }
+    },
+    "Auto-order is on: the notch sorts these by remaining usage. Dragging still sets the order ties break in.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已开启自动排序：刘海按剩余用量排列这些账号。拖动仍决定剩余相同时的先后。"
+          }
+        }
+      }
+    },
+    "Show remaining instead of used": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示剩余而非已用"
+          }
+        }
+      }
+    },
+    "The notch reads what is left — the figures, the rings' sweep, and the card's bars and percentages. Colours still judge by what is spent, so a nearly empty ring still reads red.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刘海显示剩余量，包括数字、圆环进度以及卡片中的进度条和百分比。颜色仍按已用量判断，所以快用完的圆环仍显示为红色。"
+          }
+        }
+      }
+    },
+    "Shut rings when a window is spent": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任一窗口耗尽时关闭双环"
+          }
+        }
+      }
+    },
+    "When the 5-hour or the weekly window is spent, both rings say shut even where the other window still has room — dark grey where the notch reads what is left, red where it reads what is spent.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 小时或每周窗口耗尽时，即使另一个窗口仍有余量，两个圆环也都显示为关闭：显示剩余时为深灰色，显示已用时为红色。"
+          }
+        }
+      }
+    },
+    "Hide accounts with nothing left to spend": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隐藏已耗尽的账号"
+          }
+        }
+      }
+    },
+    "%@%% left · %@%% Used": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@%% 剩余 · %@%% 已用"
+          }
+        }
+      }
+    },
+    "Weekly limit reached": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每周额度已耗尽"
+          }
+        }
+      }
+    },
+    "5-hour": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 小时"
+          }
+        }
+      }
+    },
+    "Requests today": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "今日请求"
+          }
+        }
+      }
+    },
+    "Reasoning share": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推理占比"
+          }
+        }
+      }
+    },
+    "The notch sorts rings by what is left of the window that leads each ring, most first. A high number that cannot be spent yet sinks below usable accounts but stays above empty ones. This list keeps your manual order, which breaks ties. Code Switch R rings keep their own order.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刘海按各圆环主窗口的剩余量排序，剩余多的在前。剩余较多但暂时无法使用的账号排在可用账号之后、已耗尽账号之前。此列表保留手动顺序，剩余相同时按它排列。Code Switch R 联动环保持原顺序。"
+          }
+        }
+      }
+    },
+    "When the 5-hour or the weekly window is at 0% remaining, the account leaves the notch until a window resets. Stale readings stay: an old number is not proof the account is empty. Applies to accounts on this Mac only.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 小时或每周窗口剩余 0% 时，该账号从刘海中隐藏，直到窗口重置。过期读数不会被隐藏，因为旧数字不能证明账号已耗尽。只作用于本机账号。"
           }
         }
       }

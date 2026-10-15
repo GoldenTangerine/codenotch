@@ -155,6 +155,8 @@ final class QueryCatalog: ObservableObject {
     var onChange: ((Set<String>) -> Void)?
     private let defaults: UserDefaults
     private let storageKey = "queryEntries.v1"
+    /// 首次导入时默认停用的内置来源，用户开启后保持原状。
+    static let offByDefault: Set<String> = ["kimi", "kiro", "grokbot", "muse", OMLXIdentity.providerID]
 
     init(providers: [UsageProvider], disconnected: Set<String>, defaults: UserDefaults = .standard,
          secrets: QuerySecretStorage = QueryKeychain()) {
@@ -174,7 +176,7 @@ final class QueryCatalog: ObservableObject {
                 entry.id = provider.id
                 entry.name = provider.displayName
                 entry.icon.value = provider.glyph.rawValue
-                entry.enabled = !disconnected.contains(provider.id) && !["kimi", "kiro"].contains(provider.id)
+                entry.enabled = !disconnected.contains(provider.id) && !Self.offByDefault.contains(provider.id)
                 entry.mode = .automatic
                 entry.nativeID = provider.id
                 return entry
@@ -185,7 +187,8 @@ final class QueryCatalog: ObservableObject {
             // Import newly supported sources once; a later deletion must stay deleted.
             let key = "upstreamAutomaticProviders.v1"
             let known = Set(defaults.stringArray(forKey: key) ?? [])
-            let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio", "kimi", "kiro", "minimax", "qoder"]
+            let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio", "kimi", "kiro", "minimax", "qoder",
+                                           "grokbot", "muse", OMLXIdentity.providerID]
             for provider in providers where !known.contains(provider.id)
                 && (introduced.contains(provider.id) || CodexProfile.slug(fromProviderID: provider.id) != nil
                     || CommandCodeProfile.slug(fromProviderID: provider.id) != nil
@@ -198,7 +201,7 @@ final class QueryCatalog: ObservableObject {
                 entry.id = provider.id
                 entry.name = provider.displayName
                 entry.icon.value = provider.glyph.rawValue
-                entry.enabled = !disconnected.contains(provider.id) && !["kimi", "kiro"].contains(provider.id)
+                entry.enabled = !disconnected.contains(provider.id) && !Self.offByDefault.contains(provider.id)
                 entry.mode = .automatic
                 entry.nativeID = provider.id
                 entries.append(entry)

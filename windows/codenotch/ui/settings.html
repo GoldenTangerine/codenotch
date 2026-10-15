@@ -179,6 +179,8 @@
         <div class="group">
           <div class="item"><span>Show</span><span class="seg" id="seg-show"><button data-v="show">Always show</button><button data-v="hover">Show on hover</button><button data-v="hide">Hide</button></span></div>
           <div class="item cap" id="cap-show" data-dynamic></div>
+          <div class="item"><span>Fold for full-screen apps</span><button class="switch" id="sw-fullscreen" role="switch" aria-checked="false" aria-label="Fold for full-screen apps"></button></div>
+          <div class="item cap">The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps.</div>
           <div class="item"><span>Size</span><span class="seg" id="seg-size"><button data-v="0.8">Small</button><button data-v="1">Medium</button><button data-v="1.25">Large</button></span></div>
           <div class="item cap" id="cap-size" data-dynamic></div>
           <div class="item"><span>Theme</span><span class="seg" id="seg-theme"><button data-v="system">System</button><button data-v="light">Light</button><button data-v="dark">Dark</button></span></div>
@@ -188,6 +190,8 @@
           <div class="item" id="row-weekly-dashed" hidden><span>Dashed weekly ring</span><button class="switch" id="sw-weekly-dashed" role="switch" aria-checked="false" aria-label="Dashed weekly ring"></button></div>
           <div class="item"><span>Edge</span><span class="seg" id="seg-edge"><button data-v="left">Left</button><button data-v="right">Right</button><button data-v="top">Top</button><button data-v="bottom">Bottom</button></span></div>
           <div class="item cap" id="cap-edge" data-dynamic></div>
+          <div class="item"><span>Show remaining instead of used</span><button class="switch" id="sw-remaining" role="switch" aria-checked="false" aria-label="Show remaining instead of used"></button></div>
+          <div class="item cap">The figure under each ring reads what is left — 87% instead of 13% used, the same number the card prints beside it. The rings themselves still fill by what is spent.</div>
           <div class="item" id="row-screen" hidden><span>Screen</span>
             <select id="screen" aria-label="Screen"></select>
           </div>
@@ -357,6 +361,8 @@ const PT_BR_STATIC = {
   'A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.':'Um anel mais fino para o limite semanal, desenhado ao redor do principal, no espaço entre o anel e a borda do notch.',
   'Show on hover':'Exibir ao passar o cursor',
   'A small pill at the screen edge that opens when you reach it.':'Uma pequena cápsula na borda da tela que abre quando você chega nela.',
+  'Fold for full-screen apps':'Recolher em apps de tela cheia',
+  'The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps.':'O notch se recolhe enquanto um app em tela cheia está à frente e volta quando você sai dele. Desligado, ele continua no lugar sobre apps em tela cheia.',
   'Adaptive pill':'Cápsula adaptável',
   'While the notch is folded, its pill follows what is behind it: light over a dark background, black over a light one, so it stays easy to find. To tell, Codenotch reads a thin strip of the screen beside the pill twice a second and keeps only its average brightness.':'Com o notch recolhido, a cápsula acompanha o que está atrás dela: clara sobre um fundo escuro, preta sobre um claro, para continuar fácil de achar. Para isso, o Codenotch lê duas vezes por segundo uma faixa estreita da tela ao lado da cápsula e guarda só o brilho médio dela.',
   'The notch stays open with every reading visible.':'O notch fica aberto com todas as leituras visíveis.',
@@ -447,6 +453,10 @@ const RU_STATIC = {
   'One ring per provider, showing the headline limit. The weekly allowance stays in the hover card.':'Одно кольцо на провайдера с основным лимитом. Недельная квота остаётся в карточке при наведении.',
   'A thinner ring for the weekly limit, drawn inside the main one. It shares the gap with the working indicator.':'Тонкое кольцо недельного лимита внутри основного. Оно делит зазор с индикатором работы.',
   'A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.':'Тонкое кольцо недельного лимита вокруг основного, в промежутке между кольцом и краем панели.',
+  'Fold for full-screen apps':'Сворачивать для полноэкранных приложений',
+  'Show remaining instead of used':'Показывать остаток вместо использованного',
+  'The figure under each ring reads what is left — 87% instead of 13% used, the same number the card prints beside it. The rings themselves still fill by what is spent.':'Число под каждым кольцом показывает остаток — 87% вместо 13% использованных, как и в карточке рядом. Сами кольца по-прежнему заполняются по использованному.',
+  'The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps.':'Панель сворачивается, пока впереди полноэкранное приложение, и возвращается, когда вы из него выходите. Если выключено, она остаётся на месте поверх полноэкранных приложений.',
   'The notch stays open with every reading visible.':'Выемка остаётся открытой, и все данные видны.',
   'The black pill against the right-hand edge of the screen, with one ring per tool. Turn it off and the pill disappears; Codenotch keeps counting your usage either way.':'Чёрная панель у правого края экрана с отдельным кольцом для каждого инструмента. При выключении панель исчезает, но Codenotch продолжает считать использование.',
   'Recentre':'По центру',
@@ -540,6 +550,10 @@ const ZH_STATIC = {
   'One ring per provider, showing the headline limit. The weekly allowance stays in the hover card.':'每个服务一个圆环，显示主额度。每周额度仍在提示卡里。',
   'A thinner ring for the weekly limit, drawn inside the main one. It shares the gap with the working indicator.':'一条更细的每周额度圆环，画在主环内侧。和工作指示共用那个空隙。',
   'A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.':'一条更细的每周额度圆环，画在主环外侧，圆环和刘海边缘之间的空隙里。',
+  'Fold for full-screen apps':'全屏应用时收起',
+  'Show remaining instead of used':'显示剩余而非已用',
+  'The figure under each ring reads what is left — 87% instead of 13% used, the same number the card prints beside it. The rings themselves still fill by what is spent.':'圆环下方的数字显示剩余量，例如 87% 而不是已用 13%，与卡片上的数字一致。圆环本身仍按已用量填充。',
+  'The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps.':'全屏应用在最前时，刘海会收起，离开后再回来。关闭则全屏时也留在原处。',
   'The notch stays open with every reading visible.':'刘海保持展开，所有读数都看得见。',
   'The black pill against the right-hand edge of the screen, with one ring per tool. Turn it off and the pill disappears; Codenotch keeps counting your usage either way.':'屏幕右侧边缘的黑色胶囊，每个工具对应一个圆环。关闭它后胶囊会消失；无论哪种情况，Codenotch 都会继续统计你的使用情况。',
   'Recentre':'重新居中',
@@ -647,6 +661,10 @@ const ZH_HANT_STATIC = {
   'A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.':'一條更細的每週額度圓環，畫在主環外側，圓環和瀏海邊緣之間的空隙裡。',
   'Show on hover':'懸停時顯示',
   'A small pill at the screen edge that opens when you reach it.':'螢幕邊緣一顆小膠囊，游標移過去就會展開。',
+  'Fold for full-screen apps':'全螢幕 App 時收合',
+  'Show remaining instead of used':'顯示剩餘而非已用',
+  'The figure under each ring reads what is left — 87% instead of 13% used, the same number the card prints beside it. The rings themselves still fill by what is spent.':'圓環下方的數字顯示剩餘量，例如 87% 而不是已用 13%，與卡片上的數字一致。圓環本身仍按已用量填充。',
+  'The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps.':'當全螢幕 App 在最前面時，瀏海會收合，離開後再回來。關閉則會讓它繼續蓋在全螢幕 App 上。',
   'Adaptive pill':'自適應膠囊',
   'While the notch is folded, its pill follows what is behind it: light over a dark background, black over a light one, so it stays easy to find. To tell, Codenotch reads a thin strip of the screen beside the pill twice a second and keeps only its average brightness.':'瀏海收起時，膠囊會隨背後的內容變化：深色背景上變淺，淺色背景上變黑，方便找到。為此，Codenotch 每秒讀取兩次膠囊旁邊一條窄窄的螢幕區域，只保留它的平均亮度。',
   'The notch stays open with every reading visible.':'瀏海保持展開，所有讀數都看得見。',
@@ -755,6 +773,8 @@ const JA_STATIC = {
   'One ring per provider, showing the headline limit. The weekly allowance stays in the hover card.':'サービスごとに 1 本のリングで主な上限を表示します。週間の枠はホバーカードに残ります。',
   'A thinner ring for the weekly limit, drawn inside the main one. It shares the gap with the working indicator.':'週間の上限を細いリングで主リングの内側に描きます。作業中インジケータと同じ隙間を共有します。',
   'A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.':'週間の上限を細いリングで主リングの外側、リングとノッチの端の間の余白に描きます。',
+  'Fold for full-screen apps':'フルスクリーンのアプリでは折りたたむ',
+  'The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps.':'フルスクリーンのアプリが前面にある間、ノッチは折りたたまれ、離れると戻ります。オフにすると、フルスクリーンのアプリの上でもそのまま表示されます。',
   'The notch stays open with every reading visible.':'ノッチは開いたままで、すべての読み取りが見えます。',
   'The black pill against the right-hand edge of the screen, with one ring per tool. Turn it off and the pill disappears; Codenotch keeps counting your usage either way.':'画面の右端にある黒いピルには、ツールごとに1つのリングが表示されます。オフにするとピルは消えますが、どちらにしても Codenotch は使用量のカウントを続けます。',
   'Recentre':'中央に戻す',
@@ -844,6 +864,8 @@ const KO_STATIC = {
   'Off':'끄기',
   'Inside':'안쪽',
   'Outside':'바깥쪽',
+  'Fold for full-screen apps':'전체 화면 앱 사용 시 접기',
+  'The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps.':'전체 화면 앱이 맨 앞에 있으면 노치를 접고, 해당 앱을 벗어나면 다시 표시합니다. 끄면 전체 화면 앱 위에서도 그대로 표시합니다.',
   'One ring per provider, showing the headline limit. The weekly allowance stays in the hover card.':'제공자당 하나의 링으로, 주요 제한을 표시합니다. 주간 허용량은 호버 카드에 유지됩니다.',
   'A thinner ring for the weekly limit, drawn inside the main one. It shares the gap with the working indicator.':'주간 제한을 나타내는 더 얇은 링으로, 메인 링 안쪽에 그려집니다. 작동 표시기와 간격을 공유합니다.',
   'A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.':'주간 제한을 나타내는 더 얇은 링으로, 메인 링 주위에 그려지며 링과 노치 가장자리 사이의 여백에 위치합니다.',
@@ -969,6 +991,10 @@ const UK_STATIC = {
   'A thinner ring for the weekly limit, drawn around the main one, in the margin between the ring and the notch edge.':'Тонше кільце тижневого ліміту навколо основного, у проміжку між кільцем і краєм вирізу.',
   'Show on hover':'Показувати при наведенні',
   'A small pill at the screen edge that opens when you reach it.':'Невелика смужка біля краю екрана, що розгортається при наведенні.',
+  'Fold for full-screen apps':'Згортати для повноекранних застосунків',
+  'Show remaining instead of used':'Показувати залишок замість використаного',
+  'The figure under each ring reads what is left — 87% instead of 13% used, the same number the card prints beside it. The rings themselves still fill by what is spent.':'Число під кожним кільцем показує залишок — 87% замість 13% використаних, як і в картці поруч. Самі кільця й далі заповнюються за використаним.',
+  'The notch folds away while a full-screen app is frontmost, and returns when you leave it. Off keeps it in place over full-screen apps.':'Виріз згортається, поки попереду повноекранний застосунок, і повертається, коли ви його залишите. Вимкнено — виріз лишається поверх повноекранних застосунків.',
   'Adaptive pill':'Адаптивна смужка',
   'While the notch is folded, its pill follows what is behind it: light over a dark background, black over a light one, so it stays easy to find. To tell, Codenotch reads a thin strip of the screen beside the pill twice a second and keeps only its average brightness.':'Поки виріз згорнуто, смужка підлаштовується під тло: світла на темному, чорна на світлому, щоб її було легко знайти. Для цього Codenotch двічі на секунду зчитує вузьку ділянку екрана поруч із нею і зберігає лише її середню яскравість.',
   'The notch stays open with every reading visible.':'Виріз лишається відкритим, усі показники видно.',
@@ -1218,6 +1244,8 @@ function drawSwitch(el, s){
 const hooks = remote('get_hooks_installed', 'set_hooks_installed', 'The Claude Code messages', () => renderAccounts());
 const autostart = remote('get_autostart', 'set_autostart', 'Open Codenotch at login', () => drawSwitch(document.getElementById('sw-autostart'), autostart));
 document.getElementById('sw-autostart').addEventListener('click', () => autostart.toggle());
+const foldFullScreen = remote('get_fold_for_full_screen', 'set_fold_for_full_screen', 'Fold for full-screen apps', () => drawSwitch(document.getElementById('sw-fullscreen'), foldFullScreen));
+document.getElementById('sw-fullscreen').addEventListener('click', () => foldFullScreen.toggle());
 const resetAlert = remote('get_reset_notifications', 'set_reset_notifications', 'Reset notifications', () => drawSwitch(document.getElementById('sw-reset-alert'), resetAlert));
 document.getElementById('sw-reset-alert').addEventListener('click', () => resetAlert.toggle());
 const resetSound = remote('get_reset_notification_sound', 'set_reset_notification_sound', 'Notification sound', () => drawSwitch(document.getElementById('sw-reset-sound'), resetSound));
@@ -1232,6 +1260,8 @@ document.getElementById('btn-reset-preview').addEventListener('click', async e =
 try { window.__TAURI__.event.listen('reset_alert_preview_error', e => strip('Preview card failed: ' + errText(e.payload))); } catch(e) { /* invoke failure uses the strip */ }
 const adaptivePill = remote('get_adaptive_pill', 'set_adaptive_pill', 'Adaptive pill', () => drawSwitch(document.getElementById('sw-adaptive'), adaptivePill));
 document.getElementById('sw-adaptive').addEventListener('click', () => adaptivePill.toggle());
+const showRemaining = remote('get_notch_shows_remaining', 'set_notch_shows_remaining', 'Show remaining instead of used', () => drawSwitch(document.getElementById('sw-remaining'), showRemaining));
+document.getElementById('sw-remaining').addEventListener('click', () => showRemaining.toggle());
 const weeklyDashed = remote('get_weekly_ring_dashed', 'set_weekly_ring_dashed', 'Dashed weekly ring', () => drawSwitch(document.getElementById('sw-weekly-dashed'), weeklyDashed));
 document.getElementById('sw-weekly-dashed').addEventListener('click', () => weeklyDashed.toggle());
 
@@ -1837,6 +1867,7 @@ function renderAll(){
   renderWeekly();
   renderTray();
   drawSwitch(document.getElementById('sw-autostart'), autostart);
+  drawSwitch(document.getElementById('sw-fullscreen'), foldFullScreen);
   drawSwitch(document.getElementById('sw-reset-alert'), resetAlert);
   drawSwitch(document.getElementById('sw-reset-sound'), resetSound);
   drawSwitch(document.getElementById('sw-adaptive'), adaptivePill);
@@ -1875,10 +1906,12 @@ function boot(){
       setUiLanguage(l === 'auto' && typeof resolved === 'string' ? resolved : l);
     }),
     autostart.refresh(),
+    foldFullScreen.refresh(),
     resetAlert.refresh(),
     resetSound.refresh(),
     adaptivePill.refresh(),
     weeklyDashed.refresh(),
+    showRemaining.refresh(),
     hooks.refresh()
   ];
   try { window.__TAURI__.event.listen('glyphs', e => { if(e.payload){ glyphs = e.payload; renderAccounts(); } }); } catch(e) { /* the letters stay */ }

@@ -68,6 +68,11 @@ final class ConfiguredUsageProvider: UsageProvider {
             try Task.checkCancellation()
             if entry.usesLocalAccount {
                 guard let automatic else { throw QueryError.invalid("The local provider is unavailable.") }
+                // Claude 接口的复用下限不能长于本条目的查询周期，避免自定义的较短周期失效。
+                if let claude = automatic as? ClaudeOAuthProvider {
+                    let ceiling = freshness == .standard ? entry.schedule.idleSeconds : entry.schedule.activeSeconds
+                    return decorate(try await claude.fetchSnapshot(freshness: freshness, reuseCeiling: ceiling))
+                }
                 return decorate(try await automatic.fetchSnapshot(freshness: freshness))
             }
             // Credential APIs may block before any network request starts.

@@ -18,6 +18,7 @@ struct DeepSeekUsageDetail: View {
     let schedule: DeepSeekPricing.Schedule
     let showsPricing: Bool
     @Environment(\.codenotchAccentColor) private var accentColor
+    @ObservedObject private var holidays = ChineseHolidays.shared
 
     private var timeZoneText: String {
         let absolute = abs(detail.timeZoneSeconds)
@@ -46,7 +47,7 @@ struct DeepSeekUsageDetail: View {
     }
 
     private var pricingText: String {
-        switch DeepSeekPricing.phase(at: now, schedule: schedule) {
+        switch DeepSeekPricing.phase(at: now, schedule: schedule, holidays: holidays.calendar) {
         case .peak:
             return L10n.t("Peak pricing · 2× off-peak")
         case .offPeak:
@@ -55,14 +56,14 @@ struct DeepSeekUsageDetail: View {
     }
 
     private var pricingColor: Color {
-        switch DeepSeekPricing.phase(at: now, schedule: schedule) {
+        switch DeepSeekPricing.phase(at: now, schedule: schedule, holidays: holidays.calendar) {
         case .peak: return Palette.watch
         case .offPeak: return accentColor
         }
     }
 
     private var nextPricingTransition: DeepSeekPricing.Transition {
-        DeepSeekPricing.nextTransition(after: now, schedule: schedule)
+        DeepSeekPricing.nextTransition(after: now, schedule: schedule, holidays: holidays.calendar)
     }
 
     private var nextPricingLabel: String {
@@ -73,11 +74,9 @@ struct DeepSeekUsageDetail: View {
     }
 
     private var nextPricingTime: String {
-        let formatter = ResetCopy.formatter(for: Calendar.current)
-        formatter.locale = L10n.locale
-        formatter.timeZone = .current
-        formatter.setLocalizedDateFormatFromTemplate("E j:mm")
-        return formatter.string(from: nextPricingTransition.date)
+        ResetCopy.formatter(template: "E j:mm", calendar: Calendar.current,
+                            locale: L10n.locale, timeZone: .current)
+            .string(from: nextPricingTransition.date)
     }
 
     var body: some View {

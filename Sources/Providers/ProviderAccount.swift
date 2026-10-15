@@ -147,8 +147,13 @@ struct ProviderSummary: Identifiable, Equatable {
     /// are read from their own directory's `oauth_creds.json` or `agent.db`
     /// and never raise the dialogue, so offering to restore access there would
     /// point at a prompt that cannot appear.
+    ///
+    /// Remote logins borrow their token over SSH and touch no local
+    /// keychain item at all — same exclusion, for the same reason. Muse
+    /// keeps its session in the login keychain, so a Deny is possible there.
     var usesKeychain: Bool {
-        ClaudeProfile.isClaude(providerID: id) || id == AntigravityProfile.defaultID || id == "cursor"
+        (ClaudeProfile.isClaude(providerID: id) && !RemoteHost.isRemoteClaude(providerID: id))
+            || id == AntigravityProfile.defaultID || id == "cursor" || id == "muse"
     }
 
     let id: String

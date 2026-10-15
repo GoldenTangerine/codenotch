@@ -35,7 +35,7 @@ extension View {
 /// crossing-and-notification machinery it switches is Notifications' to
 /// explain.
 private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
-    case accounts, codeSwitch, phone, deepseek, ollama, lmstudio, customEndpoints, appearance, notifications, costs, general
+    case accounts, codeSwitch, phone, deepseek, ollama, lmstudio, omlx, customEndpoints, remoteHosts, appearance, notifications, costs, general
 
     /// The sections the sidebar lists; Phone only once pairing is offered.
     static var visible: [SettingsSection] {
@@ -51,7 +51,9 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .deepseek:      return "DeepSeek"
         case .ollama:        return "Ollama"   // a product name, the same in every language
         case .lmstudio:      return "LM Studio"
+        case .omlx:          return "oMLX"
         case .customEndpoints: return L10n.t("Custom Endpoints")
+        case .remoteHosts:    return L10n.t("Remote Hosts")
         case .appearance:    return L10n.t("Appearance")
         case .notifications: return L10n.t("Notifications")
         case .costs:         return L10n.t("Costs")
@@ -67,7 +69,8 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .deepseek: return .deepseek
         case .ollama:   return .ollama
         case .lmstudio: return .lmstudio
-        default:        return nil
+        case .omlx:     return .omlx
+        default:       return nil
         }
     }
 
@@ -79,7 +82,9 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .deepseek:      return L10n.t("Peak and off-peak pricing for your DeepSeek spend.")
         case .ollama:        return L10n.t("Models running in Ollama on this Mac.")
         case .lmstudio:      return L10n.t("Models loaded in LM Studio on this Mac.")
+        case .omlx:          return L10n.t("Models loaded in oMLX on this Mac.")
         case .customEndpoints: return L10n.t("OpenAI-compatible APIs, local runtimes and custom proxies.")
+        case .remoteHosts:    return L10n.t("Claude and Codex accounts on servers you reach over SSH.")
         case .appearance:    return L10n.t("How the notch looks and where it sits.")
         case .notifications: return L10n.t("What Codenotch tells you, and when.")
         case .costs:         return L10n.t("What each project spent of each login’s allowance.")
@@ -96,7 +101,9 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .deepseek:      return "chart.line.uptrend.xyaxis"
         case .ollama:        return "desktopcomputer"
         case .lmstudio:      return "cpu"
+        case .omlx:          return "cpu"
         case .customEndpoints: return "network"
+        case .remoteHosts:    return "server.rack"
         case .appearance:    return "paintbrush.fill"
         case .notifications: return "bell.badge.fill"
         case .costs:         return "chart.bar.fill"
@@ -115,7 +122,9 @@ private enum SettingsSection: String, CaseIterable, Identifiable, Hashable {
         case .deepseek:      return .orange
         case .ollama:        return .teal
         case .lmstudio:      return .purple
+        case .omlx:          return .purple
         case .customEndpoints: return .indigo
+        case .remoteHosts:    return .orange
         case .appearance:    return .indigo
         case .notifications: return .red
         case .costs:         return .mint
@@ -473,6 +482,7 @@ struct SettingsView: View {
     var usageStore: UsageStore? = nil
     var hooks: HookSettings? = nil
     var codeSwitch: CodeSwitchBridge? = nil
+    var omlxMetrics: OMLXMetrics? = nil
     var previewResetAlert: (() -> Void)? = nil
     var previewSessionLimitAlert: (() -> Void)? = nil
     var previewWeeklyLimitAlert: (() -> Void)? = nil
@@ -573,6 +583,10 @@ struct SettingsView: View {
                 // for that explicit event, not on every usage poll.
                 accounts = providers()
             }
+        .onReceive(preferences.$remoteHosts.dropFirst().receive(on: RunLoop.main)) { _ in
+            // 主机列表变化后，存储会在同一轮主线程任务里重新注册；下一轮再读取账号摘要。
+            DispatchQueue.main.async { accounts = providers() }
+        }
     }
 
     /// The subject list: a full-height column on a shade lighter than the
@@ -734,8 +748,19 @@ struct SettingsView: View {
                 }
                 .formStyle(.grouped)
             }
+        case .omlx:
+            if let usageStore {
+                Form {
+                    Section("Connection") {
+                        OMLXSettingsRow(preferences: preferences, store: usageStore, metrics: omlxMetrics)
+                    }
+                }
+                .formStyle(.grouped)
+            }
         case .customEndpoints:
             CustomEndpointsSettingsView(preferences: preferences)
+        case .remoteHosts:
+            RemoteHostsSettingsView(preferences: preferences)
         case .appearance:    appearancePane
         case .notifications: notificationsPane
         case .costs:         CostSettingsPane()
@@ -784,6 +809,11 @@ struct SettingsView: View {
             // so dragging it was arranging something that is not on screen.
             Section(L10n.t("Connected")) {
                 if needsSetup { setupNote }
+                Toggle(L10n.t("Auto-order based on remaining usage"), isOn: $preferences.autoOrderByRemaining)
+                Text(L10n.t("The notch sorts rings by what is left of the window that leads each ring, most first. A high number that cannot be spent yet sinks below usable accounts but stays above empty ones. This list keeps your manual order, which breaks ties. Code Switch R rings keep their own order."))
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
                 ForEach(connected) { account in
                     AccountRow(provider: account, preferences: preferences,
                                signOut: signOut, signIn: signIn,
@@ -802,7 +832,9 @@ struct SettingsView: View {
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 } else if !connected.isEmpty {
-                    Text(L10n.t("The notch draws these in this order. Drag one by its handle to move it."))
+                    Text(preferences.autoOrderByRemaining
+                         ? L10n.t("Auto-order is on: the notch sorts these by remaining usage. Dragging still sets the order ties break in.")
+                         : L10n.t("The notch draws these in this order. Drag one by its handle to move it."))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -869,6 +901,16 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Picker(L10n.t("Working indicator"), selection: $preferences.busyIndicatorStyle) {
+                    ForEach(BusyIndicatorStyle.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+
+                Text(preferences.busyIndicatorStyle.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Toggle(L10n.t("Show usage pace"), isOn: $preferences.showUsagePace)
                 Text(L10n.t("Compares each timed allowance with the time left until reset, showing quota in deficit or held in reserve."))
                     .font(.caption)
@@ -892,6 +934,27 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
 
                 Text(preferences.weeklyRing.explanation)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle(L10n.t("Show remaining instead of used"),
+                       isOn: $preferences.showsRemainingInNotch)
+                Text(L10n.t("The notch reads what is left — the figures, the rings' sweep, and the card's bars and percentages. Colours still judge by what is spent, so a nearly empty ring still reads red."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle(L10n.t("Shut rings when a window is spent"),
+                       isOn: $preferences.shutRingsWhenSpent)
+                Text(L10n.t("When the 5-hour or the weekly window is spent, both rings say shut even where the other window still has room — dark grey where the notch reads what is left, red where it reads what is spent."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle(L10n.t("Hide accounts with nothing left to spend"),
+                       isOn: $preferences.hideDepletedAccounts)
+                Text(L10n.t("When the 5-hour or the weekly window is at 0% remaining, the account leaves the notch until a window resets. Stale readings stay: an old number is not proof the account is empty. Applies to accounts on this Mac only."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

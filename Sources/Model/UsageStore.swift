@@ -41,6 +41,7 @@ final class UsageStore: ObservableObject {
 
     private var providers: [UsageProvider]
     private var customProviders: [UsageProvider] = []
+    private var remoteProviders: [UsageProvider] = []
     var nicknames: [String: String] = [:] {
         didSet { if nicknames != oldValue { snapshots = snapshots.map(named) } }
     }
@@ -60,6 +61,7 @@ final class UsageStore: ObservableObject {
     /// Providers the user has switched off. They are not fetched at all — their
     /// credential is never read, which is the whole point of switching one off.
     /// Filtering the results afterwards would still touch the keychain.
+
 
     /// Provider ids plus any model cells currently on screen.
     var knownIDs: [String] {
@@ -560,6 +562,12 @@ final class UsageStore: ObservableObject {
         restart(provider) { provider.endpoint = endpoint }
     }
 
+    func updateOMLXEndpoint(_ endpoint: URL) {
+        guard let provider = underlyingProvider(OMLXIdentity.providerID) as? OMLXLocalProvider,
+              provider.endpoint != endpoint else { return }
+        restart(provider) { provider.endpoint = endpoint }
+    }
+
     /// A changed address makes whatever the old one was about to answer
     /// untrue; the reading is cleared and the new address asked at once.
     private func restart(_ provider: UsageProvider, applying change: () -> Void) {
@@ -612,7 +620,7 @@ final class UsageStore: ObservableObject {
     private func publish(_ snapshot: ProviderSnapshot) {
         guard !disconnected.contains(snapshot.id) else { return }
         var current = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.id, $0) })
-        current[snapshot.id] = named(snapshot)
+        current[snapshot.id] = named(snapshot).blockingSpentWeek()
         snapshots = orderedProviders.compactMap { disconnected.contains($0.id) ? nil : current[$0.id] }
     }
 
@@ -954,7 +962,8 @@ final class UsageStore: ObservableObject {
 
     func reconfigure(providers next: [UsageProvider], disconnected nextDisconnected: Set<String>,
                      invalidated: Set<String>) {
-        let next = next.filter { !$0.id.hasPrefix("custom-endpoint-") } + customProviders
+        let next = next.filter { !$0.id.hasPrefix("custom-endpoint-") && !RemoteHost.isRemote(providerID: $0.id) }
+            + customProviders + remoteProviders
         usesConfiguredSchedule = true
         let old = Dictionary(uniqueKeysWithValues: providers.map { ($0.id, $0) })
         let nextIDs = Set(next.map(\.id))
@@ -1016,6 +1025,14 @@ final class UsageStore: ObservableObject {
                                  disconnected: Set<String>? = nil) {
         let changed = invalidated ?? Set(customProviders.map(\.id)).union(custom.map(\.id))
         customProviders = custom
+        reconfigure(providers: providers, disconnected: disconnected ?? self.disconnected, invalidated: changed)
+    }
+
+    /// SSH 远程账号与自定义端点并列维护，目录重配时一并保留。
+    func registerRemoteProviders(_ remote: [UsageProvider], invalidated: Set<String>? = nil,
+                                 disconnected: Set<String>? = nil) {
+        let changed = invalidated ?? Set(remoteProviders.map(\.id)).union(remote.map(\.id))
+        remoteProviders = remote
         reconfigure(providers: providers, disconnected: disconnected ?? self.disconnected, invalidated: changed)
     }
 

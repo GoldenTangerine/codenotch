@@ -40,7 +40,7 @@ actor ClaudeOAuthProvider: UsageProvider {
     /// This profile's token, behind its own cache — see `ClaudeKeychain`.
     nonisolated private let keychain: ClaudeKeychain
 
-    private let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage?cedar_ember=1")!
+    private let endpoint = URL(string: "https://api.anthropic.com/api/oauth/usage")!
     private let session: URLSession
     /// Held between refreshes so the keychain is read once per token, not once
     /// per minute — a keychain read can put a prompt in front of the user.
@@ -59,6 +59,10 @@ actor ClaudeOAuthProvider: UsageProvider {
     /// How many 429s in a row. The endpoint answers `Retry-After: 0`, which is
     /// no guidance at all, so the wait doubles each time instead.
     private var consecutiveRateLimits = 0
+    private var lastEndpoint: (snapshot: ProviderSnapshot, at: Date, token: String)?
+    private var endpointFetch: Task<ProviderSnapshot, Error>?
+    private let minEndpointInterval: TimeInterval
+    private let liveMinEndpointInterval: TimeInterval
 
     private let archive: UsageArchive
     /// How this profile's token is obtained. Injected for the same reason
@@ -152,7 +156,9 @@ actor ClaudeOAuthProvider: UsageProvider {
          desktopCache: ClaudeDesktopUsageCache? = ClaudeDesktopUsageCache(),
          desktopFreshness: TimeInterval = 30 * 60,
          liveDesktopFreshness: TimeInterval = 2 * 60,
-         desktopRescanInterval: TimeInterval = 5 * 60) {
+         desktopRescanInterval: TimeInterval = 5 * 60,
+         minEndpointInterval: TimeInterval = 5 * 60,
+         liveMinEndpointInterval: TimeInterval = 2 * 60) {
         self.cli = cli
         self.loginCount = loginCount
         self.cliRefreshInterval = cliRefreshInterval
@@ -161,6 +167,8 @@ actor ClaudeOAuthProvider: UsageProvider {
         self.desktopFreshness = desktopFreshness
         self.liveDesktopFreshness = liveDesktopFreshness
         self.desktopRescanInterval = desktopRescanInterval
+        self.minEndpointInterval = minEndpointInterval
+        self.liveMinEndpointInterval = liveMinEndpointInterval
         self.profile = profile
         self.id = profile.id
         self.displayName = displayName ?? profile.displayName
@@ -199,13 +207,19 @@ actor ClaudeOAuthProvider: UsageProvider {
         try await fetchSnapshot(freshness: .standard)
     }
 
-    /// Freshness reaches the two allowances below, and nothing else. The
-    /// endpoint keeps its own back-off untouched: this is about not *serving* a
-    /// reading that was already old, never about asking Anthropic more often
-    /// than the 429 it hands back says we may.
+    /// Local sources keep their own freshness allowances; the endpoint's floor
+    /// applies even when a caller explicitly asks for the source.
     func fetchSnapshot(freshness: UsageFreshness) async throws -> ProviderSnapshot {
+        try await fetchSnapshot(freshness: freshness, reuseCeiling: nil)
+    }
+
+    /// `reuseCeiling` 来自查询条目的刷新周期：接口复用间隔不超过用户设置的周期，
+    /// 并发请求合并与限流退避仍然有效。
+    func fetchSnapshot(freshness: UsageFreshness, reuseCeiling: TimeInterval?) async throws -> ProviderSnapshot {
         let desktopAllowance: TimeInterval
         let cliAllowance: TimeInterval
+        let endpointFloor = freshness == .standard ? minEndpointInterval : liveMinEndpointInterval
+        let endpointAllowance = min(endpointFloor, reuseCeiling ?? endpointFloor)
         switch freshness {
         case .standard:
             desktopAllowance = desktopFreshness
@@ -214,12 +228,7 @@ actor ClaudeOAuthProvider: UsageProvider {
             desktopAllowance = min(liveDesktopFreshness, desktopFreshness)
             cliAllowance = min(liveCLIRefreshInterval, cliRefreshInterval)
         case .fromSource:
-            // Zero, which no reading can be inside: whatever is held is skipped,
-            // however new. A cache written two seconds ago *is* the account's
-            // number, so this spends a request to be told what it already knew —
-            // deliberately, because somebody asked for the source itself. The
-            // spacing that keeps that affordable is the caller's; see
-            // `UsageStore.refreshBecauseSomeoneIsLooking`.
+            // Skip local readings, but never bypass the endpoint's rate floor.
             desktopAllowance = 0
             cliAllowance = 0
         }
@@ -235,7 +244,7 @@ actor ClaudeOAuthProvider: UsageProvider {
         // or CLI reading would satisfy the refresh and the question would
         // never be put.
         if keychain.isAskingAgain {
-            return try await fetchFromKeychain()
+            return try await fetchFromKeychain(reusableFor: endpointAllowance)
         }
         // Ahead of both the CLI and the back-off check. This is the cheapest
         // source and the only one that can never interrupt anyone: it reads a
@@ -281,7 +290,7 @@ actor ClaudeOAuthProvider: UsageProvider {
             return snapshot(windows: windows, plan: lastCLIPlan, resetCredits: resets)
         }
         do {
-            var result = try await fetchFromKeychain()
+            var result = try await fetchFromKeychain(reusableFor: endpointAllowance)
             if result.resetCredits == nil { result.resetCredits = resets }
             return result
         } catch {
@@ -305,15 +314,28 @@ actor ClaudeOAuthProvider: UsageProvider {
         slug == nil && loginCount <= 1
     }
 
-    private func fetchFromKeychain() async throws -> ProviderSnapshot {
+    private func fetchFromKeychain(reusableFor reuseInterval: TimeInterval) async throws -> ProviderSnapshot {
         if Self.shouldHoldOff(until: retryNoEarlierThan, slack: backoffSlack),
            let retryNoEarlierThan {
             let remaining = retryNoEarlierThan.timeIntervalSinceNow
             Log.usage.debug("skipping fetch, backing off for \(remaining, format: .fixed(precision: 0))s")
             throw UsageProviderError.rateLimited(retryAfter: remaining)
         }
+        // An explicit permission request must reach the keychain even if usage is cached.
+        if keychain.isAskingAgain { credentials = nil }
+        let token = try currentToken()
+        let now = Date()
+        if let last = lastEndpoint, last.token == token,
+           now.timeIntervalSince(last.at) < reuseInterval,
+           !Self.hasExpiredWindow(last.snapshot.windows, at: now) {
+            return last.snapshot
+        }
+        if let endpointFetch { return try await endpointFetch.value }
+        let task = Task { try await self.fetch(retryingOnUnauthorized: true) }
+        endpointFetch = task
+        defer { endpointFetch = nil }
         do {
-            let snapshot = try await fetch(retryingOnUnauthorized: true)
+            let snapshot = try await task.value
             retryNoEarlierThan = nil
             consecutiveRateLimits = 0
             archive.saveBackoffUntil(nil, providerID: id)
@@ -327,9 +349,11 @@ actor ClaudeOAuthProvider: UsageProvider {
             // itself on every failed tick, so its own window never expired and
             // the keychain was never read again.
             credentials = nil
+            lastEndpoint = nil
             throw UsageProviderError.needsAuth
         } catch UsageProviderError.credentialExpired {
             credentials = nil
+            lastEndpoint = nil
             throw UsageProviderError.credentialExpired
         } catch let error as UsageProviderError {
             if case .rateLimited(let retryAfter) = error {
@@ -432,6 +456,7 @@ actor ClaudeOAuthProvider: UsageProvider {
         }
     }
 
+
     /// What `claude "/usage"` last said, or nil to mean "use the token path".
     ///
     /// Deliberately cannot throw. Every way the CLI can fail — not installed,
@@ -487,7 +512,7 @@ actor ClaudeOAuthProvider: UsageProvider {
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
         request.timeoutInterval = 15
 
-        Log.usage.debug("GET /api/oauth/usage")
+        Log.usage.debug("\(self.id, privacy: .public): GET /api/oauth/usage")
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         Log.usage.debug("usage endpoint answered \(status)")
@@ -527,7 +552,9 @@ actor ClaudeOAuthProvider: UsageProvider {
                 L10n.t("Claude answered, but listed no usage limits for this account. Some Enterprise and team plans don't report them.")
             )
         }
-        return snapshot(windows: windows, plan: credentials?.subscriptionType)
+        let result = snapshot(windows: windows, plan: credentials?.subscriptionType)
+        lastEndpoint = (result, Date(), token)
+        return result
     }
 
     private func currentToken() throws -> String {
@@ -559,12 +586,14 @@ actor ClaudeOAuthProvider: UsageProvider {
     /// The server's own hint is honoured only as a *floor-raiser*: it answers
     /// `Retry-After: 0`, and obeying that literally means retrying immediately,
     /// which is what keeps you rate limited. So the wait starts at a minute and
-    /// doubles for each 429 in a row, capped so it always recovers on its own.
+    /// doubles for each 429 in a row. Only our schedule is capped, never the server's hint.
+    ///
+    /// Shared with the remote provider: same endpoint, same rate limit.
     static func backoff(forAttempt attempt: Int, retryAfter: TimeInterval?) -> TimeInterval {
         let floor: TimeInterval = 60
         let ceiling: TimeInterval = 15 * 60
-        let doubled = floor * pow(2, Double(min(attempt, 4)))
-        return min(ceiling, max(doubled, retryAfter ?? 0))
+        let doubled = min(ceiling, floor * pow(2, Double(min(attempt, 4))))
+        return max(doubled, retryAfter ?? 0)
     }
 
     /// `Retry-After` is either a number of seconds or an HTTP date.
@@ -723,15 +752,23 @@ struct UsageResponse: Decodable {
         let limit: Amount?
     }
 
+    /// Read for one thing only: whether the cap is a *monthly* one. `spend`
+    /// carries no period and no reset time, but this block names its cap
+    /// `monthly_limit`, and that is the only place the response says so.
+    struct ExtraUsage: Decodable {
+        let monthlyLimit: Double?
+    }
+
     let limits: [Limit]?
     let fiveHour: Window?
     let sevenDay: Window?
     let cedarEmber: ClaudeResetCredits?
     let reportsResetCredits: Bool
     let spend: Spend?
+    let extraUsage: ExtraUsage?
 
     private enum CodingKeys: String, CodingKey {
-        case limits, fiveHour, sevenDay, cedarEmber, spend
+        case limits, fiveHour, sevenDay, cedarEmber, spend, extraUsage
     }
 
     init(from decoder: Decoder) throws {
@@ -747,6 +784,7 @@ struct UsageResponse: Decodable {
         // Tolerated for the same reason: on a plan seat the balance is an
         // extra, and a shape change in it must not cost the plan's windows.
         spend = try? container.decodeIfPresent(Spend.self, forKey: .spend)
+        extraUsage = try? container.decodeIfPresent(ExtraUsage.self, forKey: .extraUsage)
     }
 
     /// How this response is read, wherever it is read from.
@@ -776,7 +814,10 @@ struct UsageResponse: Decodable {
     /// `limits` is the forward-compatible shape — it grows new kinds as
     /// Anthropic adds them — so it is preferred, with the two named windows as
     /// a fallback for older responses.
-    func limitWindows() -> [LimitWindow] {
+    /// `readAt` is when the response was written, not when it is decoded: the
+    /// balance's month is worked out from it, and a reading from the 30th
+    /// decoded on the 1st belongs to the month that has just ended.
+    func limitWindows(readAt: Date = Date()) -> [LimitWindow] {
         var windows = (limits ?? []).compactMap { limit -> LimitWindow? in
             guard let resetsAt = limit.resetsAt else { return nil }
             return LimitWindow(
@@ -816,7 +857,7 @@ struct UsageResponse: Decodable {
         // they are internal codenames whose meaning is not published and can
         // change without notice. A ring drawn from one would be a number
         // presented as a limit without anybody knowing which limit.
-        if let balance = spendWindow() { windows.append(balance) }
+        if let balance = spendWindow(readAt: readAt) { windows.append(balance) }
 
         return windows.sorted(by: UsageResponse.displayOrder)
     }
@@ -845,12 +886,19 @@ struct UsageResponse: Decodable {
     /// is rounded to whole percent: at $2.97 of $200 that field says `1` while
     /// the true figure is 1.485%, and the bar under the tooltip would sit
     /// visibly left of where the numbers beside it say it should.
-    func spendWindow() -> LimitWindow? {
+    ///
+    /// The month is the calendar month in UTC. The response says the cap is
+    /// monthly but not when the month turns, so that much is an assumption —
+    /// one zone for everybody, rather than a boundary that moves with the
+    /// Mac's clock. Without `monthly_limit` there is no period at all, and the
+    /// window stays without a reset rather than having one assumed for it.
+    func spendWindow(readAt: Date = Date()) -> LimitWindow? {
         guard let spend, spend.enabled != false,
               let used = spend.used?.value,
               let limit = spend.limit?.value, limit > 0
         else { return nil }
 
+        let month = extraUsage?.monthlyLimit != nil ? Self.utcMonth(containing: readAt) : nil
         return LimitWindow(
             id: "spend",
             label: L10n.t("Spend limit"),
@@ -859,10 +907,19 @@ struct UsageResponse: Decodable {
                 currency: spend.limit?.currency ?? spend.used?.currency ?? "USD",
                 spent: used,
                 remaining: max(limit - used, 0)
-            )
-            // No reset time: the response does not carry one for this block,
-            // and a balance still says what it says without one.
+            ),
+            resetsAt: month?.end,
+            duration: month.map { $0.end.timeIntervalSince($0.start) }
         )
+    }
+
+    static func utcMonth(containing date: Date) -> (start: Date, end: Date)? {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        guard let start = calendar.dateInterval(of: .month, for: date)?.start,
+              let end = calendar.date(byAdding: .month, value: 1, to: start)
+        else { return nil }
+        return (start, end)
     }
 
     static func duration(forKind kind: String) -> TimeInterval? {

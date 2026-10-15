@@ -204,12 +204,17 @@ struct NotchRootView: View {
         .animation(motion(NotchMotion.unfold), value: model.isExpanded)
         .tint(model.accentColor.color)
         .environment(\.codenotchAccentColor, model.accentColor.color)
-        .environment(\.notchSurfaceStyle, model.surfaceStyle)
+        // The drawn style, not the chosen one: on the top edge the dock style
+        // is Dark glass, and the orb and grip have to agree with the notch.
+        .environment(\.notchSurfaceStyle, model.drawnSurfaceStyle)
+        // The cards follow the chosen style, so they look alike on every edge.
+        .environment(\.notchCardSurfaceStyle, model.cardSurfaceStyle)
         .environment(\.locale, L10n.locale)
         .environment(\.weeklyRingDashed, model.weeklyRingDashed)
         .environment(\.usageWatchLimit, model.watchLimit)
         .environment(\.usageCriticalLimit, model.criticalLimit)
         .environment(\.colorTransitionStyle, model.colorTransitionStyle)
+        .environment(\.busyIndicatorStyle, model.busyIndicatorStyle)
         .onAppear { arcSeparation = arcsOut ? 1 : 0 }
         .onChange(of: arcsOut) { _, open in
             // Both ways as motion, from wherever it is: out as the notch opens,
@@ -289,22 +294,69 @@ struct NotchRootView: View {
     /// `GooArc` — where a spring here spent the stretch in its first instant.
     static let arcDivide = Animation.timingCurve(0.35, 0, 0.25, 1, duration: 0.95)
 
+    @ViewBuilder
     private func notch(_ place: NotchPlacement, wing: NotchViewModel.Wing) -> some View {
         let shape = model.notchShape(for: wing)
+        // The dock style's slab. Its glass is a sibling behind the whole copy,
+        // taking the slab as its own shape: refraction and the rim are drawn
+        // at the edge of the glass, which a panel-sized rectangle clipped by
+        // the notch shape cut away, and glass under the copy's clip and scale
+        // came out as flat frost. So nothing above it clips, scales, masks or
+        // fades it. Reduce Transparency is read here as well as in the model
+        // because the environment is what the rest of this view obeys.
+        if model.floats && !reduceTransparency {
+            let slab = dockSlab(wing)
+            ZStack {
+                // Headless, the material is left out and nothing stands in
+                // for it — the pixel tests check what is ours. See TASKS.md,
+                // "The hardware's band stays black".
+                if !headlessGlass {
+                    if #available(macOS 26.0, *) {
+                        let scale = model.sizeScale
+                        let size = copySize(wing)
+                        Color.clear
+                            .frame(width: size.width * scale, height: size.height * scale)
+                            .glassEffect(model.drawnSurfaceStyle.slabGlass,
+                                         in: DockSlab(trim: slab.trim * scale,
+                                                      radius: slab.radius * scale,
+                                                      vertical: slab.vertical))
+                            // The copy is scaled from the bezel, so its middle
+                            // across the edge sits at half the *scaled* depth.
+                            .position(place.point(along: wing.lead + wing.length / 2,
+                                                  across: wing.depth * scale / 2))
+                            .offset(x: -model.edge.outward.x * model.edgeGap,
+                                    y: -model.edge.outward.y * model.edgeGap)
+                    }
+                }
+                notchCopy(place, wing: wing, shape: shape, clip: slab, dock: true)
+            }
+        } else {
+            notchCopy(place, wing: wing, shape: shape, clip: shape, dock: false)
+        }
+    }
+
+    /// Generic over the clip so the ordinary path keeps clipping by the notch
+    /// shape's own type, animating exactly as it did before the dock style.
+    /// `dock` keeps only the cells: the slab's glass is the sibling behind
+    /// this copy, and nothing of ours is laid under it.
+    private func notchCopy<Clip: Shape>(_ place: NotchPlacement, wing: NotchViewModel.Wing,
+                                        shape: SideNotchShape, clip: Clip,
+                                        dock: Bool) -> some View {
         let alongOffset = model.usesHardwareWings ? 0 : model.slack + model.shapeLength * model.sizeScale / 2 - place.panelLength / 2
         // Glass is for the open notch only. Folded, the pill has to read as
         // part of the bezel — and as the hardware notch itself on a MacBook —
-        // so it stays black; and glass under a `.statusBar` panel at rest
-        // would only be sampling the desktop for nothing.
+        // so it stays black. The dock's floating slab is the exception: folded
+        // it is a small capsule of the same glass.
         //
-        // Reduce transparency means "no see-through chrome", which for the
-        // notch is the solid style — the same precedence the Settings window
-        // applies to its own translucent chrome.
-        let glassy = model.surfaceStyle.isGlass
+        // The drawn style, so the dock style on the top edge is Dark glass
+        // here too. Reduce transparency means "no see-through chrome", which
+        // for the notch is the solid style — the same precedence the Settings
+        // window applies to its own translucent chrome.
+        let glassy = model.drawnSurfaceStyle.isGlass
             && !reduceTransparency
 
         return ZStack {
-            if glassy {
+            if glassy && !dock {
                 if #available(macOS 26.0, *) {
                     // The same layer twice, once without the material: an
                     // offscreen `ImageRenderer` cannot draw the system glass
@@ -315,7 +367,7 @@ struct NotchRootView: View {
                         Color.clear
                             .frame(width: place.panelSize.width, height: place.panelSize.height)
                             .background {
-                                if let dim = model.surfaceStyle.glassDim {
+                                if let dim = model.drawnSurfaceStyle.glassDim {
                                     Rectangle().fill(dim)
                                 }
                             }
@@ -323,9 +375,9 @@ struct NotchRootView: View {
                     } else {
                         Color.clear
                             .frame(width: place.panelSize.width, height: place.panelSize.height)
-                            .glassEffect(model.surfaceStyle.glass, in: Rectangle())
+                            .glassEffect(model.drawnSurfaceStyle.glass, in: Rectangle())
                             .background {
-                                if let dim = model.surfaceStyle.glassDim {
+                                if let dim = model.drawnSurfaceStyle.glassDim {
                                     Rectangle().fill(dim)
                                 }
                             }
@@ -339,12 +391,13 @@ struct NotchRootView: View {
                 // Clear/Tinted choice in Appearance settings, which is the whole
                 // point of handing this surface to the system. `darkGlass` is the
                 // one deliberate exception, and its dim sits behind the glass
-                // itself above, not here.
+                // itself above, not here. The dock's slab has none at all: its
+                // tint is part of the glass.
                 //
                 // No `else`: the solid fill below is mounted in every style anyway,
                 // and below macOS 26 `glassy` is always false, so it is simply left
                 // at full opacity.
-                shape.fill(Palette.notch).opacity(glassy && model.isExpanded ? 0 : 1)
+                shape.fill(Palette.notch).opacity((glassy && model.isExpanded) || dock ? 0 : 1)
 
             }
         }
@@ -373,12 +426,18 @@ struct NotchRootView: View {
             // the cells simply sit on top of a shrinking shape and appear to
             // slide out of the end of it; clipped, they are swallowed by the
             // outline as it closes, which is what a notch should do.
-            .clipShape(shape)
+            .clipShape(clip)
             .overlay {
                 if model.isEditingPosition {
-                    SideNotchShape(edge: model.edge, joining: model.joinedNotch)
-                        .stroke(model.accentColor.color, lineWidth: 1)
-                        .allowsHitTesting(false)
+                    // 位置编辑描边跟随实际绘制的外形，Dock 悬浮时描出圆角板。
+                    if dock {
+                        clip.stroke(model.accentColor.color, lineWidth: 1)
+                            .allowsHitTesting(false)
+                    } else {
+                        SideNotchShape(edge: model.edge, joining: model.joinedNotch)
+                            .stroke(model.accentColor.color, lineWidth: 1)
+                            .allowsHitTesting(false)
+                    }
                 }
             }
             // The size choice, applied to the notch and the cells it carries —
@@ -420,8 +479,10 @@ struct NotchRootView: View {
             // shape must never show, since it is meant to read as part of the
             // frame of the screen. Overhanging costs nothing: the panel ends
             // at the bezel and everything past it is simply not drawn.
-            .offset(x: model.edge.outward.x * Self.bezelBleed,
-                    y: model.edge.outward.y * Self.bezelBleed)
+            // The dock's slab floats clear of the bezel instead, by the gap
+            // the Dock keeps from the screen's edge.
+            .offset(x: model.edge.outward.x * (dock ? -model.edgeGap : Self.bezelBleed),
+                    y: model.edge.outward.y * (dock ? -model.edgeGap : Self.bezelBleed))
     }
 
     /// A copy's frame in the notch's design measurements, which the size
@@ -430,6 +491,19 @@ struct NotchRootView: View {
         NotchPlacement.panelSize(edge: model.edge,
                                  length: wing.length / max(model.sizeScale, 0.0001),
                                  depth: wing.depth)
+    }
+
+    /// The slab for this copy, in the copy's design measurements. Never
+    /// shortened below its own depth, and rounded no further than a capsule,
+    /// so the folded slab comes out as one.
+    private func dockSlab(_ wing: NotchViewModel.Wing) -> DockSlab {
+        let size = copySize(wing)
+        let vertical = model.edge.isVertical
+        let along = vertical ? size.height : size.width
+        let depth = vertical ? size.width : size.height
+        let trim = max(0, min(model.slabTrim, (along - depth) / 2))
+        let radius = max(0, min(model.slabCornerRadius, min(along - 2 * trim, depth) / 2))
+        return DockSlab(trim: trim, radius: radius, vertical: vertical)
     }
 
     /// The bezel side as a scaling anchor: the edge the notch is welded to
@@ -530,8 +604,26 @@ struct NotchRootView: View {
                 cellRingDiameter: model.cellRingDiameter,
                 showsReading: model.showsCellReading,
                 showsWeeklyReading: model.weeklyReading,
-                now: model.now
+                now: model.now,
+                showsRemaining: model.showsRemainingInNotch,
+                shutRingsWhenSpent: model.shutRingsWhenSpent
             )
+                // The ring colours were sampled for a black notch and go faint
+                // over the floating slab's clear glass on a light desktop, so
+                // each ring gets a ground of its own, as the Dock's icons do.
+                // A background, so the cell's size is untouched, and mounted
+                // here, under the fade and slide below, so it never shows
+                // without its ring.
+                .background(alignment: model.showsCellReading ? .top : .center) {
+                    if model.floats && !reduceTransparency {
+                        // 独立内圈会放大圆环，底色跟随实际圆环直径。
+                        let diameter = max(model.cellRingDiameter, NotchLayout.ringDiameter
+                            + (model.independentInnerRing ? NotchLayout.independentRingGrowth : 0))
+                        Circle()
+                            .fill(Palette.dockRingBacking)
+                            .frame(width: diameter, height: diameter)
+                    }
+                }
                 // Pinned to what the cell claims along the stack, or the drawn
                 // rings stop lining up with the centres `ringCenter` hands to
                 // the hover bands and the tooltip tails. Across a horizontal
@@ -618,6 +710,8 @@ struct NotchRootView: View {
                 windowCount: snapshot.windows.count,
                 groupCount: snapshot.windowGroupCount,
                 moneyWindowCount: snapshot.windows.filter { $0.money != nil }.count,
+                moneyResetCount: snapshot.windows.filter { $0.money != nil && $0.resetsAt != nil }.count,
+                moneyProjectionCount: snapshot.windows.filter { $0.money != nil && $0.usageProjection(now: model.now) != nil }.count,
                 usageDetailGroupCount: snapshot.usageDetail?.visibleGroups.count ?? 0,
                 sessionCount: snapshot.localModel == nil ? (model.activity(for: snapshot.id)?.sessions.count ?? 0) : 0,
                 sessionCap: model.sessionCap,
@@ -678,6 +772,31 @@ struct NotchRootView: View {
         )
     }
 
+}
+
+/// The dock style's slab in a copy's own frame: the frame shortened by `trim`
+/// at each end along the edge, so the cells are clipped by the same outline the
+/// glass behind them takes. See `NotchRootView.dockSlab`.
+private struct DockSlab: Shape {
+    var trim: CGFloat
+    var radius: CGFloat
+    var vertical: Bool
+
+    /// So folding morphs the slab into its capsule on the notch's own unfold
+    /// motion; without it the outline stepped to the new trim and corner while
+    /// the frame around it was still easing.
+    var animatableData: AnimatablePair<CGFloat, CGFloat> {
+        get { AnimatablePair(trim, radius) }
+        set {
+            trim = newValue.first
+            radius = newValue.second
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let slab = rect.insetBy(dx: vertical ? 0 : trim, dy: vertical ? trim : 0)
+        return RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: slab)
+    }
 }
 
 /// **The strand between a dragged notch and the display's hole**, drawn in the

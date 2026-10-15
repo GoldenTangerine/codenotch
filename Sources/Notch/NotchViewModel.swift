@@ -85,7 +85,12 @@ final class NotchViewModel: ObservableObject {
 
     // 两端入口统一移入右键菜单，绘制和热区必须同时关闭。
     // 保留默认隐藏，用户可独立恢复设置入口。
-    @Published var showsSettingsHandle = false
+    @Published var settingsHandlePreferred = false
+    /// Dock 风格悬浮时没有喇叭口可挂手柄，绘制和热区一并关闭；用户偏好保持不变。
+    var showsSettingsHandle: Bool {
+        get { settingsHandlePreferred && showsHandles }
+        set { settingsHandlePreferred = newValue }
+    }
     @Published var snapshots: [ProviderSnapshot] = [] { didSet { invalidateCollapsedProviders() } }
     @Published var tooltipHeightMode: TooltipHeightMode = .standard
     @Published var fullTooltipHeightLimit: CGFloat = NotchLayout.defaultMaxCardHeight
@@ -109,6 +114,8 @@ final class NotchViewModel: ObservableObject {
             windowCount: snapshot.windows.count,
             groupCount: snapshot.windowGroupCount,
             moneyWindowCount: snapshot.windows.filter { $0.money != nil }.count,
+            moneyResetCount: snapshot.windows.filter { $0.money != nil && $0.resetsAt != nil }.count,
+            moneyProjectionCount: snapshot.windows.filter { $0.money != nil && $0.usageProjection(now: now) != nil }.count,
             usageDetailGroupCount: snapshot.usageDetail?.visibleGroups.count ?? 0,
             sessionCount: activity(for: snapshot.id)?.sessions.count ?? 0,
             sessionCap: sessionCap, statusMessage: snapshot.statusMessage,
@@ -134,7 +141,10 @@ final class NotchViewModel: ObservableObject {
     /// Per runtime, so Ollama's relay switching off clears its own readings
     /// and nobody else's.
     private var performances: [String: [String: LocalModelPerformance]] = [:]
-    private var ledger = LocalTokenLedger()
+    /// Per runtime for the same reason: each runtime's metrics replace their
+    /// own ledger wholesale, so a single slot let the last one to report
+    /// erase the others' tooltips.
+    private var ledgers: [String: LocalTokenLedger] = [:]
     private var localMetricsEnabled = false
 
     /// The Ollama relay's own id; its readings are keyed by model name.
@@ -159,8 +169,8 @@ final class NotchViewModel: ObservableObject {
 
     /// Logged tokens per cell, read against `now` as it is drawn so "today"
     /// rolls over at midnight without a new line being written.
-    func updateLedger(_ ledger: LocalTokenLedger) {
-        self.ledger = ledger
+    func updateLedger(_ ledger: LocalTokenLedger, source: String = LMStudioMetrics.providerID) {
+        ledgers[source] = ledger
         snapshots = snapshots.map(decorated)
     }
 
@@ -171,7 +181,7 @@ final class NotchViewModel: ObservableObject {
         snapshot.showsLocalPerformance = shows
         snapshot.localPerformance = shows
             ? performances[snapshot.providerID]?[Self.performanceKey(for: snapshot, model: model)] : nil
-        snapshot.localLedger = ledger.summary(for: snapshot.id, now: now)
+        snapshot.localLedger = ledgers[snapshot.providerID]?.summary(for: snapshot.id, now: now)
         snapshot.localContextFraction = snapshot.localLedger?.contextFraction(contextLength: model.contextLength)
         return snapshot
     }
@@ -184,8 +194,10 @@ final class NotchViewModel: ObservableObject {
 
     @Published var thinkingModels: [String: Date] = [:] { didSet { invalidateCollapsedProviders() } }
     /// What each local model instance is doing, keyed by cell id. Ollama's
-    /// thinking relay reports through `thinkingModels`; LM Studio's state
-    /// poll reports here, phase and queue included.
+    /// thinking relay reports through `thinkingModels`; every other runtime's
+    /// state poll reports here, phase and queue included. The fleet hands over
+    /// the union of all runtimes' maps; cell ids are namespaced per provider,
+    /// so they never collide.
     @Published var localActivities: [String: LocalModelActivity] = [:] { didSet { invalidateCollapsedProviders() } }
 
     /// Live agent sessions, keyed by the provider they belong to. They surface
@@ -484,11 +496,58 @@ final class NotchViewModel: ObservableObject {
     /// Mirrors the persisted choice so every notch controller updates together.
     @Published var colorTransitionStyle: ColorTransitionStyle = .hardStep
     /// Whether the move handle is on the notch at all. Mirrored from Settings
-    /// like `weeklyRing`.
-    @Published var showsMoveHandle = false
+    /// like `weeklyRing`; the floating dock slab draws neither handle.
+    @Published var moveHandlePreferred = false
+    var showsMoveHandle: Bool {
+        get { moveHandlePreferred && showsHandles }
+        set { moveHandlePreferred = newValue }
+    }
+    @Published var busyIndicatorStyle: BusyIndicatorStyle = .arc
     /// Mirrors the persisted Appearance choice so the separate notch window
     /// redraws immediately when Settings changes it.
     @Published var surfaceStyle: NotchSurfaceStyle = .glass
+    /// The Mac's Reduce Transparency, mirrored by the controller. The model has
+    /// to know because under it the dock style does not float, and that
+    /// changes geometry, not only paint.
+    @Published var reduceTransparency = false
+
+    /// The style actually drawn here: the chosen one resolved for this edge,
+    /// after the fallbacks for an older Mac and for Reduce Transparency.
+    var drawnSurfaceStyle: NotchSurfaceStyle {
+        reduceTransparency ? .solid : surfaceStyle.resolved(on: edge).effective
+    }
+
+    /// The style the tooltip and cards are drawn with: the chosen one, not
+    /// resolved for this edge, so with the dock style they look the same on
+    /// the top edge as on the others. For every other style `resolved(on:)`
+    /// is the identity, so this equals `drawnSurfaceStyle` there.
+    var cardSurfaceStyle: NotchSurfaceStyle {
+        reduceTransparency ? .solid : surfaceStyle.effective
+    }
+
+    /// Whether the notch is a slab floating clear of the screen edge — the one
+    /// question every dock branch asks, so the edge, the macOS version and
+    /// Reduce Transparency are each weighed in exactly one place.
+    var floats: Bool { drawnSurfaceStyle.isDock }
+
+    /// The clear strip between the screen edge and a floating slab, in screen
+    /// points; zero for a notch welded to the bezel.
+    var edgeGap: CGFloat { floats ? NotchLayout.dockGap : 0 }
+
+    /// The settings orb and the move grip hang off a flare, and a floating
+    /// slab has none, so it goes without them: Settings stays in the context
+    /// menu and moving stays on ⌥-drag.
+    var showsHandles: Bool { !floats }
+
+    /// How much of each end the slab gives back, in design points. Open, the
+    /// slab is the body alone — the length the two flares took is not slab;
+    /// folded, the capsule is the whole resting pill.
+    var slabTrim: CGFloat { floats && isExpanded ? flare : 0 }
+
+    /// The slab's corner, in design points. The view clamps it to half the
+    /// shorter side, which is what turns the folded slab into a capsule.
+    var slabCornerRadius: CGFloat { NotchLayout.dockCornerRadius }
+
     /// Whether DeepSeek's billing phase rows are visible in its usage card.
     @Published var deepSeekPricingEnabled = true
     /// The rule used by the DeepSeek card, mirrored from Preferences so a
@@ -500,6 +559,13 @@ final class NotchViewModel: ObservableObject {
     /// that is the only thing that knows which screen that is.
     @Published var hardwareNotch: HardwareNotch?
     @Published var notchTriggerHeight = NotchTriggerHeight.defaultValue
+    /// Whether the notch reads what is left rather than what is spent.
+    /// Mirrors the Appearance setting; the figure and the arcs' sweep follow
+    /// it, the bands still judge by what is spent.
+    @Published var showsRemainingInNotch = false
+    /// Whether a spent window shuts the rings beside it. Mirrors the
+    /// Appearance setting.
+    @Published var shutRingsWhenSpent = false
 
     /// How much screen there is to spend on the panel.
     ///
@@ -890,9 +956,9 @@ final class NotchViewModel: ObservableObject {
     /// pair. The handle is a round thing in two places, and the bounding box of
     /// the two takes in a great deal of ground that is near neither — which is
     /// why the button used to appear well before the pointer reached the arc.
-    func isOnOrbHandle(along: CGFloat, across: CGFloat) -> Bool {
+    func isOnOrbHandle(along: CGFloat, across: CGFloat, points: [CGPoint]? = nil) -> Bool {
         let radius = orbHotZone / 2
-        return orbHandlePoints.contains {
+        return (points ?? orbHandlePoints).contains {
             hypot(along - $0.x, across - $0.y) <= radius
         }
     }
@@ -920,9 +986,10 @@ final class NotchViewModel: ObservableObject {
 
 
     /// Where the tooltip's tail tip sits, measured in from the bezel: just off
-    /// the inner face of a shape that the extension has made deeper.
+    /// the inner face of a shape that the extension has made deeper. A
+    /// floating slab's inner face is the gap further in.
     var tooltipInset: CGFloat {
-        notchDrawnDepth + NotchLayout.tailGap
+        notchDrawnDepth + edgeGap + NotchLayout.tailGap
     }
 
     /// How deep the notch body reaches on screen — the design-frame depth at
@@ -1086,6 +1153,8 @@ final class NotchViewModel: ObservableObject {
             NotchLayout.cardHeight(windowCount: snapshot.windows.count,
                 groupCount: Set(snapshot.windows.compactMap(\.group)).count,
                 moneyWindowCount: snapshot.windows.filter { $0.money != nil }.count,
+                moneyResetCount: snapshot.windows.filter { $0.money != nil && $0.resetsAt != nil }.count,
+                moneyProjectionCount: snapshot.windows.filter { $0.money != nil && $0.usageProjection(now: now) != nil }.count,
                 usageDetailGroupCount: snapshot.usageDetail?.visibleGroups.count ?? 0,
                 sessionCount: snapshot.localModel == nil ? sessionCap + 1 : 0,
                 sessionCap: sessionCap,
@@ -1132,6 +1201,7 @@ final class NotchViewModel: ObservableObject {
         return screenSize.height / sizeScale
             - contentInset
             - bodyDepth
+            - edgeGap / sizeScale
             - NotchLayout.tailLength
             - NotchLayout.tailGap
     }
@@ -1172,7 +1242,7 @@ final class NotchViewModel: ObservableObject {
     /// buttons then opened the notch on approach and disappeared under it.
     var wakeLength: CGFloat { max(restingLength * sizeScale, wakeBand) }
     var wakeDepth: CGFloat {
-        restingDepth * sizeScale + (mergesWithCutout ? 0 : wakeBand)
+        restingDepth * sizeScale + edgeGap + (mergesWithCutout ? 0 : wakeBand)
     }
     private var wakeBand: CGFloat { NotchLayout.pillHotZone }
 
@@ -1270,7 +1340,7 @@ final class NotchViewModel: ObservableObject {
                           height: notchDrawnDepth + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card))
         }
         if tooltipHeightMode == .full, edge.isVertical, screenUsableSize.height > 0 {
-            return CGSize(width: (contentInset + bodyDepth) * sizeScale
+            return CGSize(width: (contentInset + bodyDepth) * sizeScale + edgeGap
                           + NotchLayout.tooltipDepth(for: edge), height: screenUsableSize.height)
         }
         let card = maxCardHeight(cellCount: cellCount)
@@ -1278,7 +1348,7 @@ final class NotchViewModel: ObservableObject {
             edge: edge,
             length: shapeLength(cellCount: cellCount) * sizeScale
                 + 2 * slack(cellCount: cellCount),
-            depth: (contentInset + bodyDepth) * sizeScale
+            depth: (contentInset + bodyDepth) * sizeScale + edgeGap
                 + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card)
         )
     }
@@ -1290,7 +1360,7 @@ final class NotchViewModel: ObservableObject {
         return NotchPlacement.panelSize(edge: edge,
             length: shapeLength(cellCount: cellCount) * sizeScale
                 + 2 * NotchLayout.slack(for: edge, maxCardHeight: card, notchScale: sizeScale),
-            depth: (contentInset + bodyDepth) * sizeScale
+            depth: (contentInset + bodyDepth) * sizeScale + edgeGap
                 + NotchLayout.tooltipDepth(for: edge, maxCardHeight: card))
     }
 }

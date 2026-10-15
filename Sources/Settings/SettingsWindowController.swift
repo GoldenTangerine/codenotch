@@ -37,6 +37,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     private let codeSwitch: CodeSwitchBridge?
     private let ollamaRelay: OllamaActivityRelay?
     private let lmstudioMetrics: LMStudioMetrics?
+    private let omlxMetrics: OMLXMetrics?
     let phoneLinkPairing: PhoneLinkPairing?
     let phoneLinkRegistry: PhoneLinkRegistry?
     let phoneLinkServerStatus: PhoneLinkServerStatus?
@@ -62,9 +63,10 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
          usageStore: UsageStore? = nil,
          botModel: NotchViewModel? = nil,
          ollamaRelay: OllamaActivityRelay? = nil,
-         lmstudioMetrics: LMStudioMetrics? = nil, phoneLinkPairing: PhoneLinkPairing? = nil, phoneLinkRegistry: PhoneLinkRegistry? = nil, phoneLinkServerStatus: PhoneLinkServerStatus? = nil) {
+         lmstudioMetrics: LMStudioMetrics? = nil, omlxMetrics: OMLXMetrics? = nil, phoneLinkPairing: PhoneLinkPairing? = nil, phoneLinkRegistry: PhoneLinkRegistry? = nil, phoneLinkServerStatus: PhoneLinkServerStatus? = nil) {
         self.ollamaRelay = ollamaRelay
         self.lmstudioMetrics = lmstudioMetrics
+        self.omlxMetrics = omlxMetrics
         self.usageStore = usageStore
         self.botModel = botModel
         self.phoneLinkPairing = phoneLinkPairing
@@ -298,6 +300,7 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
                                    updater: updater,
                                    ollamaRelay: ollamaRelay, lmstudioMetrics: lmstudioMetrics,
                                    catalog: catalog, usageStore: usageStore, hooks: hooks, codeSwitch: codeSwitch,
+                                   omlxMetrics: omlxMetrics,
                                    previewResetAlert: previewResetAlert,
                                    previewSessionLimitAlert: previewSessionLimitAlert,
                                    previewWeeklyLimitAlert: previewWeeklyLimitAlert)

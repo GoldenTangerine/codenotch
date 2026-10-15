@@ -19,6 +19,7 @@ struct CustomEndpointsSettingsView: View {
     @State private var draftAPIKey: String = ""
     @State private var urlValidationError: String? = nil
     @State private var isCreatingNew = false
+    @State private var openCodeBridgeMessage: String?
     @State private var isScanningPorts = false
     @State private var detectedPresets: [CustomEndpointPreset] = []
     @State private var isTesting = false
@@ -265,6 +266,7 @@ struct CustomEndpointsSettingsView: View {
                         isDetectingUsage = false
                         trackingUnitBeforeJSON = nil
                         editingEndpoint = endpoint
+                        openCodeBridgeMessage = nil
                         draftAPIKey = endpoint.apiKey ?? ""
                         urlValidationError = nil
                         isCreatingNew = false
@@ -600,6 +602,37 @@ struct CustomEndpointsSettingsView: View {
                         ))
                         .textFieldStyle(.roundedBorder)
                     }
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L10n.t("OpenCode activity"))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                TextField(L10n.t("OpenCode provider ID (optional)"), text: Binding(
+                    get: { editingEndpoint?.openCodeProviderID ?? "" },
+                    set: { value in
+                        let id = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                        editingEndpoint?.openCodeProviderID = id.isEmpty ? nil : id
+                    }
+                ))
+                .textFieldStyle(.roundedBorder)
+                Text(L10n.t("Use the provider key from OpenCode settings. Activity is matched to this provider and the selected model. Leave empty to disable."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button(L10n.t("Install OpenCode bridge")) {
+                    do {
+                        try OpenCodePluginInstaller.install()
+                        openCodeBridgeMessage = L10n.t("Bridge installed. Restart OpenCode, then save this endpoint.")
+                    } catch {
+                        openCodeBridgeMessage = L10n.t("Could not install the bridge.") + " " + error.localizedDescription
+                    }
+                }
+                .buttonStyle(SettingsButtonStyle(kind: .standard, compact: true))
+                if let openCodeBridgeMessage {
+                    Text(openCodeBridgeMessage).font(.caption).foregroundStyle(.secondary)
                 }
             }
 
@@ -1303,6 +1336,7 @@ struct CustomEndpointsSettingsView: View {
     }
 
     private func startNewEndpoint() {
+        openCodeBridgeMessage = nil
         debounceTask?.cancel()
         detectionTask?.cancel()
         trackingUnitBeforeJSON = nil
@@ -1327,6 +1361,7 @@ struct CustomEndpointsSettingsView: View {
     }
 
     private func applyPreset(_ preset: CustomEndpointPreset) {
+        openCodeBridgeMessage = nil
         debounceTask?.cancel()
         detectionTask?.cancel()
         trackingUnitBeforeJSON = nil

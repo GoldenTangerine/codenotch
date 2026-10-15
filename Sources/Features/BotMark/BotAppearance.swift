@@ -74,7 +74,7 @@ enum BotMarkGaze: Double, CaseIterable {
 }
 
 struct BotActivityTimeline {
-    enum Source: CaseIterable { case cli, ollama, lmStudio, codeSwitch }
+    enum Source: CaseIterable { case cli, ollama, lmStudio, omlx, codeSwitch }
 
     private var busySources: Set<Source> = []
     private(set) var lastActivity: Date?

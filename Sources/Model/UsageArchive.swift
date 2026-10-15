@@ -88,7 +88,12 @@ struct UsageArchive {
         else { return [:] }
 
         var result: [String: (snapshot: ProviderSnapshot, fetchedAt: Date)] = [:]
+        var prunedObsolete = false
         for entry in entries {
+            if entry.id == "perplexity" {
+                prunedObsolete = true
+                continue
+            }
             // Spark and code-review are live windows. Older Codex readings also
             // carried rollout quotas the provider no longer displays. Strip
             // those leftovers rather than discarding a Spark snapshot — and
@@ -116,6 +121,9 @@ struct UsageArchive {
             snapshot.plan = entry.plan
             result[entry.id] = (snapshot, entry.fetchedAt)
         }
+        if prunedObsolete {
+            save(result)
+        }
         return result
     }
 
@@ -127,7 +135,9 @@ struct UsageArchive {
     }
 
     func save(_ readings: [String: (snapshot: ProviderSnapshot, fetchedAt: Date)]) {
-        let entries = readings.values.map {
+        let entries = readings.values
+            .filter { $0.snapshot.id != "perplexity" }
+            .map {
             Entry(
                 id: $0.snapshot.id,
                 displayName: $0.snapshot.displayName,

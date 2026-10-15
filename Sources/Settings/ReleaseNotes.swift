@@ -40,6 +40,17 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.23.0",
+            headline: L10n.t("Upstream 1.23, remaining mode and a Dock style"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Show what is left instead of used, shut both rings when a window is spent, and auto-order or hide spent accounts on this Mac")),
+                ReleaseNote.Change(title: L10n.t("Add a Dock style that floats the notch as glass on the left, right and bottom edges")),
+                ReleaseNote.Change(title: L10n.t("Add oMLX, Muse, Grok Bot and Claude or Codex accounts on servers over SSH")),
+                ReleaseNote.Change(title: L10n.t("Show OpenCode activity on custom endpoints and an optional breathing working indicator")),
+                ReleaseNote.Change(title: L10n.t("Merge concurrent Claude requests within your query interval, and fold the Windows notch for full-screen apps"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.22.4",
             headline: L10n.t("Gear clear of the notch, dragging follows the pointer"),
             changes: [

@@ -38,7 +38,7 @@ context.stateSnap.lang_resolved = 'zh';
 assert.equal(evaluate("tr('Usage')"), '用量');
 const readings = html.slice(html.indexOf('function smallPct('), html.indexOf('let usage='));
 const reset = html.slice(html.indexOf('function resetCopy('), html.indexOf('const STATE_DOT='));
-vm.runInContext(readings + '\n' + reset, context);
+vm.runInContext('var showRemaining=false;\n' + readings + '\n' + reset, context);
 assert.equal(evaluate('pctText(0.003)'), '0.3');
 assert.equal(evaluate('usedCopy({used:0.003})'), '已用 0.3% · 剩余 99.7%');
 context.stateSnap.lang_resolved = 'en';

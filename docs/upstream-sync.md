@@ -8,6 +8,42 @@
 @FilePath: docs/upstream-sync.md
 -->
 
+# 2026-10-15 上游 v1.23.0 功能整合（随 v1.23.0 发布）
+
+- 来源：<https://github.com/vinzdg/codenotch>；已整合基线 `bcb28894d1514fef5a810595d64b44a3817c2076`（v1.22.0），目标 `9e7cd3d`（v1.23.0 appcast），61 个提交、146 个文件。后续同步以 `9e7cd3d` 计算增量。
+- 本地起点 `586867f`（`1.22.4` / build `332`），工作区干净。以 `bcb2889` 为基线生成三方合并结果落到工作区，没有建立上游合并历史，未暂存、提交或发布。
+- 保留本地版本号、GoldenTangerine 更新源、公钥、签名、站点产物和工作流；上游 1.23.0 发布说明未并入。详细决策见 [本次计划](plans/2026-10-15-upstream-sync.md)。
+
+## 同步内容与本地适配
+
+| 范围 | 本次结果 | 本地兼容约束 |
+|---|---|---|
+| 额度显示 | 剩余模式、耗尽双环关闭、按剩余自动排序、隐藏耗尽账号；空周额度作为阻塞附加到快照 | 均为设置项；双环关闭本地默认关闭；排序和隐藏只作用于刘海中的本机账号，Code Switch R 联动环、菜单栏和额度提醒不受影响；剩余模式同时作用于联动卡片和独立内圈 |
+| Dock 风格 | 左、右、下边缘悬浮玻璃板，顶部回退为深色玻璃；面板声明活跃外观（私有选择器）；卡片使用独立的卡片样式 | 在本地刘海视图中实现；悬浮时隐藏设置半弧和六点手柄但保留用户偏好；命中区域、卡片位置和面板深度计入 5pt 间隙；设置入口沿用本地右键菜单，不重复添加 |
+| 新供应商 | oMLX（含活动、速度与每日 Token）、Muse、Grok Bot | 通过查询目录一次性导入，默认关闭，删除后不恢复；oMLX 地址更新经查询目录包装层找到原始供应商；机器人忙碌状态为 oMLX 单独记录 |
+| 远程主机 | SSH 读取远程 Claude/Codex 令牌并查询用量 | 与自定义端点并列注册到本地存储，只重建连接参数变化的条目，启动时不清除归档读数；远程账号不计入 Costs、Code Switch R 和本机钥匙串授权 |
+| OpenCode 活动 | 自定义端点的 OpenCode 桥接插件与活动监控 | 插件仅在设置中点击按钮后安装；会话按端点 ID 合入本地活动路由与忙碌判断，不扩展原生 ActivityCoordinator |
+| Claude 接口 | 去掉 `cedar_ember=1`、并发请求合并、只限制本地退避计划上限 | 接口复用间隔取上游下限与查询条目周期的较小值，本地自定义周期继续生效 |
+| 其他修复 | 显示器重配后控制器释放、常显时钟、ResetCopy 格式化缓存、Perplexity 旧条目清理、ZCode 凭据、DeepSeek 节假日、未打开的 Claude 会话过滤、呼吸圆盘、企业额度预测 | 时钟修复保留 Code Switch R 每日预算的逐秒刷新；单显示器重配仍走本地预览定位；节假日检查按查询目录中启用的 DeepSeek 条目判断 |
+| 未移植 | CursorGeometry 光标几何缓存重构 | 本地悬停、拖动和命中逻辑已独立实现，相关文件与测试移除 |
+| Windows | 全屏折叠与平滑避让、剩余模式、过期 Claude 额度弧、企业额度上限、BOM 配置、agy 数字时区、GLM_API_KEY、ZCode、Claude 每账号 5 分钟请求下限与退避持久化 | 保留本地设置页结构、托盘、拖放定位和“重新居中”行为；补齐中文、繁体中文、俄语、乌克兰语文案 |
+| 本地化 | 并入上游新增 20 个目录键，为本次新增的 62 条文案补充简体中文 | 目录共 1772 键，全部带简体中文且格式参数一致；设置说明补充“只作用于本机账号 / 联动环保持原顺序” |
+
+## 需要注意的行为变化
+
+- 存储发布快照时会把用尽的每周额度作为阻塞附加到账号上（上游行为，不受“耗尽时双环关闭”开关控制）：主圆环显示为耗尽状态，卡片、菜单栏和手机端显示“每周额度已耗尽”。
+- Windows 的 Claude 每账号最快 5 分钟请求一次（含手动刷新与失败重试），与上游一致；Windows 没有自定义查询周期，macOS 仍以查询条目周期为准。
+- Dock 风格依赖 AppKit 私有选择器 `_hasActiveAppearance`，只在悬浮时声明；系统移除该选择器时退化为磨砂玻璃。
+
+## 验证与限制
+
+- macOS：SDK 26.5 与临时 SwiftNIO/Sparkle 依赖下，全部应用源码类型检查通过（0 错误）；同步前基线同样为 0 错误。按用户要求未进行本地打包、完整编译和测试运行。
+- Windows 页面与本地化脚本：`Scripts/test-notch-localization.mjs`、`windows/scripts/` 下 5 个脚本、`windows/test-*.cjs` 4 个脚本、`upstream-sync.test.mjs`（4 项）和 `test-codex-headline.cjs`（5 项）全部通过；两页内联脚本语法检查通过。上游新增的两个脚本已按本地页面结构调整（语言表只含本地支持的 5 种语言、主圆弧绘制在 `svg.ring` 层）。
+- Rust：逐项核对合并代码引用的函数、配置字段默认值和 `windows` crate 特性；本机无 Rust 工具链，未编译或运行单测。
+- 测试源码调整：上游 Dock 几何测试改用本地接口（手柄偏好、`cellWing`）；耗尽双环测试按本地默认关闭调整；移除未采纳的空闲跳过刷新测试和光标几何测试；新增本机账号排序/隐藏回归测试。
+- 同步前已存在、与本地接口不一致而无法编译的测试未在本次修改：`UsageResetWatcherTests`、`QoderUsageTests`、`NotchGeometryTests`、`MergesWithTheCutoutTests`、`KiloProviderTests`、`FullScreenAutoFoldTests`、`CodexUsageTests`、`CodexOpenRolloutTests`、`AntigravityTests`、`AntigravityProfileTests`、`AccountNicknameTests`，以及 `NotchRenderTests`、`NotchLayoutTests`、`NotchEdgeTests` 中引用 `mergedScale`、`localSweep(for:)`、`notchAlongLead` 等已删除接口的旧用例。完整 Xcode 运行测试前需要先处理这些文件。
+- 未验证：完整 XCTest、签名构建、Dock 玻璃实际效果、SSH 远程读取、OpenCode 插件安装与活动显示、Windows 实机运行。
+
 # 2026-10-09 上游 v1.22.0 功能整合（未发布）
 
 - 来源：<https://github.com/vinzdg/codenotch>；对比基线 `07ba1db863ffc27c0bdb2397f0091b1a730b97f8`，目标 `bcb28894d1514fef5a810595d64b44a3817c2076`（v1.22.0）。

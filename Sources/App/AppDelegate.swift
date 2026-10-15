@@ -21,8 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var phoneLinkPairing: PhoneLinkPairing?
     var phoneLinkRegistry: PhoneLinkRegistry?
     private var activityCoordinator: ActivityCoordinator?
+    private var openCodeActivityBridge: OpenCodeActivityBridge?
+    /// OpenCode 桥接上报的自定义端点会话，按端点 ID 合入活动路由。
+    private var openCodeSessions: [String: [AgentSession]] = [:]
     private var ollamaRelay: OllamaActivityRelay?
     private var lmstudioMetrics: LMStudioMetrics?
+    private var omlxMetrics: OMLXMetrics?
     private var preferences: Preferences?
     private var settings: SettingsWindowController?
     private var whatsNew: WhatsNewWindowController?
@@ -43,6 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hookSettings: HookSettings?
     private var nativeSessions: [String: [AgentSession]] = [:]
     private var localSnapshots: [ProviderSnapshot] = []
+    /// 按每日节奏换算前判断的已耗尽本机账号，供“隐藏已耗尽账号”使用。
+    private var depletedLocalIDs: Set<String> = []
+    private var arrangedNotchSnapshots: [ProviderSnapshot]?
     private var activitySources: [String: String] = [:]
     private var activityRouting: ActivityRouting?
     private var pendingAnnouncements: [SessionCompletionWatcher.Event] = []
@@ -132,12 +139,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fleet = NotchFleet(scope: preferences.notchScope, edge: preferences.notchEdge)
         self.notchFleet = fleet
 
-        // `CODENOTCH_DEMO=1` puts the design frame's three providers on screen
-        // with its numbers, for screenshots and for eyeballing the layout.
-        if ProcessInfo.processInfo.environment["CODENOTCH_DEMO"] == "1" {
+        // `CODENOTCH_DEMO=1` puts the design frame's three providers and one
+        // local model on screen with its numbers, for screenshots and for
+        // eyeballing the layout.
+        // The queued local model and the stale ring are there so the busy
+        // indicator's two edge cases can be eyeballed.
+        let isDemo = ProcessInfo.processInfo.environment["CODENOTCH_DEMO"] == "1"
+        if isDemo {
             localSnapshots = Fixtures.snapshots()
             activitySources = Dictionary(uniqueKeysWithValues: localSnapshots.map { ($0.id, $0.id) })
             fleet.setSnapshots(localSnapshots)
+            // 演示会话按原生 ID 写入，经活动路由映射到同名示例环。
+            nativeSessions = Fixtures.sessions()
+            fleet.setLocalActivities(Fixtures.localActivities())
         } else {
             // DeepSeek's Platform usage page is a browser-session provider:
             // login is explicit, stays in Codenotch's own WKWebView store, and
@@ -183,10 +197,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     + [CursorLocalProvider()]
                     + codexProfiles.map { CodexLocalProvider(profile: $0) }
                     + antigravityProfiles.map { AntigravityProvider(profile: $0) }
-                    + [GLMProvider(), miniMaxProvider, GrokLocalProvider(), DevinLocalProvider(), OpenCodeProvider(),
+                    + [GLMProvider(), miniMaxProvider, GrokLocalProvider(), GrokBotProvider(), DevinLocalProvider(), OpenCodeProvider(),
                        GitHubCopilotProvider(), KimiProvider(), KiroProvider(),
+                       MuseLocalProvider(),
                        OllamaLocalProvider(endpoint: URL(string: preferences.ollamaEndpoint)!),
                        LMStudioLocalProvider(endpoint: URL(string: preferences.lmstudioEndpoint)!),
+                       OMLXLocalProvider(endpoint: URL(string: preferences.omlxEndpoint)!),
                        OllamaProvider(),
                        // A closure, not the value: the provider is an actor and
                        // re-reads the budget on every fetch, so a ceiling typed
@@ -237,6 +253,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let changed = Set(next.keys).union(registeredEndpoints.keys).filter { next[$0] != registeredEndpoints[$0] }
                     registeredEndpoints = next
                     store.registerCustomProviders(enabled.map { CustomEndpointProvider(endpoint: $0) },
+                        invalidated: Set(changed),
+                        disconnected: preferences.disconnectedIDs(among: store.knownIDs + Array(next.keys)))
+                }.store(in: &cancellables)
+            // 远程主机与自定义端点一样独立于查询目录注册；只重建连接参数变化的条目。
+            // 以启动时的配置为起点，首次注册不清除已归档的远程读数。
+            var registeredHosts = Dictionary(uniqueKeysWithValues: preferences.remoteHosts
+                .filter { $0.isEnabled && $0.isConfigured }.map { ($0.providerID, $0) })
+            preferences.$remoteHosts.removeDuplicates().receive(on: RunLoop.main)
+                .sink { [weak store, weak preferences] hosts in
+                    guard let store, let preferences else { return }
+                    let active = hosts.filter { $0.isEnabled && $0.isConfigured }
+                    let next = Dictionary(uniqueKeysWithValues: active.map { ($0.providerID, $0) })
+                    let changed = Set(next.keys).union(registeredHosts.keys).filter { next[$0] != registeredHosts[$0] }
+                    registeredHosts = next
+                    store.registerRemoteProviders(active.map { $0.makeProvider() },
                         invalidated: Set(changed),
                         disconnected: preferences.disconnectedIDs(among: store.knownIDs + Array(next.keys)))
                 }.store(in: &cancellables)
@@ -363,7 +394,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .store(in: &cancellables)
             lmstudio.$activities
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet] in fleet?.setLocalActivities($0) }
+                .sink { [weak fleet] in fleet?.setLocalActivities($0, source: LMStudioMetrics.providerID) }
                 .store(in: &cancellables)
             lmstudio.$performances
                 .receive(on: RunLoop.main)
@@ -374,7 +405,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .store(in: &cancellables)
             lmstudio.$ledger
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet] in fleet?.setLedger($0) }
+                .sink { [weak fleet] in fleet?.setLedger($0, source: LMStudioMetrics.providerID) }
+                .store(in: &cancellables)
+
+            // oMLX the same way: its admin activity endpoint says what each
+            // model is doing, its server log says what every request cost.
+            let omlx = OMLXMetrics()
+            self.omlxMetrics = omlx
+            // Split like the relay's chain above, and for the same reason.
+            let omlxPreferences = Publishers.CombineLatest(
+                preferences.$connectedProviders, preferences.$omlxEndpoint)
+            let omlxConfiguration = omlxPreferences.map { values in
+                (enabled: values.0.contains(OMLXMetrics.providerID), endpoint: values.1)
+            }.eraseToAnyPublisher()
+            omlxConfiguration
+                .removeDuplicates { $0.enabled == $1.enabled && $0.endpoint == $1.endpoint }
+                .receive(on: RunLoop.main)
+                .sink { [weak omlx] configuration in
+                    omlx?.configure(enabled: configuration.enabled, endpoint: configuration.endpoint)
+                }
+                .store(in: &cancellables)
+            omlx.$activities
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.setLocalActivities($0, source: OMLXMetrics.providerID) }
+                .store(in: &cancellables)
+            omlx.$performances
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet, weak store] measurements in
+                    fleet?.setPerformances(measurements, source: OMLXMetrics.providerID)
+                    if !measurements.isEmpty { store?.refresh(providerID: OMLXMetrics.providerID) }
+                }
+                .store(in: &cancellables)
+            omlx.$ledger
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.setLedger($0, source: OMLXMetrics.providerID) }
                 .store(in: &cancellables)
 
             let dir: URL
@@ -474,6 +538,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.previewWeeklyLimitAlert()
                 },
                 usageStore: store, botModel: fleet.menuModel, ollamaRelay: relay, lmstudioMetrics: lmstudio,
+                omlxMetrics: omlx,
                 phoneLinkPairing: phonePairing, phoneLinkRegistry: phoneRegistry, phoneLinkServerStatus: serverStatus
             )
             // The gear toggles; everything else that opens settings opens it.
@@ -615,6 +680,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(deepSeekPricingSchedule: $0) }
                 .store(in: &cancellables)
 
+            // The holiday check is a network request, so it runs only for
+            // someone who has DeepSeek on and is shown its pricing. Received on
+            // the run loop so `isConnected` reads the value just published.
+            // 本地以查询条目区分账号，任一启用的 DeepSeek 自动条目即视为开启。
+            Publishers.CombineLatest3(preferences.$deepSeekPricingEnabled,
+                                      preferences.$deepSeekPricingSchedule,
+                                      preferences.$connectedProviders)
+                .receive(on: RunLoop.main)
+                .sink { [weak preferences, weak catalog] enabled, schedule, _ in
+                    let deepSeekOn = (catalog?.automaticEntryIDs(for: "deepseek") ?? [])
+                        .contains { preferences?.isConnected($0) ?? false }
+                    ChineseHolidays.shared.setActive(enabled && schedule.offPeakOnChineseHolidays && deepSeekOn)
+                }
+                .store(in: &cancellables)
+
             preferences.$minimaxRegion
                 .dropFirst()
                 .removeDuplicates()
@@ -740,6 +820,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 .store(in: &cancellables)
 
+            preferences.$showsRemainingInNotch
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(showsRemainingInNotch: $0) }
+                .store(in: &cancellables)
+
+            preferences.$shutRingsWhenSpent
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(shutRingsWhenSpent: $0) }
+                .store(in: &cancellables)
+
             preferences.$weeklyRingDashed
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(weeklyRingDashed: $0) }
@@ -778,6 +868,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(surfaceStyle: $0) }
                 .store(in: &cancellables)
 
+            preferences.$busyIndicatorStyle
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(busyIndicatorStyle: $0) }
+                .store(in: &cancellables)
+
             Publishers.CombineLatest(preferences.$connectedProviders, preferences.$disabledModels)
                 .receive(on: RunLoop.main)
                 .sink { [weak store, weak preferences, weak catalog] _, _ in
@@ -803,6 +898,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak store] address in
                     guard let endpoint = try? LMStudioEndpoint.parse(address) else { return }
                     store?.updateLMStudioEndpoint(endpoint)
+                }
+                .store(in: &cancellables)
+
+            preferences.$omlxEndpoint
+                .receive(on: RunLoop.main)
+                .sink { [weak store] address in
+                    guard let endpoint = try? OMLXEndpoint.parse(address) else { return }
+                    store?.updateOMLXEndpoint(endpoint)
                 }
                 .store(in: &cancellables)
 
@@ -864,6 +967,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             store.$notchSnapshots.combineLatest(codeSwitch.$snapshots, preferences.$claudeDailyPaceRing)
                 .receive(on: RunLoop.main)
                 .sink { [weak self] local, linked, paced in
+                    // Before the derivations: the daily pace ring is advisory,
+                    // not a spending gate, and judging off it would hide an
+                    // account that overspent today's share while the session
+                    // still has room.
+                    self?.depletedLocalIDs = Set(local.filter(\.isDepleted).map(\.id))
                     let local = DailyPace.apply(to: local, enabled: paced)
                     let snapshots = local + linked.filter { self?.preferences?.hiddenCodeSwitchProviders.contains($0.id) != true }
                     self?.localSnapshots = local
@@ -881,6 +989,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .store(in: &cancellables)
             preferences.$codeSwitchProviderOrder.dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _ in self?.updateActivity() }
+                .store(in: &cancellables)
+            // 自动排序和隐藏只改变刘海中本机账号的显示，额度提醒与菜单栏仍使用完整读数。
+            preferences.$autoOrderByRemaining.combineLatest(preferences.$hideDepletedAccounts)
+                .dropFirst().receive(on: RunLoop.main)
+                .sink { [weak self] _, _ in self?.updateActivity() }
                 .store(in: &cancellables)
             preferences.$botAppearances.receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(botAppearances: $0) }
@@ -1053,15 +1166,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated { self.updateActivity() }
         }
         self.activityCoordinator = activity
-        updateActivityMonitoring()
-        preferences.$connectedProviders.combineLatest(preferences.$codeSwitchEnabled)
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in self?.updateActivityMonitoring() }
-            .store(in: &cancellables)
+        // Demo mode shows fixed sample data. A live monitor publishes on
+        // subscribe, so its first emission (usually no sessions at all) would
+        // overwrite the fixture sessions under the same provider id.
+        if !isDemo {
+            updateActivityMonitoring()
+            preferences.$connectedProviders.combineLatest(preferences.$codeSwitchEnabled)
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.updateActivityMonitoring() }
+                .store(in: &cancellables)
+
+            // 自定义端点的 OpenCode 活动按端点 ID 单独保存，停用或删除端点时由桥接清空。
+            let openCodeBridge = OpenCodeActivityBridge { [weak self] id, sessions in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if sessions.isEmpty { self.openCodeSessions.removeValue(forKey: id) }
+                    else { self.openCodeSessions[id] = sessions }
+                    self.updateActivity()
+                }
+            }
+            self.openCodeActivityBridge = openCodeBridge
+            Publishers.CombineLatest(preferences.$customEndpoints, preferences.$connectedProviders)
+                .receive(on: RunLoop.main)
+                .sink { [weak openCodeBridge] endpoints, enabled in
+                    openCodeBridge?.configure(endpoints: endpoints, enabled: enabled)
+                }
+                .store(in: &cancellables)
+        } else {
+            updateActivity()
+        }
         // Poll usage hard only while something is actually running.
         store?.isBusy = { [weak self] in
             self?.hookMonitor.state.merging(self?.nativeSessions ?? [:]).values.contains { $0.contains { $0.state == .busy } } ?? false
+                || (self?.openCodeSessions.values.contains { $0.contains { $0.state == .busy } } ?? false)
                 || (self?.lmstudioMetrics?.isBusy ?? false)
+                || (self?.omlxMetrics?.isBusy ?? false)
         }
         hookMonitor.$state.dropFirst().receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.updateActivity() }
@@ -1122,9 +1261,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     codeSwitchQuotaRatiosEnabled: preferences.codeSwitchQuotaRatiosEnabled)
         fleet.apply(watchLimit: preferences.watchLimit, criticalLimit: preferences.criticalLimit)
         fleet.apply(colorTransitionStyle: preferences.colorTransitionStyle)
+        fleet.apply(busyIndicatorStyle: preferences.busyIndicatorStyle)
         fleet.apply(weeklyRingDashed: preferences.weeklyRingDashed)
         fleet.apply(showsMoveHandle: preferences.showsMoveHandle)
         fleet.apply(showsSettingsHandle: preferences.showsSettingsHandle)
+        fleet.apply(showsRemainingInNotch: preferences.showsRemainingInNotch)
+        fleet.apply(shutRingsWhenSpent: preferences.shutRingsWhenSpent)
         fleet.apply(foldsForFullScreen: preferences.foldsForFullScreen)
         fleet.apply(surfaceStyle: preferences.notchSurfaceStyle)
         fleet.apply(deepSeekPricingEnabled: preferences.deepSeekPricingEnabled)
@@ -1180,10 +1322,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateActivity() {
         hookMonitor.reconcile(nativeSessions)
-        let merged = hookMonitor.state.merging(nativeSessions)
+        // OpenCode 桥接的会话以自定义端点 ID 为来源，直接归属同 ID 的端点环。
+        let merged = hookMonitor.state.merging(nativeSessions).merging(openCodeSessions) { native, _ in native }
+        let sources = activitySources.merging(openCodeSessions.keys.map { ($0, $0) }) { current, _ in current }
         notchFleet?.recordBotActivity(merged.values.flatMap { $0 })
         let routing = ActivityRouting(local: localSnapshots, linked: codeSwitch?.displayedSnapshots ?? [],
-                                      sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:],
+                                      sources: sources, sessions: merged, bindings: codeSwitch?.bindings ?? [:],
                                       hiddenLinked: preferences?.hiddenCodeSwitchProviders ?? [],
                                       linkedOrder: preferences?.codeSwitchProviderOrder ?? [])
         if (activityRouting?.unmatched ?? [:]) != routing.unmatched {
@@ -1195,12 +1339,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if activityRouting?.sessions != routing.sessions {
             notchFleet?.setSessions(routing.sessions)
         }
-        if activityRouting?.snapshots != routing.snapshots {
-            notchFleet?.setSnapshots(routing.snapshots)
+        let arranged = ProviderOrder.arrangingLocal(routing.snapshots,
+            hiding: preferences?.hideDepletedAccounts == true ? depletedLocalIDs : [],
+            byRemaining: preferences?.autoOrderByRemaining == true)
+        if arrangedNotchSnapshots != arranged {
+            arrangedNotchSnapshots = arranged
+            notchFleet?.setSnapshots(arranged)
         }
         // 设置列表保留全部供应商，机器人状态不受悬浮窗显示范围或隐藏设置过滤。
         let settingsRouting = ActivityRouting(local: localSnapshots, linked: codeSwitch?.snapshots ?? [],
-            sources: activitySources, sessions: merged, bindings: codeSwitch?.bindings ?? [:])
+            sources: sources, sessions: merged, bindings: codeSwitch?.bindings ?? [:])
         if let model = notchFleet?.menuModel, model.sessions != settingsRouting.sessions {
             model.sessions = settingsRouting.sessions
         }
@@ -1415,8 +1563,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         codeSwitch?.stop()
         ollamaRelay?.configure(enabled: false, endpoint: OllamaEndpoint.defaultAddress)
         lmstudioMetrics?.stop()
+        omlxMetrics?.stop()
         tokenRefresher?.stop()
         store?.stop()
+        openCodeActivityBridge?.stop()
         activityCoordinator?.stop()
         notchFleet?.stop()
         Task { await phoneLinkServer?.stop() }

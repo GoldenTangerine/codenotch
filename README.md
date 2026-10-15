@@ -228,6 +228,7 @@ existing request spinner without guessing which supplier a question belongs to.
 | **Ollama (Local)** | local runtime | Automatically detected local models, RAM/VRAM, unload time and context. Optional response capture adds thinking and generation speed. |
 | **LM Studio** | local runtime | Loaded models from LM Studio's own listing, what each one is doing (prompt, generating, queue) from its SDK socket, and speed, context use and tokens per day from its server log. No relay needed. |
 | **Grok** | official | The Grok CLI session in `~/.grok/auth.json`, against the same credits billing endpoint `/usage` uses. |
+| **oMLX** | local runtime | Loaded models from oMLX's own status listing, what each one is doing (prompt, generating, queue) from its admin activity endpoint, and speed and tokens from `~/.omlx/logs/server.log`. |
 | **OpenCode** | official | The Go plan's official usage endpoint, with the `opencode-go` key OpenCode itself stores on sign-in. |
 | **Command Code** | official | The GOAT plan's `/alpha` billing endpoints, with the key the Command Code app writes to `~/.commandcode/auth.json`. |
 | **GitHub Copilot** | official | GitHub's Copilot quota endpoint, authenticated with the GitHub CLI session already on the Mac (`gh auth login`). |
@@ -353,6 +354,11 @@ clock, so their speed is timed from the generating phase and marked `~`. If LM S
 set to require an API token, paste one in Settings → LM Studio (or export `LM_API_TOKEN`); without
 one, requests are sent with no Authorization header at all.
 See [LM Studio details](docs/plans/2026-09-10-lm-studio-provider-plan.md).
+
+**Local oMLX is off by default**; once it is switched on in the provider list, it is found on the
+port `~/.omlx/settings.json` names (8000 by default). The API key is borrowed from the same file, or from `OMLX_API_KEY`, and is never
+stored or logged by Codenotch. Configure the address or stop monitoring in **Settings → oMLX**.
+See [oMLX details](docs/plans/2026-10-08-omlx-provider-plan.md).
 
 Settings lists the connected providers in the order the notch draws them, and
 you can drag one by its handle to move it. The order is remembered across
