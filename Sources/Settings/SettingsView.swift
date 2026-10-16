@@ -965,7 +965,9 @@ struct SettingsView: View {
 
                 Toggle(L10n.t("Claude daily pace ring"), isOn: $preferences.claudeDailyPaceRing)
                 Text(preferences.independentInnerRing
-                    ? L10n.t("Claude’s inner ring shows daily pace against the weekly allowance. Alerts follow daily pace.")
+                    ? (preferences.dailyEstimateRingEnabled
+                        ? L10n.t("Claude’s inner ring shows daily pace against the weekly allowance. Alerts follow daily pace.")
+                        : L10n.t("Daily pace remains available in the hover card. Alerts follow daily pace."))
                     : L10n.t("Claude's main ring shows today's share of the weekly limit — a seventh a day, counted from the weekly reset — instead of the session. The session moves to the thin ring and the card; alerts follow the daily ring."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -978,7 +980,14 @@ struct SettingsView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 Toggle(L10n.t("Independent inner ring"), isOn: $preferences.independentInnerRing)
-                Text(L10n.t("Enlarge all provider rings equally. Show daily budget on the thick inner ring and its percentage below."))
+                Text(L10n.t("Enlarge all provider rings equally and emphasize the innermost quota ring."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle(L10n.t("Show daily estimate"), isOn: $preferences.dailyEstimateRingEnabled)
+                    .disabled(!preferences.independentInnerRing)
+                Text(L10n.t("Show daily estimates on the inner ring. Turn off to show original quotas; estimates remain in the hover card."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

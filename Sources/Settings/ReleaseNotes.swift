@@ -40,6 +40,16 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.23.1",
+            headline: L10n.t("Choose daily estimates or original quotas"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Turn off Show daily estimate under Independent inner ring to restore original account quotas")),
+                ReleaseNote.Change(title: L10n.t("Keep ring sizes and outer ring styles while emphasizing the innermost quota ring")),
+                ReleaseNote.Change(title: L10n.t("Daily estimates remain in the hover card and alerts keep their existing rules")),
+                ReleaseNote.Change(title: L10n.t("Keep actual remaining quota readable when Claude daily pace is exhausted"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.23.0",
             headline: L10n.t("Upstream 1.23, remaining mode and a Dock style"),
             changes: [

@@ -64,6 +64,7 @@ struct ProviderRing: View {
     var bandOverride: UsageBand? = nil
     var innerFraction: Double?
     var expanded = false
+    var emphasizeSingleRing = false
 
     private var isExpanded: Bool { expanded || innerFraction != nil }
     private var hasSecondary: Bool {
@@ -75,6 +76,7 @@ struct ProviderRing: View {
     }
     var mainTrackStroke: CGFloat {
         guard hasMultipleRings else {
+            if emphasizeSingleRing { return NotchLayout.independentRingStroke }
             return isExpanded ? NotchLayout.weeklyRingStroke : NotchLayout.trackStroke
         }
         return mainIsInnermost ? NotchLayout.independentRingStroke : NotchLayout.weeklyRingStroke
@@ -463,6 +465,7 @@ struct ProviderCell: View {
     var weeklyRing: WeeklyRing = .off
     var codeSwitchQuotaRatiosEnabled: Bool = false
     var independentInnerRing: Bool = false
+    var dailyEstimateRingEnabled: Bool = true
     var cellRingDiameter: CGFloat = NotchLayout.ringDiameter
     var showsReading = true
     var showsWeeklyReading = false
@@ -490,7 +493,8 @@ struct ProviderCell: View {
         return QuotaReading(
             snapshot: independentInnerRing ? IndependentQuotaRing.originalQuotas(in: snapshot) : snapshot,
             ratios: independentInnerRing ? nil : ratios,
-            inner: independentInnerRing ? IndependentQuotaRing.reading(for: snapshot, ratios: ratios) : nil)
+            inner: independentInnerRing && dailyEstimateRingEnabled
+                ? IndependentQuotaRing.reading(for: snapshot, ratios: ratios) : nil)
     }
 
     var displayedReadingText: String { makeReadingText(quotaReading) }
@@ -510,8 +514,10 @@ struct ProviderCell: View {
 
     /// Grey only when a window is actually spent and the figure reads what is
     /// left — see `ProviderReading.isDimmed`.
-    private var readingForeground: Color {
-        let dimmed = ProviderReading(snapshot: snapshot, showsRemaining: showsRemaining).isDimmed
+    var readingForeground: Color {
+        let displayedSnapshot = independentInnerRing && !dailyEstimateRingEnabled
+            ? quotaReading.snapshot : snapshot
+        let dimmed = ProviderReading(snapshot: displayedSnapshot, showsRemaining: showsRemaining).isDimmed
         return dimmed || (snapshot.showsLocalPerformance && snapshot.localPerformance == nil)
             ? Palette.textSecondary : Palette.textPrimary
     }
@@ -551,7 +557,8 @@ struct ProviderCell: View {
                 weeklyRing: weeklyRing,
                 bandOverride: reading.snapshot.bandOverride,
                 innerFraction: reading.inner?.fraction,
-                expanded: independentInnerRing
+                expanded: independentInnerRing,
+                emphasizeSingleRing: independentInnerRing && !dailyEstimateRingEnabled && !isLocal
             )
             .frame(width: cellDiameter, height: cellDiameter)
             if showsReading {

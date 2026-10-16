@@ -371,6 +371,7 @@ final class NotchViewModel: ObservableObject {
     var showsCellReading: Bool { showsNotchReadings && !readsAcrossHardware }
     @Published var isPreviewingExpandedGeometry = false
     @Published var independentInnerRing = false
+    @Published var dailyEstimateRingEnabled = true
     @Published var codeSwitchQuotaRatiosEnabled = false
 
     var ringGrowth: CGFloat {
@@ -1296,6 +1297,7 @@ final class NotchViewModel: ObservableObject {
         preview.ringEdgeAdjustment = ringEdgeAdjustment
         preview.snapshots = snapshots
         preview.independentInnerRing = independentInnerRing
+        preview.dailyEstimateRingEnabled = dailyEstimateRingEnabled
         preview.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
         preview.tooltipHeightMode = tooltipHeightMode
         preview.showsMoveHandle = showsMoveHandle

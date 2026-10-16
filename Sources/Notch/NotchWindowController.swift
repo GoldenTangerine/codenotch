@@ -2003,7 +2003,8 @@ final class NotchWindowController {
                 activity: model.activity(for: snapshot), isRefreshing: model.isRefreshing(snapshot),
                 bot: model.botPresentation(for: snapshot), weeklyRing: model.weeklyRing,
                 codeSwitchQuotaRatiosEnabled: model.codeSwitchQuotaRatiosEnabled,
-                independentInnerRing: model.independentInnerRing, cellRingDiameter: model.cellRingDiameter,
+                independentInnerRing: model.independentInnerRing,
+                dailyEstimateRingEnabled: model.dailyEstimateRingEnabled, cellRingDiameter: model.cellRingDiameter,
                 showsReading: model.showsNotchReadings, showsWeeklyReading: model.weeklyReading,
                 now: model.now), offset: sign * (first + (last - first) * turn))
         }

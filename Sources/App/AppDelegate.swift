@@ -855,10 +855,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(weeklyRing: $0) }
                 .store(in: &cancellables)
 
-            preferences.$independentInnerRing.combineLatest(preferences.$codeSwitchQuotaRatiosEnabled)
+            preferences.$independentInnerRing.combineLatest(preferences.$codeSwitchQuotaRatiosEnabled,
+                                                            preferences.$dailyEstimateRingEnabled)
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet, weak codeSwitch] independent, ratios in
-                    fleet?.apply(independentInnerRing: independent, codeSwitchQuotaRatiosEnabled: ratios)
+                .sink { [weak fleet, weak codeSwitch] independent, ratios, dailyEstimate in
+                    fleet?.apply(independentInnerRing: independent, codeSwitchQuotaRatiosEnabled: ratios,
+                                 dailyEstimateRingEnabled: dailyEstimate)
                     codeSwitch?.setDailyBudgetEnabled(ratios)
                 }
                 .store(in: &cancellables)
@@ -1258,7 +1260,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
         fleet.apply(weeklyRing: preferences.weeklyRing)
         fleet.apply(independentInnerRing: preferences.independentInnerRing,
-                    codeSwitchQuotaRatiosEnabled: preferences.codeSwitchQuotaRatiosEnabled)
+                    codeSwitchQuotaRatiosEnabled: preferences.codeSwitchQuotaRatiosEnabled,
+                    dailyEstimateRingEnabled: preferences.dailyEstimateRingEnabled)
         fleet.apply(watchLimit: preferences.watchLimit, criticalLimit: preferences.criticalLimit)
         fleet.apply(colorTransitionStyle: preferences.colorTransitionStyle)
         fleet.apply(busyIndicatorStyle: preferences.busyIndicatorStyle)

@@ -49,6 +49,93 @@ import Testing
         #expect(legacy.displayedMainFraction == budget.usedFraction)
     }
 
+    @Test func disablingDailyEstimateRestoresActualReadingsAndKeepsBudgetAvailable() throws {
+        let raw = snapshot([quota("daily", used: 50, total: 100), weekly, monthly])
+        let now = Date()
+        let budget = try #require(CodeSwitchDailyBudget.reading(for: raw, now: now))
+        for placement in WeeklyRing.allCases {
+            for remaining in [false, true] {
+                for pair in [false, true] {
+                    let cell = ProviderCell(snapshot: raw, activity: ActivitySummary(state: .working),
+                        weeklyRing: placement, codeSwitchQuotaRatiosEnabled: true,
+                        independentInnerRing: true, dailyEstimateRingEnabled: false,
+                        showsWeeklyReading: pair, now: now, showsRemaining: remaining)
+                    #expect(cell.innerReading == nil)
+                    #expect(cell.displayedMainFraction == raw.ringFraction)
+                    #expect(cell.displayedSecondaryFraction == raw.secondaryWindow?.usedFraction)
+                    #expect(cell.displayedReadingText == ProviderReading(snapshot: raw, weeklyRing: placement,
+                        showsWeeklyReading: pair, showsRemaining: remaining).text)
+                    #expect(!cell.accessibilityText.contains(L10n.t("Daily budget")))
+                    #expect(CodeSwitchDailyBudget.reading(for: cell.snapshot, now: now) == budget)
+                }
+            }
+        }
+        let legacy = ProviderCell(snapshot: raw, codeSwitchQuotaRatiosEnabled: true,
+            dailyEstimateRingEnabled: false, now: now)
+        #expect(legacy.displayedMainFraction == budget.usedFraction)
+        let empty = ProviderCell(snapshot: snapshot([]), independentInnerRing: true,
+            dailyEstimateRingEnabled: false)
+        #expect(empty.innerReading == nil)
+        #expect(empty.displayedReadingText == "—")
+    }
+
+    @Test func dailyEstimatePreferenceDefaultsOnAndPersistsIndependently() throws {
+        let domain = "DailyEstimateRingTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let preferences = Preferences(defaults: defaults)
+        #expect(preferences.dailyEstimateRingEnabled)
+        preferences.independentInnerRing = true
+        preferences.codeSwitchQuotaRatiosEnabled = true
+        preferences.claudeDailyPaceRing = true
+        preferences.weeklyRingDashed = true
+        preferences.dailyEstimateRingEnabled = false
+        let restored = Preferences(defaults: defaults)
+        #expect(!restored.dailyEstimateRingEnabled)
+        #expect(restored.independentInnerRing && restored.codeSwitchQuotaRatiosEnabled)
+        #expect(restored.claudeDailyPaceRing && restored.weeklyRingDashed)
+        restored.dailyEstimateRingEnabled = true
+        #expect(Preferences(defaults: defaults).dailyEstimateRingEnabled)
+    }
+
+    @Test func disabledEstimateSingleRingStaysLargeAndThick() throws {
+        for fraction in [0.0, 0.32, 1.0] {
+            for remaining in [false, true] {
+                let ring = ProviderRing(usedFraction: fraction, glyph: .claude,
+                    showsRemaining: remaining, expanded: true, emphasizeSingleRing: true)
+                #expect(ring.mainTrackStroke == 4)
+                #expect(ring.mainProgressStroke == 4)
+                let renderer = ImageRenderer(content: ring.environment(\.colorScheme, .dark)
+                    .background(Color.black))
+                renderer.scale = 4
+                let bitmap = NSBitmapImageRep(cgImage: try #require(renderer.cgImage))
+                #expect(bitmap.pixelsWide == 216 && bitmap.pixelsHigh == 216)
+                let center = CGFloat(bitmap.pixelsWide) / 8
+                let radius = center - ring.mainInset - ring.mainTrackStroke / 2
+                for offset: CGFloat in [-1.25, 0, 1.25] {
+                    let color = try #require(bitmap.colorAt(x: Int((center + radius + offset) * 4),
+                        y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB))
+                    #expect(max(color.redComponent, color.greenComponent, color.blueComponent) > 0.05)
+                }
+            }
+        }
+    }
+
+    @Test func estimateToggleKeepsCellGeometry() {
+        let model = NotchViewModel()
+        model.independentInnerRing = true
+        model.codeSwitchQuotaRatiosEnabled = true
+        model.snapshots = [snapshot([weekly, monthly])]
+        let diameter = model.cellRingDiameter
+        let depth = model.bodyDepth
+        let length = model.bodyLength
+        let center = model.ringCenter(index: 0)
+        model.dailyEstimateRingEnabled = false
+        #expect(model.cellRingDiameter == diameter)
+        #expect(model.bodyDepth == depth && model.bodyLength == length)
+        #expect(model.ringCenter(index: 0) == center)
+    }
+
     @Test func allProvidersEnlargeEvenWithoutBudget() {
         for raw in [snapshot([]), snapshot([quota("five_hour")]), snapshot([weekly])] {
             let model = NotchViewModel()
@@ -496,6 +583,24 @@ import Testing
         #expect(IndependentQuotaRing.originalQuotas(in: paced) == raw)
         #expect(paced.headlineID == DailyPace.windowID)
         #expect(ProviderCell(snapshot: raw, independentInnerRing: true).innerReading == nil)
+        for placement in WeeklyRing.allCases {
+            let actual = ProviderCell(snapshot: paced, weeklyRing: placement,
+                independentInnerRing: true, dailyEstimateRingEnabled: false, showsRemaining: true)
+            #expect(actual.innerReading == nil)
+            #expect(actual.displayedMainFraction == 0.42)
+            #expect(actual.displayedSecondaryFraction == 0.3)
+            #expect(actual.displayedReadingText == "58%")
+            #expect(!actual.accessibilityText.contains(L10n.t("Independent inner ring")))
+            #expect(actual.snapshot.headlineID == DailyPace.windowID)
+        }
+        let legacy = ProviderCell(snapshot: paced, dailyEstimateRingEnabled: false)
+        #expect(legacy.displayedMainFraction == paced.ringFraction)
+        let spentPace = DailyPace.apply(to: raw, now: now.addingTimeInterval(-2 * 86_400))
+        #expect(ProviderReading(snapshot: spentPace, showsRemaining: true).isDimmed)
+        let remaining = ProviderCell(snapshot: spentPace, independentInnerRing: true,
+            dailyEstimateRingEnabled: false, showsRemaining: true)
+        #expect(remaining.displayedReadingText == "58%")
+        #expect(remaining.readingForeground == Palette.textPrimary)
     }
 
     @Test func expandedGeometryKeepsCentersAndCapacityConsistent() {

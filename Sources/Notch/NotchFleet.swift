@@ -113,6 +113,7 @@ final class NotchFleet {
     private var weeklyRing: WeeklyRing = .off
     private var hardwareNotchWings = false
     private var independentInnerRing = false
+    private var dailyEstimateRingEnabled = true
     private var topAvoidanceAdjustment: CGFloat = 0
     private var ringEdgeAdjustment: CGFloat = 0
     private var collapsedSideWidth: CGFloat = 64
@@ -365,12 +366,15 @@ final class NotchFleet {
         }
     }
 
-    func apply(independentInnerRing: Bool, codeSwitchQuotaRatiosEnabled: Bool) {
+    func apply(independentInnerRing: Bool, codeSwitchQuotaRatiosEnabled: Bool,
+               dailyEstimateRingEnabled: Bool) {
         self.independentInnerRing = independentInnerRing
         self.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
+        self.dailyEstimateRingEnabled = dailyEstimateRingEnabled
         for controller in controllers.values {
             controller.model.independentInnerRing = independentInnerRing
             controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
+            controller.model.dailyEstimateRingEnabled = dailyEstimateRingEnabled
         }
     }
 
@@ -751,6 +755,7 @@ final class NotchFleet {
         controller.model.showsNotchReadings = showsNotchReadings
         controller.model.weeklyReading = weeklyReading
         controller.model.independentInnerRing = independentInnerRing
+        controller.model.dailyEstimateRingEnabled = dailyEstimateRingEnabled
         controller.model.codeSwitchQuotaRatiosEnabled = codeSwitchQuotaRatiosEnabled
         controller.model.watchLimit = watchLimit
         controller.model.criticalLimit = criticalLimit

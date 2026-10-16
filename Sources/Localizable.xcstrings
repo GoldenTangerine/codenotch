@@ -1464,6 +1464,105 @@
         }
       }
     },
+    "Choose daily estimates or original quotas": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换每日估算与原始额度"
+          }
+        }
+      }
+    },
+    "Turn off Show daily estimate under Independent inner ring to restore original account quotas": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭「独立内圈」下的「显示每日估算」，恢复账号原始额度"
+          }
+        }
+      }
+    },
+    "Keep ring sizes and outer ring styles while emphasizing the innermost quota ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保持圆环尺寸和外圈样式，加粗最内侧额度圈"
+          }
+        }
+      }
+    },
+    "Daily estimates remain in the hover card and alerts keep their existing rules": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬浮详情仍保留每日估算，提醒沿用原有规则"
+          }
+        }
+      }
+    },
+    "Keep actual remaining quota readable when Claude daily pace is exhausted": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "修复 Claude 每日节奏耗尽时真实剩余额度数字错误变灰的问题"
+          }
+        }
+      }
+    },
+    "Show daily estimate": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示每日估算"
+          }
+        }
+      }
+    },
+    "Enlarge all provider rings equally and emphasize the innermost quota ring.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "统一放大供应商圆环，并加粗最内侧额度圈。"
+          }
+        }
+      }
+    },
+    "Show daily estimates on the inner ring. Turn off to show original quotas; estimates remain in the hover card.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在内圈显示每日估算。关闭后显示原始额度，悬浮详情仍保留估算。"
+          }
+        }
+      }
+    },
+    "Daily pace remains available in the hover card. Alerts follow daily pace.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "悬浮详情仍显示每日节奏，提醒仍按每日节奏触发。"
+          }
+        }
+      }
+    },
     "Independent inner ring": {
       "extractionState": "manual",
       "localizations": {

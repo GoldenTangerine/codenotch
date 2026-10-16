@@ -514,6 +514,7 @@ struct NotchRootView: View {
                 Text(ProviderCell(snapshot: snapshot, weeklyRing: model.weeklyRing,
                     codeSwitchQuotaRatiosEnabled: model.codeSwitchQuotaRatiosEnabled,
                     independentInnerRing: model.independentInnerRing,
+                    dailyEstimateRingEnabled: model.dailyEstimateRingEnabled,
                     showsWeeklyReading: model.weeklyReading, now: model.now).displayedReadingText)
                     .font(Typography.percent)
                     .foregroundStyle(Palette.textPrimary)
@@ -601,6 +602,7 @@ struct NotchRootView: View {
                 weeklyRing: model.weeklyRing,
                 codeSwitchQuotaRatiosEnabled: model.codeSwitchQuotaRatiosEnabled,
                 independentInnerRing: model.independentInnerRing,
+                dailyEstimateRingEnabled: model.dailyEstimateRingEnabled,
                 cellRingDiameter: model.cellRingDiameter,
                 showsReading: model.showsCellReading,
                 showsWeeklyReading: model.weeklyReading,

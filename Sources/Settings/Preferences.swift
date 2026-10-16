@@ -97,6 +97,10 @@ final class Preferences: ObservableObject {
     }
     static let codeSwitchQuotaRatiosKey = "codeSwitchQuotaRatiosEnabled"
     static let independentInnerRingKey = "independentInnerRing"
+    static let dailyEstimateRingKey = "dailyEstimateRingEnabled"
+    @Published var dailyEstimateRingEnabled: Bool {
+        didSet { defaults.set(dailyEstimateRingEnabled, forKey: Self.dailyEstimateRingKey) }
+    }
     @Published var independentInnerRing: Bool {
         didSet { defaults.set(independentInnerRing, forKey: Self.independentInnerRingKey) }
     }
@@ -1218,6 +1222,7 @@ final class Preferences: ObservableObject {
         self.claudeDailyPaceRing = defaults.bool(forKey: Keys.claudeDailyPaceRing)
         self.codeSwitchQuotaRatiosEnabled = defaults.bool(forKey: Self.codeSwitchQuotaRatiosKey)
         self.independentInnerRing = defaults.bool(forKey: Self.independentInnerRingKey)
+        self.dailyEstimateRingEnabled = defaults.object(forKey: Self.dailyEstimateRingKey) as? Bool ?? true
         self.showCodexExtraLimits = Self.storedShowCodexExtraLimits(defaults: defaults)
         self.deepSeekPricingEnabled = defaults.object(forKey: Keys.deepSeekPricingEnabled) as? Bool ?? true
         if let data = defaults.data(forKey: Keys.deepSeekPricingSchedule),
