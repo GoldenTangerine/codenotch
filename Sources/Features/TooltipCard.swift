@@ -609,6 +609,12 @@ private struct CodeSwitchTooltip: View {
                     Text("Code Switch R · \(details.platform)")
                         .foregroundStyle(secondaryInk)
                         .fixedSize(horizontal: false, vertical: true)
+                    // 联动读数来自 Code Switch R，标明多久前获取，避免旧数据被当作实时读数。
+                    if let fetchedAt = details.provider.dataFetchedAt {
+                        Text(L10n.t("Fetched \(ElapsedCopy.ago(since: fetchedAt, now: now))"))
+                            .foregroundStyle(secondaryInk)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                     if details.provider.status == "active" {
                         HStack(spacing: 4) {
                             Text("Calling")

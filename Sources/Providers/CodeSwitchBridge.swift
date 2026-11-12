@@ -55,7 +55,9 @@ struct CodeSwitchSessionBinding: Codable, Equatable {
     func snapshot(platform: CodeSwitchPlatform, retaining previous: ProviderSnapshot? = nil,
                   loading: Bool = false) -> ProviderSnapshot {
         CodeSwitchProvider(providerId: providerId, providerName: providerName, icon: icon,
-                           activeRequests: 0, status: "session", loading: loading, updatedAt: updatedAt,
+                           // 绑定时间不是额度获取时间，沿用原供应商的获取时间，避免“多久前获取”被误报为刚刚。
+                           activeRequests: 0, status: "session", loading: loading,
+                           updatedAt: previous?.linked?.provider.updatedAt ?? 0,
                            quotas: previous?.linked?.provider.quotas ?? [], stats: previous?.linked?.provider.stats,
                            quotaState: previous?.linked?.provider.quotaState,
                            quotaAutoDisabled: previous?.linked?.provider.quotaAutoDisabled).snapshot(platform: platform)
@@ -91,6 +93,18 @@ struct CodeSwitchProvider: Codable, Equatable {
         }
         if valid.contains(where: { $0.unlimited != true && $0.total - $0.used <= 0 }) { return "exhausted" }
         return valid.isEmpty ? "unknown" : "available"
+    }
+
+    /// 额度数据的实际获取时间：被动采样以最新的采样时间为准，其余以 Code Switch R 查询时间为准；
+    /// 加载中或从未获取时返回 nil。
+    var dataFetchedAt: Date? {
+        guard !loading else { return nil }
+        let sampled = quotas.compactMap { quota -> Double? in
+            guard let value = quota.sampledAt, value.isFinite, value > 0 else { return nil }
+            return value
+        }.max()
+        guard let millis = sampled ?? (updatedAt.isFinite && updatedAt > 0 ? updatedAt : nil) else { return nil }
+        return Date(timeIntervalSince1970: millis / 1000)
     }
 
     func snapshot(platform: CodeSwitchPlatform) -> ProviderSnapshot {

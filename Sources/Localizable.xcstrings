@@ -1464,6 +1464,39 @@
         }
       }
     },
+    "Show when Code Switch R quota data was fetched": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "显示 Code Switch R 额度数据的获取时间"
+          }
+        }
+      }
+    },
+    "The linked tooltip shows how long ago its quota data was fetched": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "联动悬停卡片显示额度数据是多久前获取的"
+          }
+        }
+      }
+    },
+    "Passive quotas use their latest sample time instead of the polling time": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "被动采样额度以最新采样时间为准，而不是轮询时间"
+          }
+        }
+      }
+    },
     "Show reset 5-hour passive windows as waiting": {
       "extractionState": "manual",
       "localizations": {
@@ -41440,6 +41473,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "按量计费"
+          }
+        }
+      }
+    },
+    "Fetched %@": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@获取"
           }
         }
       }

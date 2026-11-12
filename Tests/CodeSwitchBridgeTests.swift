@@ -123,6 +123,34 @@ final class CodeSwitchBridgeTests: XCTestCase {
         XCTAssertNil(try JSONDecoder().decode(LimitWindow.self, from: plain).estimate)
     }
 
+    func testDataFetchedAtPrefersNewestSampleOverQueryTime() throws {
+        let queried = now.timeIntervalSince1970 * 1000
+        func provider(_ quotas: [CodeSwitchQuota], updatedAt: Double = queried, loading: Bool = false) -> CodeSwitchProvider {
+            CodeSwitchProvider(providerId: "42", providerName: "Shared", icon: "openai", activeRequests: 0,
+                               status: "enabled", loading: loading, updatedAt: updatedAt, quotas: quotas, stats: nil)
+        }
+        // 非被动采样额度以 Code Switch R 查询时间为准。
+        XCTAssertEqual(provider([quota("daily")]).dataFetchedAt, now)
+        // 被动采样额度以最新的采样时间为准，而不是每次轮询都会刷新的查询时间。
+        var older = quota("weekly")
+        older.sampledAt = queried - 2 * 3600 * 1000
+        var newer = quota("five_hour")
+        newer.sampledAt = queried - 10 * 60 * 1000
+        XCTAssertEqual(provider([older, newer]).dataFetchedAt, now.addingTimeInterval(-10 * 60))
+        XCTAssertNil(provider([quota("daily")], loading: true).dataFetchedAt)
+        XCTAssertNil(provider([quota("daily")], updatedAt: 0).dataFetchedAt)
+        XCTAssertEqual(L10n.t("Fetched \(ElapsedCopy.ago(since: now.addingTimeInterval(-10 * 60), now: now, locale: Locale(identifier: "zh-Hans")))",
+                              locale: Locale(identifier: "zh-Hans")), "10 分钟前获取")
+        // 会话绑定沿用原供应商的获取时间，而不是绑定发生的时间。
+        let platform = try fixture().platforms[0]
+        let binding = CodeSwitchSessionBinding(sessionKey: String(repeating: "a", count: 64), providerId: "42",
+                                               providerName: "Shared", icon: "openai", sequence: 1, updatedAt: queried + 60_000)
+        let retained = provider([quota("daily")], updatedAt: queried - 5 * 60 * 1000).snapshot(platform: platform)
+        XCTAssertEqual(binding.snapshot(platform: platform, retaining: retained).linked?.provider.dataFetchedAt,
+                       now.addingTimeInterval(-5 * 60))
+        XCTAssertNil(binding.snapshot(platform: platform).linked?.provider.dataFetchedAt)
+    }
+
     func testProviderLoadingDrivesRefreshPresentation() throws {
         let source = try fixture(loading: true)
         let snapshot = source.platforms[0].providers[0].snapshot(platform: source.platforms[0])
