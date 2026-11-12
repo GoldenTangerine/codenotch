@@ -125,7 +125,8 @@ struct CodeSwitchQuota: Codable, Equatable {
     let displayKind: String
     /// 被动采样的采样时间（Unix 毫秒）；仅被动采样项携带，旧版快照没有该字段。
     var sampledAt: Double? = nil
-    /// `aged`：采样已超过 5 分钟；`projected`：重置时间已过，本地顺延并将用量估为 0；
+    /// `aged`：采样已超过 5 分钟；`projected`：固定周期窗口重置时间已过，本地顺延并将用量估为 0；
+    /// `reset`：会话窗口已重置，用量估为 0，下一次请求后才有重置时间；
     /// 缺省或空串表示最新的权威读数。
     var estimate: String? = nil
 
@@ -218,6 +219,8 @@ struct LimitEstimate: Codable, Equatable {
     enum Kind: String, Codable {
         case aged
         case projected
+        /// 会话窗口（如 5 小时）已重置，下一次请求才开始计时，因此不提供倒计时。
+        case reset
         /// 后端新增了本版本不认识的估算类型时的通用兜底。
         case estimated
     }
@@ -233,6 +236,8 @@ struct LimitEstimate: Codable, Equatable {
                           locale: locale)
         case .projected:
             return L10n.t("Estimated locally, waiting for a new request", locale: locale)
+        case .reset:
+            return L10n.t("Window reset, the countdown starts with the next request", locale: locale)
         case .estimated:
             return L10n.t("Estimated reading, may be inaccurate", locale: locale)
         }

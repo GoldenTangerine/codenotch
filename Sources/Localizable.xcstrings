@@ -1464,6 +1464,39 @@
         }
       }
     },
+    "Show reset 5-hour passive windows as waiting": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "被动采样的 5 小时窗口重置后显示为等待开始"
+          }
+        }
+      }
+    },
+    "A reset 5-hour window shows 0% with no countdown until the next request starts it": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 小时窗口重置后显示 0%，不再显示倒计时，等下一次请求开始计时"
+          }
+        }
+      }
+    },
+    "Weekly windows still move to the next reset as a local estimate": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每周窗口仍按周期进入下一次重置，并标注为本地估算"
+          }
+        }
+      }
+    },
     "Mark stale Code Switch R passive quota readings": {
       "extractionState": "manual",
       "localizations": {
@@ -41440,6 +41473,17 @@
           "stringUnit": {
             "state": "translated",
             "value": "本地估算，等待新的请求"
+          }
+        }
+      }
+    },
+    "Window reset, the countdown starts with the next request": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "窗口已重置，下次请求后开始计时"
           }
         }
       }

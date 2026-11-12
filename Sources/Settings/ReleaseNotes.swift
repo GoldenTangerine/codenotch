@@ -40,6 +40,14 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.23.3",
+            headline: L10n.t("Show reset 5-hour passive windows as waiting"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("A reset 5-hour window shows 0% with no countdown until the next request starts it")),
+                ReleaseNote.Change(title: L10n.t("Weekly windows still move to the next reset as a local estimate"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.23.2",
             headline: L10n.t("Mark stale Code Switch R passive quota readings"),
             changes: [

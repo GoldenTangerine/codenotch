@@ -75,6 +75,9 @@ final class CodeSwitchBridgeTests: XCTestCase {
         let projected = String(legacy.dropLast()) + ",\"estimate\":\"projected\"}"
         XCTAssertEqual(try JSONDecoder().decode(CodeSwitchQuota.self, from: Data(projected.utf8)).window?.estimate,
                        LimitEstimate(kind: .projected, sampledAt: nil))
+        let reset = String(legacy.dropLast()) + ",\"estimate\":\"reset\"}"
+        XCTAssertEqual(try JSONDecoder().decode(CodeSwitchQuota.self, from: Data(reset.utf8)).window?.estimate?.kind,
+                       .reset)
         let unknown = String(legacy.dropLast()) + ",\"estimate\":\"future-kind\"}"
         XCTAssertEqual(try JSONDecoder().decode(CodeSwitchQuota.self, from: Data(unknown.utf8)).window?.estimate?.kind,
                        .estimated)
@@ -96,6 +99,9 @@ final class CodeSwitchBridgeTests: XCTestCase {
         let projected = LimitEstimate(kind: .projected, sampledAt: sampled)
         XCTAssertEqual(projected.hint(now: now, locale: english), "Estimated locally, waiting for a new request")
         XCTAssertEqual(projected.hint(now: now, locale: chinese), "本地估算，等待新的请求")
+        let reset = LimitEstimate(kind: .reset, sampledAt: sampled)
+        XCTAssertEqual(reset.hint(now: now, locale: english), "Window reset, the countdown starts with the next request")
+        XCTAssertEqual(reset.hint(now: now, locale: chinese), "窗口已重置，下次请求后开始计时")
         XCTAssertEqual(LimitEstimate(kind: .estimated, sampledAt: nil).hint(now: now, locale: chinese),
                        "估算读数，可能不准确")
     }
