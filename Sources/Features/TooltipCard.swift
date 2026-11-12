@@ -539,6 +539,7 @@ private struct LimitWindowRow: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(Palette.barTrack)
                         Capsule().fill(barColor).frame(width: fillWidth)
+                            .opacity(window.estimate == nil ? 1 : 0.55)
                         if showsUsagePace,
                            let marker = window.paceMarkerFraction(now: now, showingRemaining: showsRemaining) {
                             PaceMarker(position: marker, trackWidth: trackWidth)
@@ -554,6 +555,16 @@ private struct LimitWindowRow: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7).help(window.summary)
                     .padding(.top, NotchLayout.barToUsed)
+
+                // 估算读数照常展示，但需说明它不是最新的权威数据。
+                if let estimate = window.estimate {
+                    Text(estimate.hint(now: now))
+                        .font(Typography.cardBody)
+                        .foregroundStyle(Color.orange)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
             }
         }
     }

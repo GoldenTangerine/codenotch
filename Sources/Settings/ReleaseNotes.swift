@@ -40,6 +40,15 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.23.2",
+            headline: L10n.t("Mark stale Code Switch R passive quota readings"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Passive quotas not sampled for over 5 minutes keep their reading and show when they were sampled")),
+                ReleaseNote.Change(title: L10n.t("After a reset passes with no new request, the countdown moves to the next window as a local estimate")),
+                ReleaseNote.Change(title: L10n.t("Estimated readings are dimmed and no longer count toward daily budgets or quota state"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.23.1",
             headline: L10n.t("Choose daily estimates or original quotas"),
             changes: [

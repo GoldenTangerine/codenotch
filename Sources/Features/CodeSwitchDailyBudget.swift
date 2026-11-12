@@ -37,7 +37,7 @@ enum CodeSwitchDailyBudget {
         guard snapshot.kind == .usage, let quotas = snapshot.linked?.provider.quotas else { return nil }
         let matches = quotas.filter { $0.key == key }
         guard matches.count == 1, let value = matches.first,
-              value.hasWindow, value.displayKind == "progress", value.unlimited != true,
+              !value.isEstimated, value.hasWindow, value.displayKind == "progress", value.unlimited != true,
               value.total > 0, ["currency", "count"].contains(value.valueMode ?? "currency"),
               !["%", "PERCENT", "PERCENTAGE"].contains(unit(value)),
               let reset = value.reset, reset.timeIntervalSince1970.isFinite, reset > now else { return nil }
@@ -55,7 +55,7 @@ enum CodeSwitchDailyBudget {
     static func dailyUsage(in snapshot: ProviderSnapshot, source: CodeSwitchQuota, now: Date) -> Double? {
         let matches = snapshot.linked?.provider.quotas.filter { $0.key == "daily" } ?? []
         guard matches.count == 1, let daily = matches.first,
-              daily.active, daily.displayKind == "progress", daily.invalidMessage?.isEmpty != false,
+              !daily.isEstimated, daily.active, daily.displayKind == "progress", daily.invalidMessage?.isEmpty != false,
               daily.used.isFinite, daily.used >= 0,
               let reset = daily.reset, reset.timeIntervalSince1970.isFinite, reset > now,
               unit(daily) == unit(source), (daily.valueMode ?? "currency") == (source.valueMode ?? "currency") else { return nil }

@@ -197,12 +197,15 @@ struct LimitWindow: Identifiable, Codable, Equatable {
     let duration: TimeInterval?
     var bandOverride: UsageBand? = nil
     var prefersUsedText: Bool = false
+    /// 仅联动的被动采样额度会携带：读数为估算值时，界面需要提示其不精确。
+    var estimate: LimitEstimate? = nil
 
     init(id: String, group: String? = nil, label: String, usedFraction: Double? = nil,
          remaining: Int? = nil, used: Int? = nil, usedText: String? = nil, detail: String? = nil,
          money: UsageMoneyBreakdown? = nil, resetsAt: Date? = nil,
          quantity: QuotaQuantity? = nil, duration: TimeInterval? = nil,
-         bandOverride: UsageBand? = nil, prefersUsedText: Bool = false) {
+         bandOverride: UsageBand? = nil, prefersUsedText: Bool = false,
+         estimate: LimitEstimate? = nil) {
         self.id = id
         self.group = group
         self.label = label
@@ -217,6 +220,7 @@ struct LimitWindow: Identifiable, Codable, Equatable {
         self.duration = duration
         self.bandOverride = bandOverride
         self.prefersUsedText = prefersUsedText
+        self.estimate = estimate
     }
 
     init(from decoder: Decoder) throws {
@@ -234,7 +238,8 @@ struct LimitWindow: Identifiable, Codable, Equatable {
                   quantity: try c.decodeIfPresent(QuotaQuantity.self, forKey: .quantity),
                   duration: try c.decodeIfPresent(TimeInterval.self, forKey: .duration),
                   bandOverride: try c.decodeIfPresent(UsageBand.self, forKey: .bandOverride),
-                  prefersUsedText: try c.decodeIfPresent(Bool.self, forKey: .prefersUsedText) ?? false)
+                  prefersUsedText: try c.decodeIfPresent(Bool.self, forKey: .prefersUsedText) ?? false,
+                  estimate: try c.decodeIfPresent(LimitEstimate.self, forKey: .estimate))
     }
 
     var isFiveHour: Bool {

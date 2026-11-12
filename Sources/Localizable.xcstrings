@@ -1464,6 +1464,50 @@
         }
       }
     },
+    "Mark stale Code Switch R passive quota readings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标记 Code Switch R 被动采样的过旧读数"
+          }
+        }
+      }
+    },
+    "Passive quotas not sampled for over 5 minutes keep their reading and show when they were sampled": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "被动采样超过 5 分钟未更新时保留读数，并显示采样时间"
+          }
+        }
+      }
+    },
+    "After a reset passes with no new request, the countdown moves to the next window as a local estimate": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "越过重置时间且没有新请求时，倒计时按周期进入下一窗口并标注为本地估算"
+          }
+        }
+      }
+    },
+    "Estimated readings are dimmed and no longer count toward daily budgets or quota state": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "估算读数以淡色显示，不再计入每日预算和额度状态"
+          }
+        }
+      }
+    },
     "Choose daily estimates or original quotas": {
       "extractionState": "manual",
       "localizations": {
@@ -41363,6 +41407,50 @@
           "stringUnit": {
             "state": "translated",
             "value": "按量计费"
+          }
+        }
+      }
+    },
+    "Sampled %@, may be inaccurate": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "采样于 %@，读数可能不准确"
+          }
+        }
+      }
+    },
+    "Sample is old, may be inaccurate": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "采样已过期，读数可能不准确"
+          }
+        }
+      }
+    },
+    "Estimated locally, waiting for a new request": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地估算，等待新的请求"
+          }
+        }
+      }
+    },
+    "Estimated reading, may be inaccurate": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "估算读数，可能不准确"
           }
         }
       }

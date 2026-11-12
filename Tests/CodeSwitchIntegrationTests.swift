@@ -232,6 +232,24 @@ import Testing
         #expect(tableProvider([tableQuota("daily", used: 100, kind: "error")]).effectiveQuotaState == "unknown")
     }
 
+    @Test func estimatedQuotasAreIgnoredByQuotaStateFallback() {
+        var projected = tableQuota("five_hour", used: 0)
+        projected.estimate = "projected"
+        var agedFull = tableQuota("weekly", used: 100)
+        agedFull.estimate = "aged"
+        // 仅有估算项：没有权威读数，状态未知，且过期的满额采样不会判为耗尽。
+        #expect(tableProvider([projected]).effectiveQuotaState == "unknown")
+        #expect(tableProvider([agedFull]).effectiveQuotaState == "unknown")
+        #expect(tableProvider([projected, agedFull]).effectiveQuotaState == "unknown")
+        // 权威项仍然决定结果。
+        #expect(tableProvider([agedFull, tableQuota("daily")]).effectiveQuotaState == "available")
+        #expect(tableProvider([agedFull, tableQuota("daily", used: 100)]).effectiveQuotaState == "exhausted")
+        // 后端给出的状态优先。
+        var provider = tableProvider([agedFull])
+        provider.quotaState = "available"
+        #expect(provider.effectiveQuotaState == "available")
+    }
+
     @Test func settingsTableDoesNotPresentSessionCacheAsCurrentData() throws {
         let source = try fixture()
         let platform = source.platforms[0]

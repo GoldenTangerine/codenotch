@@ -84,8 +84,9 @@ struct CodeSwitchProvider: Codable, Equatable {
     var effectiveQuotaState: String {
         if quotaAutoDisabled == true { return "exhausted" }
         if let quotaState, ["available", "exhausted", "unknown"].contains(quotaState) { return quotaState }
+        // 估算读数不是权威数据，与 Code Switch R 后端一致，不参与可用/耗尽判断。
         let valid = quotas.filter {
-            ["progress", "balance"].contains($0.displayKind) && $0.invalidMessage?.isEmpty != false
+            !$0.isEstimated && ["progress", "balance"].contains($0.displayKind) && $0.invalidMessage?.isEmpty != false
                 && $0.used.isFinite && $0.total.isFinite && $0.used >= 0 && $0.total >= 0
         }
         if valid.contains(where: { $0.unlimited != true && $0.total - $0.used <= 0 }) { return "exhausted" }
@@ -122,6 +123,25 @@ struct CodeSwitchQuota: Codable, Equatable {
     let extra: String?
     let invalidMessage: String?
     let displayKind: String
+    /// 被动采样的采样时间（Unix 毫秒）；仅被动采样项携带，旧版快照没有该字段。
+    var sampledAt: Double? = nil
+    /// `aged`：采样已超过 5 分钟；`projected`：重置时间已过，本地顺延并将用量估为 0；
+    /// 缺省或空串表示最新的权威读数。
+    var estimate: String? = nil
+
+    /// 非空的估算标记；权威读数返回 nil。
+    private var estimateName: String? {
+        let value = estimate?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return value?.isEmpty == false ? value : nil
+    }
+
+    var isEstimated: Bool { estimateName != nil }
+
+    var estimateInfo: LimitEstimate? {
+        guard let name = estimateName else { return nil }
+        let sampled = sampledAt.flatMap { $0.isFinite && $0 > 0 ? Date(timeIntervalSince1970: $0 / 1000) : nil }
+        return LimitEstimate(kind: LimitEstimate.Kind(rawValue: name) ?? .estimated, sampledAt: sampled)
+    }
 
     var title: String {
         switch key {
@@ -189,7 +209,40 @@ struct CodeSwitchQuota: Codable, Equatable {
             resetsAt: active ? reset : nil,
             quantity: QuotaQuantity(remaining: max(0, total - used), used: balance ? nil : used,
                 total: balance ? nil : total, unit: unit ?? (valueMode == "count" ? "" : "USD"),
-                unlimited: unlimited == true), duration: duration)
+                unlimited: unlimited == true), duration: duration, estimate: estimateInfo)
+    }
+}
+
+/// 联动额度的估算说明：读数仍会展示，但需要提示它不是最新的权威数据。
+struct LimitEstimate: Codable, Equatable {
+    enum Kind: String, Codable {
+        case aged
+        case projected
+        /// 后端新增了本版本不认识的估算类型时的通用兜底。
+        case estimated
+    }
+
+    let kind: Kind
+    let sampledAt: Date?
+
+    func hint(now: Date = Date(), locale: Locale = L10n.locale) -> String {
+        switch kind {
+        case .aged:
+            guard let sampledAt else { return L10n.t("Sample is old, may be inaccurate", locale: locale) }
+            return L10n.t("Sampled \(Self.ago(since: sampledAt, now: now, locale: locale)), may be inaccurate",
+                          locale: locale)
+        case .projected:
+            return L10n.t("Estimated locally, waiting for a new request", locale: locale)
+        case .estimated:
+            return L10n.t("Estimated reading, may be inaccurate", locale: locale)
+        }
+    }
+
+    /// 一天以内沿用分钟/小时文案，更久改用天数，避免出现“50 小时前”。
+    private static func ago(since: Date, now: Date, locale: Locale) -> String {
+        let days = Int(max(0, now.timeIntervalSince(since)) / 86_400)
+        if days >= 1 { return L10n.t("\(days) days ago", locale: locale) }
+        return ElapsedCopy.ago(since: since, now: now, locale: locale)
     }
 }
 

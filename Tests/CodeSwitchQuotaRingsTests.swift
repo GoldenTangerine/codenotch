@@ -49,6 +49,22 @@ import Testing
         #expect(legacy.displayedMainFraction == budget.usedFraction)
     }
 
+    @Test func estimatedQuotasDoNotFeedDailyBudget() {
+        let now = Date()
+        #expect(CodeSwitchDailyBudget.reading(for: snapshot([quota("daily"), weekly]), now: now) != nil)
+        for estimate in ["aged", "projected"] {
+            var estimatedWeekly = weekly
+            estimatedWeekly.estimate = estimate
+            // 估算的周额度不能作为预算来源；只剩日额度时才退回日额度。
+            #expect(CodeSwitchDailyBudget.reading(for: snapshot([estimatedWeekly]), now: now) == nil)
+            #expect(CodeSwitchDailyBudget.source(in: snapshot([quota("daily"), estimatedWeekly]), now: now)?.key == "daily")
+            var estimatedDaily = quota("daily")
+            estimatedDaily.estimate = estimate
+            let raw = snapshot([estimatedDaily, weekly])
+            #expect(CodeSwitchDailyBudget.dailyUsage(in: raw, source: weekly, now: now) == nil)
+        }
+    }
+
     @Test func disablingDailyEstimateRestoresActualReadingsAndKeepsBudgetAvailable() throws {
         let raw = snapshot([quota("daily", used: 50, total: 100), weekly, monthly])
         let now = Date()

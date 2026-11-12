@@ -41,6 +41,82 @@ final class CodeSwitchBridgeTests: XCTestCase {
         XCTAssertNotEqual(snapshot.id, provider.snapshot(platform: other).id)
     }
 
+    func testEstimateFieldsDecodeAndStayBackwardCompatible() throws {
+        let legacy = #"{"key":"five_hour","used":30,"total":100,"active":true,"displayKind":"progress","nextReset":"2026-09-12T00:00:00Z"}"#
+        let old = try JSONDecoder().decode(CodeSwitchQuota.self, from: Data(legacy.utf8))
+        XCTAssertNil(old.sampledAt)
+        XCTAssertNil(old.estimate)
+        XCTAssertFalse(old.isEstimated)
+        XCTAssertNil(old.window?.estimate)
+
+        let aged = #"{"key":"five_hour","used":30,"total":100,"unit":"%","active":true,"displayKind":"progress","valueMode":"count","nextReset":"2026-09-12T00:00:00Z","sampledAt":1788886200000,"estimate":"aged"}"#
+        let decoded = try JSONDecoder().decode(CodeSwitchQuota.self, from: Data(aged.utf8))
+        XCTAssertEqual(decoded.sampledAt, 1_788_886_200_000)
+        XCTAssertEqual(decoded.estimate, "aged")
+        XCTAssertTrue(decoded.isEstimated)
+        let estimate = try XCTUnwrap(decoded.window?.estimate)
+        XCTAssertEqual(estimate.kind, .aged)
+        XCTAssertEqual(estimate.sampledAt, Date(timeIntervalSince1970: 1_788_886_200))
+        XCTAssertEqual(decoded.window?.usedFraction, 0.3)
+        XCTAssertNotNil(decoded.window?.resetsAt)
+        let again = try JSONDecoder().decode(CodeSwitchQuota.self, from: JSONEncoder().encode(decoded))
+        XCTAssertEqual(again, decoded)
+
+        // 新鲜采样带 sampledAt 但没有 estimate，或 estimate 为空串，都是权威读数。
+        let freshTails = [",\"sampledAt\":1788886200000", ",\"sampledAt\":1788886200000,\"estimate\":\"\"",
+                          ",\"estimate\":\"  \""]
+        for tail in freshTails {
+            let json = String(legacy.dropLast()) + tail + "}"
+            let quota = try JSONDecoder().decode(CodeSwitchQuota.self, from: Data(json.utf8))
+            XCTAssertFalse(quota.isEstimated)
+            XCTAssertNil(quota.window?.estimate)
+        }
+
+        let projected = String(legacy.dropLast()) + ",\"estimate\":\"projected\"}"
+        XCTAssertEqual(try JSONDecoder().decode(CodeSwitchQuota.self, from: Data(projected.utf8)).window?.estimate,
+                       LimitEstimate(kind: .projected, sampledAt: nil))
+        let unknown = String(legacy.dropLast()) + ",\"estimate\":\"future-kind\"}"
+        XCTAssertEqual(try JSONDecoder().decode(CodeSwitchQuota.self, from: Data(unknown.utf8)).window?.estimate?.kind,
+                       .estimated)
+    }
+
+    func testEstimateHintDescribesAgeAndProjection() {
+        let english = Locale(identifier: "en")
+        let chinese = Locale(identifier: "zh-Hans")
+        let sampled = now.addingTimeInterval(-10 * 60)
+        let aged = LimitEstimate(kind: .aged, sampledAt: sampled)
+        XCTAssertEqual(aged.hint(now: now, locale: english), "Sampled 10 min ago, may be inaccurate")
+        XCTAssertEqual(aged.hint(now: now, locale: chinese), "采样于 10 分钟前，读数可能不准确")
+        XCTAssertEqual(LimitEstimate(kind: .aged, sampledAt: now.addingTimeInterval(-3 * 3600))
+            .hint(now: now, locale: english), "Sampled 3 hr ago, may be inaccurate")
+        XCTAssertEqual(LimitEstimate(kind: .aged, sampledAt: now.addingTimeInterval(-50 * 3600))
+            .hint(now: now, locale: english), "Sampled 2 days ago, may be inaccurate")
+        XCTAssertEqual(LimitEstimate(kind: .aged, sampledAt: nil).hint(now: now, locale: english),
+                       "Sample is old, may be inaccurate")
+        let projected = LimitEstimate(kind: .projected, sampledAt: sampled)
+        XCTAssertEqual(projected.hint(now: now, locale: english), "Estimated locally, waiting for a new request")
+        XCTAssertEqual(projected.hint(now: now, locale: chinese), "本地估算，等待新的请求")
+        XCTAssertEqual(LimitEstimate(kind: .estimated, sampledAt: nil).hint(now: now, locale: chinese),
+                       "估算读数，可能不准确")
+    }
+
+    func testEstimatedQuotaKeepsWindowButIsMarked() throws {
+        var estimated = quota("five_hour")
+        estimated.estimate = "projected"
+        estimated.sampledAt = 1_788_886_200_000
+        let snapshot = try snapshot(quotas: [estimated, quota("weekly")])
+        XCTAssertEqual(snapshot.windows.count, 2)
+        XCTAssertEqual(snapshot.windows[0].estimate?.kind, .projected)
+        XCTAssertNil(snapshot.windows[1].estimate)
+        XCTAssertEqual(snapshot.windows[0].usedFraction, 0.3)
+        XCTAssertEqual(snapshot.windows[0].duration, 5 * 3600)
+        // 估算标记随窗口一起归档，旧归档缺少该字段时仍可解码。
+        let window = try XCTUnwrap(snapshot.windows.first)
+        XCTAssertEqual(try JSONDecoder().decode(LimitWindow.self, from: JSONEncoder().encode(window)), window)
+        let plain = try JSONEncoder().encode(LimitWindow(id: "x", label: "X", usedFraction: 0.1))
+        XCTAssertNil(try JSONDecoder().decode(LimitWindow.self, from: plain).estimate)
+    }
+
     func testProviderLoadingDrivesRefreshPresentation() throws {
         let source = try fixture(loading: true)
         let snapshot = source.platforms[0].providers[0].snapshot(platform: source.platforms[0])

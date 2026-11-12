@@ -485,6 +485,7 @@ struct CodeSwitchTableQuotaCell: View {
                         ProgressView(value: min(1, max(0, fraction)))
                             .progressViewStyle(.linear)
                             .tint(band.color(accent: accent))
+                            .opacity(window.estimate == nil ? 1 : 0.55)
                             .accessibilityLabel(item.quota.title)
                     }
                 } else {
@@ -498,6 +499,14 @@ struct CodeSwitchTableQuotaCell: View {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
                         Text(CodeSwitchTableText.attributed(
                             ResetCopy.text(for: reset, now: context.date, format: resetTimeFormat)))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if let estimate = window.estimate {
+                    // 估算读数照常展示，但需说明它不是最新的权威数据。
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        Text(estimate.hint(now: context.date))
+                            .font(.caption).foregroundStyle(.orange)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
