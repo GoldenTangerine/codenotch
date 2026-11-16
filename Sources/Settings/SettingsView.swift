@@ -1600,7 +1600,7 @@ struct SettingsView: View {
             // about notifications in general — but the mechanism it silences
             // belongs to this pane's subject.
             Section(L10n.t("Threshold alerts")) {
-                Text(L10n.t("A system notification the moment a provider's headline limit crosses 80%, and again at 100% — once per crossing, and again only after the window rolls over. Mute one from the bell beside its row in Accounts."))
+                Text(L10n.t("A system notification the moment a provider's headline limit crosses 80% — once per crossing, and again only after the window rolls over. Running out is announced only by the switches under When a limit is reached. Mute one from the bell beside its row in Accounts."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

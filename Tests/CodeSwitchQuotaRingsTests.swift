@@ -1069,7 +1069,7 @@ import Testing
         let spent = snapshot(keys.map { quota($0, used: $0 == target ? 10 : 4, total: 10) })
         notifier.observe([spent]); watcher.observe([spent])
         #expect(alerts.map(\.threshold) == [80, 100])
-        #expect(alerts.allSatisfy { $0.windowID == target && $0.usedPercent == 100 })
+        #expect(alerts.allSatisfy { $0.windowID == target && $0.usedPercent == 100 && $0.reachesLimit })
         #expect(limits.count == 1)
         #expect(limits.first?.windowID == target)
         #expect(limits.first?.kind == (target == "weekly" ? .weeklyLimitReached : .sessionLimitReached))

@@ -40,6 +40,14 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.23.5",
+            headline: L10n.t("Limit-reached alerts follow their switches"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Turning off limit-reached alerts also silences the 100% threshold alert")),
+                ReleaseNote.Change(title: L10n.t("A spent limit shows a single card instead of two"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.23.4",
             headline: L10n.t("Show when Code Switch R quota data was fetched"),
             changes: [

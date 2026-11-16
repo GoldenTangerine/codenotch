@@ -1393,6 +1393,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// fallback for a notch that cannot show the card (hidden).
     @MainActor
     private func announceThreshold(_ alert: ThresholdAlert) {
+        // 用尽由 UsageLimitWatcher 按「额度用尽时」的开关单独提醒；这里再报一次
+        // 既绕过了开关，开着时又会同一时刻弹两张卡，所以只保留 80% 预警。
+        guard !alert.reachesLimit else { return }
         guard let preferences, let fleet = notchFleet,
               preferences.notificationChannel == .notch else {
             ThresholdAlerts.deliver(alert)

@@ -1464,6 +1464,39 @@
         }
       }
     },
+    "Limit-reached alerts follow their switches": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度用尽提醒遵循通知开关"
+          }
+        }
+      }
+    },
+    "Turning off limit-reached alerts also silences the 100% threshold alert": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭额度用尽提醒后，100% 阈值提醒也不再弹出"
+          }
+        }
+      }
+    },
+    "A spent limit shows a single card instead of two": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "额度用尽时只弹一张卡片，不再重复提醒"
+          }
+        }
+      }
+    },
     "Show when Code Switch R quota data was fetched": {
       "extractionState": "manual",
       "localizations": {
@@ -32756,61 +32789,61 @@
         }
       }
     },
-    "A system notification the moment a provider's headline limit crosses 80%, and again at 100% — once per crossing, and again only after the window rolls over. Mute one from the bell beside its row in Accounts.": {
+    "A system notification the moment a provider's headline limit crosses 80% — once per crossing, and again only after the window rolls over. Running out is announced only by the switches under When a limit is reached. Mute one from the bell beside its row in Accounts.": {
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Eine Systembenachrichtigung, sobald das Hauptlimit eines Anbieters 80 % überschreitet, und erneut bei 100 % — jeweils einmal pro Überschreitung, danach erst wieder, wenn sich das Zeitfenster erneuert hat. Über die Glocke neben seiner Zeile in Konten lässt sich ein Anbieter stummschalten."
+            "value": "Eine Systembenachrichtigung, sobald das Hauptlimit eines Anbieters 80 % überschreitet — jeweils einmal pro Überschreitung, danach erst wieder, wenn sich das Zeitfenster erneuert hat. Ein ausgeschöpftes Limit melden nur die Schalter unter „Wenn ein Limit erreicht ist“. Über die Glocke neben seiner Zeile in Konten lässt sich ein Anbieter stummschalten."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "サービスの主な上限が 80% を超えた瞬間と、100% に達したときにシステム通知を出します。超えるたびに 1 回で、次は期間が切り替わったあとだけです。「アカウント」の各行の横にあるベルからミュートできます。"
+            "value": "サービスの主な上限が 80% を超えた瞬間にシステム通知を出します。超えるたびに 1 回で、次は期間が切り替わったあとだけです。上限に達したことは「上限に達したとき」のスイッチだけで通知します。「アカウント」の各行の横にあるベルからミュートできます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "当某家服务的主额度越过 80% 时发一条系统通知，100% 时再发一次 — 每次越过只发一次，要等额度窗口滚动过后才会再发。可在「账号」里该行旁边的铃铛上静音。"
+            "value": "当某家服务的主额度越过 80% 时发一条系统通知 — 每次越过只发一次，要等额度窗口滚动过后才会再发。额度用尽只按上方「额度用尽时」的开关提醒。可在「账号」里该行旁边的铃铛上静音。"
           }
         },
         "uk": {
           "stringUnit": {
             "state": "translated",
-            "value": "Системне сповіщення, щойно головний ліміт провайдера перетне 80%, і ще раз на 100% — одне на кожен перетин, наступне лише після оновлення вікна ліміту. Вимкнути окремий провайдер можна дзвіночком біля його рядка в розділі «Акаунти»."
+            "value": "Системне сповіщення, щойно головний ліміт провайдера перетне 80% — одне на кожен перетин, наступне лише після оновлення вікна ліміту. Про вичерпання ліміту сповіщають лише перемикачі в розділі «Коли ліміт вичерпано». Вимкнути окремий провайдер можна дзвіночком біля його рядка в розділі «Акаунти»."
           }
         },
         "zh-Hant": {
           "stringUnit": {
             "state": "translated",
-            "value": "當某家服務的主額度越過 80% 時發一條系統通知，100% 時再發一次 — 每次越過只發一次，要等額度視窗結束後才會再發。可在「帳號」裡該行旁邊的鈴鐺上靜音。"
+            "value": "當某家服務的主額度越過 80% 時發一條系統通知 — 每次越過只發一次，要等額度視窗結束後才會再發。額度用盡只依上方「額度用盡時」的開關提醒。可在「帳號」裡該行旁邊的鈴鐺上靜音。"
           }
         },
         "ko": {
           "stringUnit": {
             "state": "translated",
-            "value": "제공자의 주요 한도 사용량이 80%를 넘는 순간과 100%에 도달할 때 시스템 알림을 보냅니다. 각 기준을 넘을 때 한 번씩 알리고, 집계 기간이 바뀐 뒤에만 다시 알립니다. ‘계정’의 해당 항목 옆 종 아이콘으로 알림을 끌 수 있습니다."
+            "value": "제공자의 주요 한도 사용량이 80%를 넘는 순간 시스템 알림을 보냅니다. 넘을 때마다 한 번씩 알리고, 집계 기간이 바뀐 뒤에만 다시 알립니다. 한도 소진은 ‘한도 도달 시’의 스위치로만 알립니다. ‘계정’의 해당 항목 옆 종 아이콘으로 알림을 끌 수 있습니다."
           }
         },
         "uz": {
           "stringUnit": {
             "state": "translated",
-            "value": "Provayderning asosiy limiti 80% dan oshgan zahoti tizim bildirishnomasi, 100% da esa yana bir marta — har oʻtishda bir martadan, keyingisi faqat oyna yangilangandan soʻng. Birini oʻchirish uchun Hisoblar boʻlimidagi qatori yonidagi qoʻngʻiroqni bosing."
+            "value": "Provayderning asosiy limiti 80% dan oshgan zahoti tizim bildirishnomasi — har oʻtishda bir martadan, keyingisi faqat oyna yangilangandan soʻng. Limit tugaganini faqat «Limitga yetilganda» boʻlimidagi kalitlar bildiradi. Birini oʻchirish uchun Hisoblar boʻlimidagi qatori yonidagi qoʻngʻiroqni bosing."
           }
         },
         "id": {
           "stringUnit": {
             "state": "translated",
-            "value": "Pemberitahuan sistem saat batas utama penyedia melampaui 80%, dan sekali lagi saat 100% — sekali per kejadian, dan hanya berulang setelah siklus direset. Bisukan melalui ikon lonceng di samping barisnya di Akun."
+            "value": "Pemberitahuan sistem saat batas utama penyedia melampaui 80% — sekali per kejadian, dan hanya berulang setelah siklus direset. Batas yang habis hanya diberitahukan lewat sakelar di bawah Saat batas tercapai. Bisukan melalui ikon lonceng di samping barisnya di Akun."
           }
         },
         "tr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bir sağlayıcının ana limiti %80 eşiğini geçtiği anda ve %100 eşiğine ulaştığında bir sistem bildirimi — her geçişte bir kez ve dönem yenilendikten sonra yeniden. Birini sessize almak için Hesaplar'daki satırının yanındaki zile tıklayın."
+            "value": "Bir sağlayıcının ana limiti %80 eşiğini geçtiği anda bir sistem bildirimi — her geçişte bir kez ve dönem yenilendikten sonra yeniden. Limitin dolması yalnızca \"Bir limite ulaşıldığında\" altındaki anahtarlarla bildirilir. Birini sessize almak için Hesaplar'daki satırının yanındaki zile tıklayın."
           }
         }
       }

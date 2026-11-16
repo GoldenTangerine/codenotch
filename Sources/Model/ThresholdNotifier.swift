@@ -20,6 +20,9 @@ struct ThresholdAlert: Equatable {
     let usedPercent: Int
     let resetsAt: Date?
     var windowID: String? = nil
+    /// 这次越过时读数已到 100%。一口气从 80% 以下跳到用尽时，80% 那条也带着
+    /// 这个标记 — 它报的其实是用尽，该由「额度用尽时」的开关决定是否出现。
+    var reachesLimit: Bool = false
 }
 
 /// Watches the store's snapshots and reports the moment a provider's headline
@@ -85,7 +88,8 @@ final class ThresholdNotifier {
                 windowLabel: headline.label,
                 glyph: snapshot.glyph,
                 usedPercent: usedPercent,
-                resetsAt: headline.resetsAt
+                resetsAt: headline.resetsAt,
+                reachesLimit: level >= 100
             ))
         }
     }
@@ -105,7 +109,8 @@ final class ThresholdNotifier {
                 deliver(ThresholdAlert(threshold: threshold, providerID: snapshot.id,
                     providerName: snapshot.displayName, windowLabel: window.label,
                     glyph: snapshot.glyph,
-                    usedPercent: usedPercent, resetsAt: window.resetsAt, windowID: window.id))
+                    usedPercent: usedPercent, resetsAt: window.resetsAt, windowID: window.id,
+                    reachesLimit: level >= 100))
             }
         }
         linkedCrossed[snapshot.id] = crossed

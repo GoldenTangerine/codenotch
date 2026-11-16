@@ -55,6 +55,16 @@ final class ThresholdNotifierTests: XCTestCase {
         notifier.observe([snapshot("claude", "Claude", 0.85)])
         notifier.observe([snapshot("claude", "Claude", 1.02)])
         XCTAssertEqual(alerts.map(\.threshold), [80, 100])
+        XCTAssertEqual(alerts.map(\.reachesLimit), [false, true],
+                       "只有用尽那一条交给「额度用尽时」的开关")
+    }
+
+    /// 从 80% 以下一步跳到用尽，两条都在报用尽，都不能绕过用尽开关。
+    func testJumpingStraightToTheLimitMarksEveryAlertAsReachingIt() {
+        notifier.observe([snapshot("claude", "Claude", 0.5)])
+        notifier.observe([snapshot("claude", "Claude", 1.0)])
+        XCTAssertEqual(alerts.map(\.threshold), [80, 100])
+        XCTAssertTrue(alerts.allSatisfy(\.reachesLimit))
     }
 
     /// The archived reading published at launch is marked stale, and the live
