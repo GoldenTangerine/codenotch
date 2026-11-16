@@ -83,4 +83,14 @@ struct AgentSession: Identifiable, Equatable {
         self.noticeID = noticeID
         self.notice = notice
     }
+
+    /// The same session under a better name than the one it was found with.
+    /// 只换名字：进程、hook 与原生会话键必须原样保留，Code Switch R 的会话路由依赖它们。
+    func named(_ name: String) -> AgentSession {
+        AgentSession(id: id, name: name, detail: detail, state: state,
+                     waitingFor: waitingFor, since: since, processID: processID,
+                     processStartedAt: processStartedAt, hookSessionKey: hookSessionKey,
+                     hookTurnStartedAt: hookTurnStartedAt, noticeID: noticeID, notice: notice,
+                     nativeSessionKey: nativeSessionKey)
+    }
 }

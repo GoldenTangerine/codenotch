@@ -23,11 +23,14 @@ local metadata comments may be added:
 | gemini.svg | icons/antigravity.svg | Antigravity cell |
 | gemini-alt.svg | icons/gemini.svg | alternative: the Gemini spark |
 | opencode.svg | icons/opencode.svg | OpenCode cell |
+| deepseek.svg | icons/deepseek.svg | DeepSeek Harness cell |
+| qoder.svg | icons/qoder.svg | Qoder cell |
+| mistral.svg | icons/mistral.svg | Mistral cell |
 
 MIT License — Copyright (c) LobeHub. See that repository's LICENSE.
 
-**Trademarks**: these marks are trademarks of Anthropic, OpenAI, Anysphere (Cursor), xAI (Grok) and Google
-respectively, and are used here only to identify the product whose usage is displayed. Whether
+**Trademarks**: these marks are trademarks of Anthropic, OpenAI, Anysphere (Cursor), xAI (Grok), GitHub
+(Copilot), Google, the OpenCode project, Qoder, and Mistral AI respectively, and are used here only to identify the product whose usage is displayed. Whether
 they stay in a distributed build is the repository owner's call under each brand's guidelines;
 they can be swapped for generated glyphs without touching any code.
 

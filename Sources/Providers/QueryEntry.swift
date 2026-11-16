@@ -156,7 +156,8 @@ final class QueryCatalog: ObservableObject {
     private let defaults: UserDefaults
     private let storageKey = "queryEntries.v1"
     /// 首次导入时默认停用的内置来源，用户开启后保持原状。
-    static let offByDefault: Set<String> = ["kimi", "kiro", "grokbot", "muse", OMLXIdentity.providerID]
+    static let offByDefault: Set<String> = ["kimi", "kiro", "grokbot", "muse", OMLXIdentity.providerID,
+                                              "higgsfield", "krea", "manual"]
 
     init(providers: [UsageProvider], disconnected: Set<String>, defaults: UserDefaults = .standard,
          secrets: QuerySecretStorage = QueryKeychain()) {
@@ -188,9 +189,11 @@ final class QueryCatalog: ObservableObject {
             let key = "upstreamAutomaticProviders.v1"
             let known = Set(defaults.stringArray(forKey: key) ?? [])
             let introduced: Set<String> = ["deepseek", "devin", "commandcode", "ollama", "ollama-local", "lmstudio", "kimi", "kiro", "minimax", "qoder",
-                                           "grokbot", "muse", OMLXIdentity.providerID]
+                                           "grokbot", "muse", OMLXIdentity.providerID,
+                                           "higgsfield", "krea", "manual"]
             for provider in providers where !known.contains(provider.id)
                 && (introduced.contains(provider.id) || CodexProfile.slug(fromProviderID: provider.id) != nil
+                    || GrokProfile.slug(fromProviderID: provider.id) != nil
                     || CommandCodeProfile.slug(fromProviderID: provider.id) != nil
                     || AntigravityProfile.slug(fromProviderID: provider.id) != nil) {
                 // A manually configured entry may already use this native id.

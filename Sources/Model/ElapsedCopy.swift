@@ -20,6 +20,7 @@ enum ElapsedCopy {
         case minutes(Int)
         case hours(Int)
         case hoursMinutes(Int, Int)
+        case days(Int)
     }
 
     private static func span(since: Date, now: Date) -> Span {
@@ -31,6 +32,11 @@ enum ElapsedCopy {
         if minutes < 60 { return .minutes(max(1, minutes)) }
 
         let hours = minutes / 60
+        // Past a day the hours stop being useful, and "81 hr 9 min ago" no
+        // longer fits a card header.
+        if hours >= 24 {
+            return .days(hours / 24)
+        }
         let rest = minutes % 60
         return rest == 0 ? .hours(hours) : .hoursMinutes(hours, rest)
     }
@@ -46,6 +52,8 @@ enum ElapsedCopy {
         case .minutes(let m):                   return L10n.t("\(m) min ago", locale: locale)
         case .hours(let h):                     return L10n.t("\(h) hr ago", locale: locale)
         case .hoursMinutes(let h, let m):       return L10n.t("\(h) hr \(m) min ago", locale: locale)
+        case .days(let d):                      return d == 1 ? L10n.t("\(d) day ago", locale: locale)
+                                                              : L10n.t("\(d) days ago", locale: locale)
         }
     }
 
@@ -55,6 +63,8 @@ enum ElapsedCopy {
         case .minutes(let m):                   return L10n.t("\(m) min", locale: locale)
         case .hours(let h):                     return L10n.t("\(h) hr", locale: locale)
         case .hoursMinutes(let h, let m):       return L10n.t("\(h) hr \(m) min", locale: locale)
+        case .days(let d):                      return d == 1 ? L10n.t("\(d) day", locale: locale)
+                                                              : L10n.t("\(d) days", locale: locale)
         }
     }
 }

@@ -111,7 +111,7 @@ struct CodeSwitchSettingsView: View {
     @ObservedObject var preferences: Preferences
     @ObservedObject var bridge: CodeSwitchBridge
     @State private var search = ""
-    @StateObject private var drag = CodeSwitchProviderDrag()
+    @State private var drag = CodeSwitchProviderDrag()
 
     private var rows: [CodeSwitchSettingsRow] {
         CodeSwitchSettingsRow.rows(snapshots: bridge.snapshots, bindings: bridge.bindings,
@@ -148,10 +148,18 @@ struct CodeSwitchSettingsView: View {
                         ForEach(rows) { row in
                             CodeSwitchSettingsProviderRow(row: row, width: width, preferences: preferences,
                                 duplicate: duplicates[row.savedName, default: 0] > 1, canReorder: canReorder,
-                                drag: drag, acceptDrop: { payload, placement in
-                                    guard let id = drag.takeSource(payload), canReorder else { return false }
-                                    return preferences.moveCodeSwitchProvider(id, onto: row.id, placement: placement,
-                                                                             visible: self.rows.map(\.id))
+                                drag: drag,
+                                placement: { moved in
+                                    CodeSwitchProviderDrag.placement(moving: moved, onto: row.id,
+                                                                     in: self.rows.map(\.id))
+                                },
+                                acceptDrop: { moved, placement in
+                                    guard canReorder else { return false }
+                                    // 写入后经 ActivityRouting 同步到刘海中的联动圆环顺序。
+                                    return withAnimation(.snappy(duration: 0.22)) {
+                                        preferences.moveCodeSwitchProvider(moved, onto: row.id, placement: placement,
+                                                                           visible: self.rows.map(\.id))
+                                    }
                                 })
                             Divider()
                         }
@@ -180,8 +188,8 @@ struct CodeSwitchSettingsView: View {
                 .padding(.horizontal, 20).padding(.bottom, 20)
             }
         }
-        .onChange(of: search) { _, _ in drag.reset() }
-        .onDisappear { drag.reset() }
+        .onChange(of: search) { _, _ in drag.id = nil }
+        .onDisappear { drag.id = nil }
     }
 
     private var controls: some View {
@@ -199,45 +207,23 @@ struct CodeSwitchSettingsView: View {
 
 }
 
+/// 正在拖动的联动供应商。
+///
+/// 用 `onDrag` 在拖动开始时记录来源，而不是 `draggable` 的懒加载载荷：后者直到
+/// 投放取数据时才执行闭包，拖动途中各行无法判断来源，投放会被一律拒绝。
+/// 普通引用类型，记录来源不会触发整个列表重绘。
 @MainActor
-final class CodeSwitchProviderDrag: ObservableObject {
-    private var source: String?
-    private var payload: String?
-    @Published private(set) var isActive = false
+final class CodeSwitchProviderDrag {
+    var id: String?
 
-    func begin(_ id: String) -> String {
-        source = id
-        let token = UUID().uuidString
-        payload = token
-        isActive = true
-        return token
+    /// 拖到某一行上的落点：向下拖放在目标之后，向上拖放在目标之前；
+    /// 拖回自身或来源不在当前列表中时不移动。
+    static func placement(moving id: String, onto target: String,
+                          in order: [String]) -> CodeSwitchProviderOrder.Placement? {
+        guard id != target, let from = order.firstIndex(of: id),
+              let to = order.firstIndex(of: target) else { return nil }
+        return from < to ? .after : .before
     }
-
-    func accepts(_ items: [String], target: String) -> Bool {
-        isActive && source != target && items.count == 1 && items.first == payload
-    }
-
-    func update(_ phase: DragSession.Phase, items: [String]) {
-        guard items.count == 1, items.first == payload else { return }
-        switch phase {
-        case .ended(let operation):
-            isActive = false
-            // A successful drop can deliver its payload after the pointer session ends.
-            if operation != .move && operation != .copy { reset() }
-        case .dataTransferCompleted:
-            reset()
-        default:
-            break
-        }
-    }
-
-    func takeSource(_ items: [String]) -> String? {
-        guard items.count == 1, items.first == payload else { return nil }
-        defer { reset() }
-        return source
-    }
-
-    func reset() { source = nil; payload = nil; isActive = false }
 }
 
 private func codeSwitchSummaryColumns<Controls: View, Identity: View, Today: View, Quota: View, Appearance: View, Details: View>(
@@ -265,11 +251,12 @@ struct CodeSwitchSettingsProviderRow: View {
     @ObservedObject var preferences: Preferences
     let duplicate: Bool
     let canReorder: Bool
-    @ObservedObject var drag: CodeSwitchProviderDrag
-    let acceptDrop: ([String], CodeSwitchProviderOrder.Placement) -> Bool
+    let drag: CodeSwitchProviderDrag
+    /// 被拖动的供应商放到本行时的落点，nil 表示不接受。
+    var placement: (String) -> CodeSwitchProviderOrder.Placement? = { _ in nil }
+    let acceptDrop: (String, CodeSwitchProviderOrder.Placement) -> Bool
     @State var expanded = false
     @State private var insertion: CodeSwitchProviderOrder.Placement?
-    @State private var rowHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -279,33 +266,23 @@ struct CodeSwitchSettingsProviderRow: View {
         .font(.caption).monospacedDigit()
         .padding(.vertical, 9)
         .frame(width: width, alignment: .leading)
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowHeight = $0 }
         .overlay(alignment: insertion == .before ? .top : .bottom) {
-            if insertion != nil && drag.isActive && canReorder {
+            if insertion != nil && canReorder {
                 Rectangle().fill(preferences.accentColor.color).frame(height: 2)
                     .allowsHitTesting(false).accessibilityHidden(true)
             }
         }
         .contentShape(Rectangle())
-        .dropDestination(for: String.self, isEnabled: canReorder) { items, session in
-            insertion = nil
-            if canReorder { _ = acceptDrop(items, .at(y: session.location.y, height: rowHeight)) }
+        // 整行都是投放区域，拖动手柄太小不好对准。
+        .dropDestination(for: String.self) { ids, _ in
+            defer { insertion = nil; drag.id = nil }
+            // 只接受本列表发起的拖动，外部拖入的文本一律忽略。
+            guard canReorder, let moved = ids.first, moved == drag.id,
+                  let placement = placement(moved) else { return false }
+            return acceptDrop(moved, placement)
+        } isTargeted: { entered in
+            insertion = entered && canReorder ? drag.id.flatMap(placement) : nil
         }
-        .dropConfiguration { session in
-            DropConfiguration(operation: canReorder && drag.accepts(
-                session.localSession?.draggedItemIDs(for: String.self) ?? [], target: row.id) ? .move : .forbidden)
-        }
-        .onDropSessionUpdated { session in
-            switch session.phase {
-            case .entering, .active:
-                insertion = canReorder && drag.accepts(
-                    session.localSession?.draggedItemIDs(for: String.self) ?? [], target: row.id)
-                    ? .at(y: session.location.y, height: rowHeight) : nil
-            default:
-                insertion = nil
-            }
-        }
-        .onChange(of: drag.isActive) { _, active in if !active { insertion = nil } }
         .accessibilityElement(children: .contain)
     }
 
@@ -316,12 +293,11 @@ struct CodeSwitchSettingsProviderRow: View {
                 Image(systemName: "line.3.horizontal")
                     .foregroundStyle(.secondary).opacity(canReorder ? 1 : 0.35)
                     .frame(width: 24, height: 32).contentShape(Rectangle())
-                    .draggable(String.self, id: \.self) { canReorder ? drag.begin(row.id) : nil }
-                    .dragConfiguration(DragConfiguration(
-                        operationsWithinApp: .init(allowCopy: false, allowMove: true),
-                        operationsOutsideApp: .init(allowCopy: false)))
-                    .onDragSessionUpdated { session in
-                        drag.update(session.phase, items: session.draggedItemIDs(for: String.self))
+                    .onDrag {
+                        // 返回空的 NSItemProvider 即拒绝这次拖动（搜索中不允许排序）。
+                        guard canReorder else { return NSItemProvider() }
+                        drag.id = row.id
+                        return NSItemProvider(object: row.id as NSString)
                     }
                     .pointerStyle(canReorder ? .grabIdle : nil)
                     .help(canReorder ? L10n.t("Drag to reorder") : L10n.t("Clear search to reorder"))

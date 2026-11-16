@@ -19,7 +19,7 @@ struct CodenotchMain: App {
         Settings { EmptyView() }
             .commands {
                 CommandGroup(replacing: .appSettings) {
-                    Button("Settings…") { appDelegate.openSettings() }
+                    Button(L10n.t("Settings…")) { appDelegate.openSettings() }
                         .keyboardShortcut(",", modifiers: .command)
                 }
             }

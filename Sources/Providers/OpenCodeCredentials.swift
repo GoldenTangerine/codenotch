@@ -12,21 +12,32 @@ import SQLite3
 
 /// The credential OpenCode itself signed in with, borrowed — never written.
 ///
-/// OpenCode 1.18 moved its sign-in into SQLite, and with OpenCode 2.x on the
-/// machine the `auth.json` this used to read is simply gone. Three sources, in
-/// the order that keeps the account steady:
+/// After the Console migration a live Go key is a console personal key. It is
+/// stored in `auth.json` under `"opencode"` as `{"type":"api","key":"oc_sk_…"}`
+/// — not under `"opencode-go"`, and not `type` `oauth`. The same shape can also
+/// sit in `opencode.db`'s `credential` table. `auth.json` is still read; it is
+/// not gone. The leftover `"opencode-go"` entry is the old `sk-` key, which the
+/// usage endpoint now rejects.
 ///
-/// 1. `auth.json` → `opencode-go` (`{"type":"api","key":…}`), the Go plan's own
-///    API key and what OpenCode wrote before 1.18;
-/// 2. `opencode.db` → the `credential` table, which is where the sign-in lives
-///    now — either that same Go key, or an `opencode` OAuth sign-in
-///    (`{"type":"oauth","access":…,"expires":…,"metadata":{"server":…,"orgID":…}}`);
-/// 3. `auth.json` → the `opencode` OAuth entry, only a fallback: OpenCode stops
-///    updating the file once the database holds the sign-in.
+/// A console key — a non-OAuth token with the `oc_sk_` prefix — wins wherever
+/// it was written, so a database row cannot hide one that lives only in the
+/// file. When more than one exists the order is:
+///
+/// 1. database `opencode`, then database `opencode-go` (active rows, newest
+///    first, the same query as before);
+/// 2. `auth.json` `"opencode"` when that entry is an API key (`type` `"api"`,
+///    a bare string, or the usual key fields) and the token is `oc_sk_`;
+/// 3. `auth.json` `"opencode-go"` when its token is `oc_sk_`.
+///
+/// With no console key the older order stands: database `opencode-go`, then
+/// database `opencode`, then `auth.json` `opencode-go`, then `auth.json`
+/// `opencode` only when `type` is `oauth`. The database still beats the file
+/// when it holds the `oc_sk_` key itself, and when the file has no console key.
 ///
 /// Which one is found decides the usage endpoint, because each route refuses the
-/// other's credential — see `OpenCodeProvider`. Only OpenCode's own two ids are
-/// ever claimed; another integration's row (`openrouter`, `openai`, …) is that
+/// other's credential — see `OpenCodeProvider`. A non-OAuth key, including
+/// `oc_sk_`, stays on the zen route. Only OpenCode's own two ids are ever
+/// claimed; another integration's row (`openrouter`, `openai`, …) is that
 /// vendor's key, and reading it under OpenCode's name would meter the wrong
 /// account.
 enum OpenCodeCredentials {
@@ -67,49 +78,66 @@ enum OpenCodeCredentials {
         }
     }
 
-    /// The three sources above, in order. `nil` means OpenCode is installed but
-    /// has no sign-in we may claim.
+    /// Console key first, then the pre-console order. See the file comment for
+    /// which source wins: a database `sk-` row must not hide an `oc_sk_` key
+    /// that exists only in `auth.json`.
     static func load(in directory: URL = dataDirectory) -> Credential? {
         let auth = directory.appendingPathComponent("auth.json")
-        if let go = loadGoKey(from: auth) { return go }
-        if let stored = loadFromDatabase(directory.appendingPathComponent("opencode.db")) {
-            return stored
+        let stored = databaseCredentials(directory.appendingPathComponent("opencode.db"))
+        let fileGo = loadGoKey(from: auth)
+        let fileAccount = authEntry("opencode", from: auth)
+
+        if let console = consoleKey(in: stored, fileAccount: fileAccount, fileGo: fileGo) {
+            return console
         }
-        return loadOAuth(from: auth)
+        if let preferred = preferredDatabase(stored) { return preferred }
+        if let fileGo { return fileGo }
+        if let fileAccount, fileAccount.oauth { return fileAccount }
+        return nil
     }
 
     // MARK: - Sources
 
-    /// Source 1 and the `opencode-go` half of source 3's file: the Go plan's own
-    /// API key. Kept as its own entry point because the tests pin it, and
-    /// because "the key this account was given" is the one shape that has never
-    /// moved.
+    /// The `opencode-go` half of `auth.json`: the Go plan's own API key, what
+    /// OpenCode wrote before 1.18. Kept as its own entry point because the
+    /// tests pin it, and because "the key this account was given" is the one
+    /// shape that has never moved.
     static func loadGoKey(from url: URL = authURL) -> Credential? {
-        guard let root = readJSON(at: url), let entry = root["opencode-go"] else { return nil }
-        return credential(from: entry, source: "OpenCode")
+        authEntry("opencode-go", from: url)
     }
 
-    /// Source 3: the OAuth sign-in mirrored into `auth.json`. A fallback only —
-    /// OpenCode stops writing it once the database holds the sign-in, so this
-    /// covers a machine whose `opencode.db` cannot be opened, and nothing else.
+    /// The `opencode` half of `auth.json` when it is still an OAuth sign-in.
+    /// A non-console fallback only: an `oc_sk_` API key under the same id is
+    /// chosen earlier, in `load`. OpenCode stops mirroring OAuth into the file
+    /// once the database holds the sign-in, so this covers a machine whose
+    /// `opencode.db` cannot be opened, and nothing else.
     static func loadOAuth(from url: URL = authURL) -> Credential? {
-        guard let root = readJSON(at: url),
-              let entry = root["opencode"],
-              (entry as? [String: Any])?["type"] as? String == "oauth"
-        else { return nil }
-        return credential(from: entry, source: "OpenCode")
+        guard let found = authEntry("opencode", from: url), found.oauth else { return nil }
+        return found
     }
 
-    /// Source 2. Read-only, and never `immutable` while OpenCode is running:
-    /// that would ignore the write-ahead log and serve a token OpenCode has
-    /// already rotated. `SQLiteStore` opens `mode=ro` first for that reason.
+    /// The database. Read-only, and never `immutable` while OpenCode is
+    /// running: that would ignore the write-ahead log and serve a token
+    /// OpenCode has already rotated. `SQLiteStore` opens `mode=ro` first for
+    /// that reason. Preference here is the pre-console order (Go key, then
+    /// the other `opencode` row). `load` re-ranks these rows when one of them
+    /// is a console key.
     static func loadFromDatabase(_ url: URL = databaseURL) -> Credential? {
-        guard let db = SQLiteStore.open(url) else { return nil }
+        preferredDatabase(databaseCredentials(url))
+    }
+
+    private struct StoredCredential {
+        let integrationID: String
+        let credential: Credential
+    }
+
+    /// Active OpenCode rows, newest first. The active flag is honoured but a
+    /// row that omits it counts as active: OpenCode has shipped both.
+    /// Unreadable values are skipped, not fatal.
+    private static func databaseCredentials(_ url: URL) -> [StoredCredential] {
+        guard let db = SQLiteStore.open(url) else { return [] }
         defer { sqlite3_close(db) }
 
-        // Newest first, so a rotated sign-in beats the one it replaced. The
-        // active flag is honoured but a row that omits it counts as active:
-        // OpenCode has shipped both.
         let rows = SQLiteStore.rows(
             in: db,
             sql: """
@@ -120,17 +148,58 @@ enum OpenCodeCredentials {
             """,
             columns: 2
         )
-        // Go key first, then the OAuth sign-in: same order as the file sources,
-        // so a machine holding both reads the same account either way.
+        var stored: [StoredCredential] = []
+        for row in rows {
+            guard let value = try? JSONSerialization.jsonObject(with: Data(row[1].utf8)),
+                  let found = credential(from: value, source: "OpenCode")
+            else { continue }
+            stored.append(StoredCredential(integrationID: row[0], credential: found))
+        }
+        return stored
+    }
+
+    /// Go key first, then the other `opencode` row — the same order the file
+    /// sources use when neither is a console key. The first parseable row of
+    /// that id wins, which is the newest because the query is
+    /// `time_updated DESC`.
+    private static func preferredDatabase(_ rows: [StoredCredential]) -> Credential? {
         for wanted in ["opencode-go", "opencode"] {
-            for row in rows where row[0] == wanted {
-                guard let value = try? JSONSerialization.jsonObject(with: Data(row[1].utf8)),
-                      let found = credential(from: value, source: "OpenCode")
-                else { continue }
-                return found
+            if let found = rows.first(where: { $0.integrationID == wanted }) {
+                return found.credential
             }
         }
         return nil
+    }
+
+    /// The first console key in source order. A newer non-console row of the
+    /// same id does not hide an older `oc_sk_` row: any console key beats
+    /// every credential that is not one.
+    private static func consoleKey(
+        in rows: [StoredCredential],
+        fileAccount: Credential?,
+        fileGo: Credential?
+    ) -> Credential? {
+        for wanted in ["opencode", "opencode-go"] {
+            if let found = rows.first(where: {
+                $0.integrationID == wanted && isConsoleKey($0.credential)
+            }) {
+                return found.credential
+            }
+        }
+        if let fileAccount, isConsoleKey(fileAccount) { return fileAccount }
+        if let fileGo, isConsoleKey(fileGo) { return fileGo }
+        return nil
+    }
+
+    /// A console personal key: not OAuth, and issued with the `oc_sk_` prefix.
+    /// An `sk-` token is the leftover Go key, whatever file it sits in.
+    private static func isConsoleKey(_ credential: Credential) -> Bool {
+        !credential.oauth && credential.token.hasPrefix("oc_sk_")
+    }
+
+    private static func authEntry(_ id: String, from url: URL) -> Credential? {
+        guard let root = readJSON(at: url), let entry = root[id] else { return nil }
+        return credential(from: entry, source: "OpenCode")
     }
 
     // MARK: - Shapes

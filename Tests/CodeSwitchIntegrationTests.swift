@@ -351,33 +351,17 @@ import Testing
         #expect(restored.codeSwitchProviderOrder == preferences.codeSwitchProviderOrder)
     }
 
-    @Test @MainActor func settingsDragRejectsForeignAndCancelledPayloads() {
-        let drag = CodeSwitchProviderDrag()
-        let first = drag.begin("code-switch:5:codex:1")
-        #expect(!drag.accepts(["foreign"], target: "other"))
-        #expect(!drag.accepts([first], target: "code-switch:5:codex:1"))
-        #expect(drag.takeSource(["foreign"]) == nil)
-        #expect(drag.isActive)
-        #expect(drag.takeSource([first]) == "code-switch:5:codex:1")
-        let cancelled = drag.begin("code-switch:5:codex:1")
-        drag.update(.ended(.cancel), items: [cancelled])
-        #expect(!drag.isActive)
-        #expect(drag.takeSource([cancelled]) == nil)
-        let rejected = drag.begin("code-switch:5:codex:1")
-        drag.update(.ended(.forbidden), items: [rejected])
-        #expect(!drag.isActive)
-        #expect(drag.takeSource([rejected]) == nil)
-        let token = drag.begin("code-switch:5:codex:2")
-        drag.update(.dataTransferCompleted, items: [cancelled])
-        #expect(drag.accepts([token], target: "other"))
-        drag.update(.ended(.move), items: [token])
-        #expect(!drag.isActive)
-        #expect(drag.takeSource([token]) == "code-switch:5:codex:2")
-        #expect(drag.takeSource([token]) == nil)
-        let completed = drag.begin("code-switch:5:codex:2")
-        drag.update(.ended(.move), items: [completed])
-        drag.update(.dataTransferCompleted, items: [completed])
-        #expect(drag.takeSource([completed]) == nil)
+    @Test @MainActor func settingsDragPlacesByDirection() {
+        let ids = ["a", "b", "c"].map { "code-switch:5:codex:" + $0 }
+        // 向下拖放在目标之后，向上拖放在目标之前，最终都占据目标原来的位置。
+        #expect(CodeSwitchProviderDrag.placement(moving: ids[0], onto: ids[2], in: ids) == .after)
+        #expect(CodeSwitchProviderDrag.placement(moving: ids[2], onto: ids[0], in: ids) == .before)
+        #expect(CodeSwitchProviderDrag.placement(moving: ids[1], onto: ids[1], in: ids) == nil)
+        #expect(CodeSwitchProviderDrag.placement(moving: "foreign", onto: ids[0], in: ids) == nil)
+        let down = CodeSwitchProviderOrder.moving(ids[0], onto: ids[2], placement: .after, visible: ids, remembered: [])
+        #expect(down == [ids[1], ids[2], ids[0]])
+        let up = CodeSwitchProviderOrder.moving(ids[2], onto: ids[0], placement: .before, visible: ids, remembered: [])
+        #expect(up == [ids[2], ids[0], ids[1]])
     }
 
     @Test func insertionFeedbackMatchesMovesInBothDirections() {

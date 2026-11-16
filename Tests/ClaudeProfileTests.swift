@@ -138,6 +138,23 @@ final class ClaudeProfileTests: XCTestCase {
         XCTAssertEqual(found[2].configDirectory.path, home.appendingPathComponent(".claude-work").path)
     }
 
+    /// `~/.claude_<name>` is an account too (#546). Spelled both ways, the
+    /// hyphen keeps the ring, so two rings never share an id.
+    func testAnUnderscoreProfileIsFoundAndTheHyphenWinsATie() throws {
+        XCTAssertEqual(ClaudeProfile.slug(fromDirectoryName: ".claude_ops"), "ops")
+        XCTAssertNil(ClaudeProfile.slug(fromDirectoryName: ".claude_"), "empty slug")
+        let home = try home([
+            ".claude": ["settings.json"],
+            ".claude_ops": [".claude.json"],
+            ".claude-dup": ["settings.json"],
+            ".claude_dup": ["settings.json"]
+        ])
+        let found = ClaudeProfile.discover(home: home, hasCredential: signedIn)
+        XCTAssertEqual(found.map(\.id), ["claude", "claude-dup", "claude-ops"])
+        XCTAssertEqual(found[1].configDirectory.lastPathComponent, ".claude-dup")
+        XCTAssertEqual(found[2].configDirectory.lastPathComponent, ".claude_ops")
+    }
+
     /// An empty directory is not a profile: a permanent "sign in" ring for an
     /// account that does not exist is worse than no ring.
     func testDirectoriesClaudeCodeHasNeverUsedAreIgnored() throws {
@@ -462,6 +479,42 @@ final class ClaudeAccountNameTests: XCTestCase {
         let home = try home()
         XCTAssertEqual(ClaudeProfile.default(home: home).displayName, "Claude")
         XCTAssertEqual(profile(slug: "work", in: home).displayName, "Claude (work)")
+    }
+
+    // MARK: - One account, with nothing to tell it from
+
+    /// The label tells rings apart. A machine with one Claude account has one
+    /// ring, and `Claude Gmail Usage` over the only Claude card named a product
+    /// that does not exist.
+    func testALoneAccountIsJustClaude() throws {
+        let home = try home(default: "paulo@gmail.com")
+        let profiles = [ClaudeProfile.default(home: home)]
+
+        let names = ClaudeProfile.displayNames(for: profiles)
+
+        XCTAssertEqual(names, ["claude": "Claude"])
+    }
+
+    /// Claude Desktop signed in to a second account that has no ring: the lone
+    /// ring is no longer the only Claude account on the Mac, so it says which
+    /// one it is (#509).
+    func testALoneAccountBesideAnotherInUseIsNamed() throws {
+        let home = try home(default: "paulo@gmail.com")
+        let profiles = [ClaudeProfile.default(home: home)]
+
+        let names = ClaudeProfile.displayNames(for: profiles, anotherAccountInUse: true)
+
+        XCTAssertEqual(names, ["claude": "Claude Gmail"])
+    }
+
+    /// With no address to name it by, it is still called something.
+    func testALoneAccountWithNoAddressStaysClaude() throws {
+        let home = try home()
+        let profiles = [ClaudeProfile.default(home: home)]
+
+        let names = ClaudeProfile.displayNames(for: profiles, anotherAccountInUse: true)
+
+        XCTAssertEqual(names, ["claude": "Claude"])
     }
 
     // MARK: - Two accounts that would be called the same thing

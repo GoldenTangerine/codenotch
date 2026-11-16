@@ -35,10 +35,26 @@ pub struct TraySlot {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ClaudeProfileConfig {
+    pub id: String,
+    /// No longer read: accounts are named from their sign-in, as on the Mac. Still written, with
+    /// that name, because 1.24.0 needs it to load the file, shows it, and won't save a blank one.
+    #[serde(default)]
+    pub name: String,
+    #[serde(default = "yes")]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    #[serde(default)]
+    pub claude_profiles: Vec<ClaudeProfileConfig>,
+    /// off | left | right; an owned child window on the primary Windows taskbar.
+    #[serde(default = "default_taskbar_mode")]
+    pub taskbar_mode: String,
     #[serde(default = "default_port")]
     pub port: u16,
-    /// "auto" | "zh" | "en" | "ja" | "ko" | "ru" | "uk"
+    /// "auto" | "zh" | "zh-Hant" | "en" | "ja" | "ko" | "pt-BR" | "ru" | "uk"
     #[serde(default = "default_lang")]
     pub lang: String,
     #[serde(default)]
@@ -125,9 +141,18 @@ pub struct Config {
     pub glm_notch_fixed: bool,
     #[serde(default)]
     pub opencode_notch_fixed: bool,
+    /// Add Command Code to a previously saved notch selection once.
+    #[serde(default)]
+    pub commandcode_notch_fixed: bool,
     /// The same one-shot migration for the GitHub Copilot ring.
     #[serde(default)]
     pub copilot_notch_fixed: bool,
+    /// The same one-shot migration for the Qoder ring.
+    #[serde(default)]
+    pub qoder_notch_fixed: bool,
+    /// Add Mistral to a previously saved notch selection once when a credential is present.
+    #[serde(default)]
+    pub mistral_notch_fixed: bool,
     /// false = the pill is kept off the screen edge entirely; the tray icon is then the only way in
     #[serde(default = "yes")]
     pub notch_visible: bool,
@@ -166,7 +191,16 @@ pub struct Config {
     /// rings themselves still sweep by what is spent either way.
     #[serde(default)]
     pub notch_shows_remaining: bool,
+    /// true = the card adds how far a timed window is ahead of its clock ("12% deficit"), as the
+    /// Mac's usage pace setting. Off by default, as on the Mac.
+    #[serde(default)]
+    pub show_usage_pace: bool,
+    /// Require X-Codenotch-Token on /event requests (defense-in-depth, #165)
+    #[serde(default = "yes")]
+    pub require_event_token: bool,
 }
+
+fn default_taskbar_mode() -> String { "off".into() }
 
 fn default_notch_y() -> f64 {
     0.5
@@ -310,6 +344,8 @@ fn default_lang() -> String {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            claude_profiles: Vec::new(),
+            taskbar_mode: default_taskbar_mode(),
             port: default_port(),
             lang: default_lang(),
             bar_x: None,
@@ -336,7 +372,10 @@ impl Default for Config {
             antigravity_model: default_antigravity_model(),
             glm_notch_fixed: true,
             opencode_notch_fixed: true,
+            commandcode_notch_fixed: true,
             copilot_notch_fixed: true,
+            qoder_notch_fixed: true,
+            mistral_notch_fixed: true,
             notch_visible: true,
             notch_on_hover: true,
             tray_visible: true,
@@ -347,6 +386,8 @@ impl Default for Config {
             adaptive_pill: false,
             fold_for_full_screen: true,
             notch_shows_remaining: false,
+            show_usage_pace: false,
+            require_event_token: true,
         }
     }
 }
@@ -430,8 +471,13 @@ pub fn load() -> Config {
     carry_shared_position(&mut cfg);
     migrate_glm_notch(&mut cfg, &raw);
     migrate_opencode_notch(&mut cfg, &raw);
+    migrate_commandcode_notch(&mut cfg, &raw);
     // And for GitHub Copilot.
     migrate_copilot_notch(&mut cfg, &raw);
+    // And for Qoder.
+    migrate_qoder_notch(&mut cfg, &raw);
+    // And for Mistral, only when a credential is already present.
+    migrate_mistral_notch(&mut cfg, &raw);
 
     // Both hidden would leave the app unreachable: no pill, no tray icon, no way to open settings.
     if !cfg.notch_visible && !cfg.tray_visible {
@@ -478,6 +524,22 @@ fn migrate_opencode_notch(cfg: &mut Config, raw: &Option<String>) {
     }
 }
 
+fn migrate_commandcode_notch(cfg: &mut Config, raw: &Option<String>) {
+    let predates = raw.as_deref()
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(text).ok())
+        .is_some_and(|value| value.get("commandcode_notch_fixed").is_none());
+    if !predates { return; }
+    // Only for someone who has Command Code: every other upgrade would gain a ring for an app it
+    // has never had.
+    if crate::commandcode::present()
+        && !cfg.notch_slots.is_empty()
+        && !cfg.notch_slots.iter().any(|slot| slot.provider == "commandcode")
+    {
+        cfg.notch_slots.push(TraySlot { provider: "commandcode".into() });
+    }
+    cfg.commandcode_notch_fixed = true;
+}
+
 fn migrate_copilot_notch(cfg: &mut Config, raw: &Option<String>) {
     let predates = raw
         .as_deref()
@@ -493,14 +555,49 @@ fn migrate_copilot_notch(cfg: &mut Config, raw: &Option<String>) {
     cfg.copilot_notch_fixed = true;
 }
 
+fn migrate_qoder_notch(cfg: &mut Config, raw: &Option<String>) {
+    let predates = raw
+        .as_deref()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(t).ok())
+        .map(|v| v.get("qoder_notch_fixed").is_none())
+        .unwrap_or(false);
+    if !predates {
+        return;
+    }
+    if !cfg.notch_slots.is_empty() && !cfg.notch_slots.iter().any(|s| s.provider == "qoder") {
+        cfg.notch_slots.push(TraySlot { provider: "qoder".into() });
+    }
+    cfg.qoder_notch_fixed = true;
+}
+
+fn migrate_mistral_notch(cfg: &mut Config, raw: &Option<String>) {
+    let predates = raw
+        .as_deref()
+        .and_then(|t| serde_json::from_str::<serde_json::Value>(t).ok())
+        .is_some_and(|v| v.get("mistral_notch_fixed").is_none());
+    if !predates {
+        return;
+    }
+    if crate::mistral::present()
+        && !cfg.notch_slots.is_empty()
+        && !cfg.notch_slots.iter().any(|s| s.provider == "mistral")
+    {
+        cfg.notch_slots.push(TraySlot { provider: "mistral".into() });
+    }
+    cfg.mistral_notch_fixed = true;
+}
+
 pub fn save(cfg: &Config) {
+    let _ = save_checked(cfg);
+}
+
+pub fn save_checked(cfg: &Config) -> Result<(), String> {
     let path = config_path();
     if let Some(dir) = path.parent() {
-        let _ = std::fs::create_dir_all(dir);
+        std::fs::create_dir_all(dir).map_err(|_| "Unable to create the settings folder".to_string())?;
     }
-    if let Ok(txt) = serde_json::to_string_pretty(cfg) {
-        let _ = std::fs::write(path, txt);
-    }
+    let txt = serde_json::to_string_pretty(cfg).map_err(|_| "Unable to serialize settings".to_string())?;
+    std::fs::write(path, txt).map_err(|_| "Unable to save settings".to_string())
 }
 
 #[cfg(test)]
@@ -524,6 +621,13 @@ mod tests {
         assert!(!restored.reset_notification_sound);
         assert!(!restored.notch_visible);
         assert_eq!(restored.theme, "light");
+    }
+
+    /// "es", the code the Mac's picker stores too, so both ports name Spanish the same way.
+    #[test]
+    fn spanish_is_kept_as_its_language_code() {
+        let cfg: Config = serde_json::from_str("{\"lang\":\"es\"}").expect("a Spanish config parses");
+        assert_eq!(cfg.lang, "es");
     }
 
     /// What PowerShell 5 writes for `Set-Content -Encoding UTF8`: the same JSON behind a BOM. It used

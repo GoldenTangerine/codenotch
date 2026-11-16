@@ -86,6 +86,45 @@ enum AntigravityBridge {
         return URL(fileURLWithPath: String(fields[1])).lastPathComponent == "agy"
     }
 
+    /// ACP runs as `agy_acp_server.par` or `localharness_external`.
+    static func isACP(_ line: Substring) -> Bool {
+        line.contains("agy_acp_server") || line.contains("localharness_external")
+    }
+
+    /// Whether an Antigravity ACP server process is currently running.
+    static func isACPRunning(processTable: String? = nil) -> Bool {
+        let table = processTable ?? run("/bin/ps", ["-Ao", "pid,command"])
+        return table.split(separator: "\n").contains(where: isACP)
+    }
+
+    /// IDE runs as language_server with --csrf_token or Antigravity.app.
+    static func isIDE(_ line: Substring) -> Bool {
+        (line.contains("language_server") && line.contains("--csrf_token")) ||
+        line.contains("Antigravity.app")
+    }
+
+    /// Whether an Antigravity IDE process is currently running.
+    static func isIDERunning(processTable: String? = nil) -> Bool {
+        let table = processTable ?? run("/bin/ps", ["-Ao", "pid,command"])
+        return table.split(separator: "\n").contains(where: isIDE)
+    }
+
+    /// Whether an Antigravity CLI process is currently running.
+    static func isCLIRunning(processTable: String? = nil) -> Bool {
+        let table = processTable ?? run("/bin/ps", ["-Ao", "pid,command"])
+        return table.split(separator: "\n").contains(where: isCLI)
+    }
+
+    /// Whether a specific Antigravity flavor process is currently running.
+    static func isRunning(flavor: AntigravityFlavor, processTable: String? = nil) -> Bool {
+        let table = processTable ?? run("/bin/ps", ["-Ao", "pid,command"])
+        switch flavor {
+        case .ide: return isIDERunning(processTable: table)
+        case .cli: return isCLIRunning(processTable: table)
+        case .acp: return isACPRunning(processTable: table)
+        }
+    }
+
     private static func endpoint(
         for line: Substring, token: String?, ports listeningPorts: ((Int) -> [Int])?
     ) -> Endpoint? {
@@ -227,6 +266,8 @@ enum AntigravityBridge {
             // server would bind its own ports for nothing.
             if let endpoint { return endpoint }
 
+            AntigravityBridge.reapOrphans()
+
             let token = UUID().uuidString
             let process = Process()
             process.executableURL = binary
@@ -270,10 +311,41 @@ enum AntigravityBridge {
             process = nil
             endpoint = nil
         }
+
+        func resetForTesting() {
+            stop()
+        }
     }
 
     /// A server Codenotch owns, or nil until one is needed.
     static let owned = Owned()
+
+    /// Our own servers left behind by an instance that crashed or was killed
+    /// before `stop()` ran: re-parented to launchd, and sometimes stopped, so
+    /// they hold ports nothing can read and ignore SIGTERM until continued
+    /// (#546). Only a server whose parent is launchd is taken. One started by
+    /// another Codenotch still running has that instance as its parent.
+    static func orphanPIDs(in processTable: String, appDataDir: String = "codenotch-bridge") -> [Int32] {
+        processTable.split(separator: "\n").compactMap { line in
+            let fields = line.split(separator: " ", maxSplits: 2, omittingEmptySubsequences: true)
+            guard fields.count == 3, let pid = Int32(fields[0]), fields[1] == "1",
+                  fields[2].contains("language_server"),
+                  value(of: "--app_data_dir", in: String(fields[2])) == appDataDir
+            else { return nil }
+            return pid
+        }
+    }
+
+    static func reapOrphans() {
+        // A test run is a running Codenotch: it has no business signalling
+        // processes on the developer's machine.
+        guard !Runtime.isUnderTest else { return }
+        for pid in orphanPIDs(in: run("/bin/ps", ["-axo", "pid=,ppid=,command="])) {
+            Log.usage.notice("antigravity: ending a bridge server left by an earlier run (pid \(pid, privacy: .public))")
+            kill(pid, SIGCONT)
+            kill(pid, SIGTERM)
+        }
+    }
 
     /// The same flags the IDE passes its own server, minus everything that wires
     /// it to a running IDE — there is none. `--standalone` is what makes it
@@ -331,7 +403,7 @@ enum AntigravityBridge {
 
     // MARK: - Plumbing
 
-    private static func run(_ path: String, _ arguments: [String]) -> String {
+    static func run(_ path: String, _ arguments: [String]) -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = arguments

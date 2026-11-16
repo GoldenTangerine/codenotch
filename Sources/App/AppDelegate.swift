@@ -107,12 +107,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let codexProfiles = CodexProfile.discover()
     private let commandCodeProfiles = CommandCodeProfile.discover()
     private let antigravityProfiles = AntigravityProfile.discover()
+    private let grokProfiles = GrokProfile.discover()
     /// Held as concrete providers, not just handed to the store: the token
     /// refresher needs to ask one of them how long its token has left, and the
     /// protocol has no business carrying that.
     private var claudeProviders: [ClaudeOAuthProvider] = []
     /// MiniMax Platform sign-in sheet. Not a UsageProvider — that is MiniMaxProvider.
     private var miniMaxWeb: WebSessionProvider?
+    private var manualProvider: ManualProvider?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Set here, not in the Info.plist: this call is applied at launch and
@@ -167,7 +169,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let miniMaxWeb = WebSessionProvider(site: Sites.minimax(region: preferences.minimaxRegion))
             self.miniMaxWeb = miniMaxWeb
             let miniMaxProvider = MiniMaxProvider(web: miniMaxWeb)
-            let webProviders: [WebSessionProvider] = [deepSeek, qoder]
+            // DeepSeek's ring is DeepSeekProvider, which reads either this
+            // sign-in or an API key, so the WebView is not a ring of its own.
+            let webProviders: [WebSessionProvider] = [qoder]
             fleet.signInItems = [deepSeek, miniMaxWeb, qoder].map { provider in
                 let name = provider.displayName
                 return (title: L10n.t("Sign in to \(name)…"),
@@ -186,9 +190,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.usage.info("codex profiles: \(self.codexProfiles.map(\.displayPath).joined(separator: ", "), privacy: .public)")
             Log.usage.info("antigravity profiles: \(self.antigravityProfiles.map(\.displayPath).joined(separator: ", "), privacy: .public)")
             // Named together rather than one by one: a name derived from the
-            // signed-in address can collide with another profile's, and only a
-            // caller holding every profile can see that.
-            let claudeNames = ClaudeProfile.displayNames(for: claudeProfiles)
+            // signed-in address can collide with another profile's, and a lone
+            // profile needs no name beyond "Claude" — only a caller holding
+            // every profile can see either.
+            //
+            // Claude Desktop can be signed in to an account that has no
+            // profile here, and so no ring (#509). Then the lone ring is not
+            // the only account in use, and is named for its own.
+            let desktopOnly = ClaudeDesktopSessionIndex().untrackedAccounts(among: claudeProfiles)
+            if !desktopOnly.isEmpty {
+                Log.usage.info("claude desktop: \(desktopOnly.count, privacy: .public) account(s) with no profile, so no ring; `CLAUDE_CONFIG_DIR=~/.claude-<name> claude` adds one")
+            }
+            let claudeNames = ClaudeProfile.displayNames(for: claudeProfiles,
+                                                         anotherAccountInUse: !desktopOnly.isEmpty)
             let claudeProviders = claudeProfiles.map {
                 ClaudeOAuthProvider(profile: $0, displayName: claudeNames[$0.id], loginCount: claudeProfiles.count)
             }
@@ -197,8 +211,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     + [CursorLocalProvider()]
                     + codexProfiles.map { CodexLocalProvider(profile: $0) }
                     + antigravityProfiles.map { AntigravityProvider(profile: $0) }
-                    + [GLMProvider(), miniMaxProvider, GrokLocalProvider(), GrokBotProvider(), DevinLocalProvider(), OpenCodeProvider(),
-                       GitHubCopilotProvider(), KimiProvider(), KiroProvider(),
+                    + [GLMProvider(), miniMaxProvider, GrokBotProvider(), DevinLocalProvider(), OpenCodeProvider()]
+                    + grokProfiles.map { GrokLocalProvider(profile: $0) }
+                    + [GitHubCopilotProvider(), KimiProvider(), KiroProvider(),
+                       HiggsfieldProvider(), KreaProvider(),
                        MuseLocalProvider(),
                        OllamaLocalProvider(endpoint: URL(string: preferences.ollamaEndpoint)!),
                        LMStudioLocalProvider(endpoint: URL(string: preferences.lmstudioEndpoint)!),
@@ -208,9 +224,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                        // re-reads the budget on every fetch, so a ceiling typed
                        // into Settings applies without a restart.
                        GeminiAPIProvider(budget: {
-                           Preferences.storedGeminiAPIMonthlyTokenBudget()
+                           Preferences.storedEffectiveCeiling(for: "gemini-api")
                        })]
                     + commandCodeProfiles.map { CommandCodeProvider(profile: $0) }
+                    + {
+                        let manual = ManualProvider(
+                            limitProvider: { Preferences.storedManualProviderLimit() },
+                            scheduleProvider: { Preferences.storedManualProviderSchedule() }
+                        )
+                        self.manualProvider = manual
+                        return [manual as UsageProvider]
+                    }()
+                    + [DeepSeekProvider(web: deepSeek)]
                     + webProviders
             preferences.reconcile(discoveredIDs: nativeProviders.map(\.id))
             let catalog = QueryCatalog(providers: nativeProviders,
@@ -221,6 +246,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 disconnected: preferences.disconnectedIDs(among: catalog.entries.map(\.id)), configured: true,
                 order: preferences.providerOrder
             )
+            self.manualProvider?.onChanged = { [weak store] in
+                Task { @MainActor in
+                    _ = store?.refresh(providerID: "manual")
+                }
+            }
             let applyCatalog: (Set<String>) -> Void = { [weak self, weak catalog, weak store, weak fleet, weak preferences] invalidated in
                 guard let catalog, let store, let preferences else { return }
                 preferences.reconcileCatalog(catalog.entries)
@@ -574,13 +604,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
             let statusItem = StatusItemController { [weak settings] in settings?.show() }
             self.statusItem = statusItem
-            statusItem.onRefreshProvider = { [weak store] id in store?.refresh(providerID: id) }
-            statusItem.onRefreshAll = { [weak store] in store?.refreshNow() }
+            // The cards in the menu are drawn from the fleet's panel-less
+            // model — the very snapshots and Appearance settings the notches
+            // are handed. No provider is read to open the menu and no second
+            // store is kept: the menu is another reader of the one the notch
+            // already reads, which is what keeps the two from disagreeing.
+            statusItem.model = fleet.menuModel
             // The menu's tick writes to the same preference Settings writes to,
             // and reads nothing back of its own: the sink below carries the new
             // value to the item, and Settings — a published property away —
             // redraws its own switch from it in the same breath.
             statusItem.onToggleLimits = { [weak preferences] in preferences?.showsLimitsInMenuBar = $0 }
+            // A card's own switch, written back the same way: into Preferences,
+            // and read back through the sink below. The controller keeps no
+            // copy, so the switch and what the card draws cannot disagree.
+            statusItem.onToggleDetail = { [weak preferences] id, expanded in
+                preferences?.setDetailExpanded(expanded, for: id)
+            }
+            statusItem.expandedDetail = preferences.expandedDetailProviders
             // Read when the menu opens, so a model's line is as current as its cell.
             statusItem.cells = { [weak fleet] in fleet?.menuModel.snapshots ?? [] }
             statusItem.activity = { [weak fleet] in fleet?.menuModel.activity(for: $0) }
@@ -590,6 +631,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             statusItem.limits = preferences.menuBarLimits
             statusItem.resetTimeFormat = preferences.resetTimeFormat
             statusItem.showsWeeklyLimit = preferences.showsWeeklyLimitInMenuBar
+            statusItem.showsRemaining = preferences.showsRemainingInNotch
+            statusItem.hidesDepleted = preferences.hideDepletedAccounts
+            statusItem.clickAction = preferences.menuBarClickAction
+            statusItem.autoOrders = preferences.ringOrder == .remaining
+            statusItem.reading = preferences.menuBarReading
+            statusItem.visualMode = preferences.menuBarVisualMode
+            statusItem.activityStyle = preferences.menuBarActivityStyle
 
             preferences.$appPresence
                 .receive(on: RunLoop.main)
@@ -613,12 +661,67 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak statusItem] in statusItem?.limits = $0 }
                 .store(in: &cancellables)
 
+            // Dispatch, not the run loop, for the reason the limit switch
+            // above gives: this lands while AppKit is still tracking the menu
+            // the card is in, which is exactly when a card is opened.
+            preferences.$expandedDetailProviders
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak statusItem] in statusItem?.expandedDetail = $0 }
+                .store(in: &cancellables)
+
             // Presentation only, like the parent limit switch: redraw from the
             // current snapshots immediately and never start another fetch.
             preferences.$showsWeeklyLimitInMenuBar
                 .removeDuplicates()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak statusItem] in statusItem?.showsWeeklyLimit = $0 }
+                .store(in: &cancellables)
+
+            // The notch's own two display choices, which the item's face now
+            // answers as well. Presentation only, like everything above: the
+            // same readings, read from the other end or one account shorter.
+            preferences.$showsRemainingInNotch
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak statusItem] in statusItem?.showsRemaining = $0 }
+                .store(in: &cancellables)
+
+            preferences.$hideDepletedAccounts
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak statusItem] in statusItem?.hidesDepleted = $0 }
+                .store(in: &cancellables)
+
+            preferences.$menuBarClickAction
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak statusItem] in statusItem?.clickAction = $0 }
+                .store(in: &cancellables)
+
+            preferences.$ringOrder
+                .map { $0 == .remaining }
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak statusItem] in statusItem?.autoOrders = $0 }
+                .store(in: &cancellables)
+
+            preferences.$menuBarReading
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak statusItem] in statusItem?.reading = $0 }
+                .store(in: &cancellables)
+
+            preferences.$menuBarVisualMode
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak statusItem] in statusItem?.visualMode = $0 }
+                .store(in: &cancellables)
+
+            preferences.$menuBarActivityStyle
+                .removeDuplicates()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak statusItem] in statusItem?.activityStyle = $0 }
                 .store(in: &cancellables)
 
             preferences.$notchVisibility
@@ -665,9 +768,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] editing in fleet?.previewGeometry(editing: editing) }
                 .store(in: &cancellables)
 
-            preferences.$foldsForFullScreen
+            preferences.$autoHideMode
                 .receive(on: RunLoop.main)
-                .sink { [weak fleet] in fleet?.apply(foldsForFullScreen: $0) }
+                .sink { [weak fleet] in fleet?.apply(autoHideMode: $0) }
                 .store(in: &cancellables)
 
             preferences.$deepSeekPricingEnabled
@@ -692,6 +795,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     let deepSeekOn = (catalog?.automaticEntryIDs(for: "deepseek") ?? [])
                         .contains { preferences?.isConnected($0) ?? false }
                     ChineseHolidays.shared.setActive(enabled && schedule.offPeakOnChineseHolidays && deepSeekOn)
+                }
+                .store(in: &cancellables)
+
+            // The sign-in and a key can be different accounts, so the old
+            // source's reading is discarded rather than shown under the new one.
+            preferences.$deepSeekSource
+                .dropFirst()
+                .removeDuplicates()
+                .receive(on: RunLoop.main)
+                .sink { [weak store, weak catalog] _ in
+                    // 与 MiniMax 切换区域一致：作废查询目录中 DeepSeek 条目的旧读数后重新读取。
+                    store?.providerAccountChanged()
+                    for id in catalog?.automaticEntryIDs(for: "deepseek") ?? [] {
+                        store?.invalidateUsageSource(providerID: id)
+                        store?.refresh(providerID: id)
+                    }
                 }
                 .store(in: &cancellables)
 
@@ -933,11 +1052,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
                 .store(in: &cancellables)
 
+            preferences.$planCeilingMode
+                .dropFirst()
+                .receive(on: RunLoop.main)
+                .sink { [weak store] _ in store?.refresh(providerID: "gemini-api") }
+                .store(in: &cancellables)
+
             // Limit crossings become notifications here rather than inside
             // the store: the store fetches, the notifier decides what is
             // worth interrupting someone for, and neither needs to know the
             // other.
             let notifier = ThresholdNotifier(
+                warningThreshold: { [weak preferences] in preferences?.ceilingWarningThreshold ?? 80 },
                 isMuted: { [weak preferences] in preferences?.isMutedAlerts(for: $0) ?? false },
                 deliver: { [weak self] in self?.announceThreshold($0) }
             )
@@ -981,6 +1107,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     notifier.observe(snapshots)
                     resetWatcher.observe(snapshots)
                     limitWatcher.observe(snapshots)
+                    for snapshot in snapshots {
+                        if let used = snapshot.headline?.used, used > 0 {
+                            self?.preferences?.recordPeakUsage(providerID: snapshot.id, used: used)
+                        }
+                    }
                 }
                 .store(in: &cancellables)
             codeSwitch.$displayedSnapshots.dropFirst().receive(on: RunLoop.main)
@@ -993,7 +1124,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak self] _ in self?.updateActivity() }
                 .store(in: &cancellables)
             // 自动排序和隐藏只改变刘海中本机账号的显示，额度提醒与菜单栏仍使用完整读数。
-            preferences.$autoOrderByRemaining.combineLatest(preferences.$hideDepletedAccounts)
+            preferences.$ringOrder.combineLatest(preferences.$hideDepletedAccounts)
                 .dropFirst().receive(on: RunLoop.main)
                 .sink { [weak self] _, _ in self?.updateActivity() }
                 .store(in: &cancellables)
@@ -1022,9 +1153,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             statusItem.onLook = { [weak store] in store?.refreshBecauseSomeoneIsLooking() }
             fleet.onLook = { [weak store] in store?.refreshBecauseSomeoneIsLooking() }
-            statusItem.onRefreshAll = fleet.onRefresh
-            statusItem.onRefreshProvider = { [weak fleet] id in
-                Task { await fleet?.onRefreshProvider?(id) }
+            // 菜单中的“全部刷新”需要等待本机与联动读数都完成后再结束“刷新中”状态。
+            statusItem.onRefreshAll = { [weak store, weak codeSwitch] in
+                // Somebody's own click, so it is not answered from anything held:
+                // see `UsageFreshness.fromSource`.
+                let local = store?.refreshNow(freshness: .fromSource)
+                let linked = codeSwitch?.refresh()
+                guard local != nil || linked != nil else { return nil }
+                return Task { await local?.value; await linked?.value }
             }
             store.$refreshing.combineLatest(codeSwitch.$refreshing)
                 .receive(on: RunLoop.main)
@@ -1035,9 +1171,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // and logs the API calls it makes — for finding an undocumented
             // endpoint by watching the site rather than guessing at path names.
             if let target = ProcessInfo.processInfo.environment["CODENOTCH_DISCOVER"],
-               let url = URL(string: target),
-               let provider = webProviders.first(where: { url.host?.contains($0.id) == true })
-                   ?? webProviders.first {
+               let url = URL(string: target) {
+                let provider = ([deepSeek] + webProviders).first(where: { url.host?.contains($0.id) == true })
+                    ?? deepSeek
                 Task {
                     let calls = await provider.recordCalls(on: url)
                     Log.usage.notice("discovered: \(calls.joined(separator: "  "), privacy: .public)")
@@ -1050,10 +1186,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // still working without you switching to it.
         var monitors: [String: any AgentActivityMonitor] = [
             "cursor": CursorActivityMonitor(),
-            "grok": GrokActivityMonitor(),
             "gemini-api": GeminiAPIActivityMonitor(),
             "kimi": KimiActivityMonitor(),
         ]
+        for profile in grokProfiles {
+            monitors[profile.id] = GrokActivityMonitor(
+                activeURL: profile.configDirectory.appendingPathComponent("active_sessions.json"),
+                sessionsRoot: profile.configDirectory.appendingPathComponent("sessions")
+            )
+        }
         for profile in antigravityProfiles {
             monitors[profile.id] = AntigravityActivityMonitor(profile: profile)
         }
@@ -1270,7 +1411,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(showsSettingsHandle: preferences.showsSettingsHandle)
         fleet.apply(showsRemainingInNotch: preferences.showsRemainingInNotch)
         fleet.apply(shutRingsWhenSpent: preferences.shutRingsWhenSpent)
-        fleet.apply(foldsForFullScreen: preferences.foldsForFullScreen)
+        fleet.apply(autoHideMode: preferences.autoHideMode)
         fleet.apply(surfaceStyle: preferences.notchSurfaceStyle)
         fleet.apply(deepSeekPricingEnabled: preferences.deepSeekPricingEnabled)
         fleet.apply(deepSeekPricingSchedule: preferences.deepSeekPricingSchedule)
@@ -1344,7 +1485,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let arranged = ProviderOrder.arrangingLocal(routing.snapshots,
             hiding: preferences?.hideDepletedAccounts == true ? depletedLocalIDs : [],
-            byRemaining: preferences?.autoOrderByRemaining == true)
+            order: preferences?.ringOrder ?? .manual)
         if arrangedNotchSnapshots != arranged {
             arrangedNotchSnapshots = arranged
             notchFleet?.setSnapshots(arranged)
@@ -1361,6 +1502,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let busyIDs = Set(previous.filter { $0.state == .busy }.map(\.id))
             if routing.sessions[id]?.contains(where: { busyIDs.contains($0.id) && $0.state != .busy }) == true {
                 store?.refreshBecauseWorkFinished(providerID: id)
+            }
+        }
+        // 菜单栏图标的活动脉冲、等待红点与完成闪烁按路由后的会话驱动，
+        // 与刘海同源（含 Code Switch R 联动）；会话消失的供应商补发空列表以停止脉冲。
+        if let statusItem {
+            let previous = activityRouting?.sessions ?? [:]
+            for (id, sessions) in routing.sessions where previous[id] != sessions {
+                statusItem.setActivity(providerID: id, sessions: sessions)
+            }
+            for id in previous.keys where routing.sessions[id] == nil {
+                statusItem.setActivity(providerID: id, sessions: [])
             }
         }
         activityRouting = routing

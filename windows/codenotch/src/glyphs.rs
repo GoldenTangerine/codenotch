@@ -18,9 +18,7 @@
 //! None of those → the page falls back to a letter.
 //! SVGs are inlined into the DOM as text (`fill="currentColor"` follows the CSS white/dimmed state);
 //! 旧版说明保留；本次扩展后的行为见下方实现。
-//! PNGs and app icons go through <img>. Ids match the page and upstream: claude / codex / cursor / gemini.
-//! PNGs and app icons go through <img>. Ids match the page and upstream: claude / codex / cursor / grok / gemini.
-//! PNGs and app icons go through <img>. Ids match the page and upstream: claude / codex / cursor / grok / copilot / gemini / opencode.
+//! PNGs and app icons go through <img>. Ids match the page and upstream: claude / codex / cursor / grok / copilot / gemini / opencode / commandcode / deepseek / qoder.
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -38,10 +36,10 @@ pub struct Glyph {
     pub source: String,
 }
 
-pub const IDS: [&str; 7] = ["claude", "codex", "cursor", "grok", "copilot", "gemini", "opencode"];
+pub const IDS: [&str; 11] = ["claude", "codex", "cursor", "grok", "copilot", "gemini", "opencode", "commandcode", "deepseek", "qoder", "mistral"];
 
 /// Built-in artwork (@lobehub/icons-static-svg, MIT): the OpenAI mark for codex (matching upstream's glyph choice), the Antigravity mark for gemini
-const BUILTIN: [(&str, &str); 7] = [
+pub(crate) const BUILTIN: [(&str, &str); 11] = [
     ("claude", include_str!("../glyphs/claude.svg")),
     ("codex", include_str!("../glyphs/codex.svg")),
     ("cursor", include_str!("../glyphs/cursor.svg")),
@@ -49,6 +47,10 @@ const BUILTIN: [(&str, &str); 7] = [
     ("copilot", include_str!("../glyphs/copilot.svg")),
     ("gemini", include_str!("../glyphs/gemini.svg")),
     ("opencode", include_str!("../glyphs/opencode.svg")),
+    ("commandcode", include_str!("../glyphs/commandcode.svg")),
+    ("deepseek", include_str!("../glyphs/deepseek.svg")),
+    ("qoder", include_str!("../glyphs/qoder.svg")),
+    ("mistral", include_str!("../glyphs/mistral.svg")),
 ];
 
 /// Minimal SVG sanitising before inlining into the DOM: drop <script> blocks and on*="…" event
@@ -181,6 +183,9 @@ fn app_candidates(id: &str) -> Vec<PathBuf> {
             v.push(programs.join("Antigravity").join("Antigravity.exe"));
             v.push(programs.join("antigravity").join("Antigravity.exe"));
         }
+        "qoder" => {
+            v.push(programs.join("Qoder").join("Qoder.exe"));
+        }
         _ => {}
     }
     v.into_iter().filter(|p| p.is_file()).collect()
@@ -299,7 +304,7 @@ pub fn collect() -> HashMap<String, Glyph> {
                 found = Some(Glyph {
                     kind: "svg".into(),
                     svg: sanitize_svg(svg),
-                    source: "built-in · @lobehub/icons-static-svg 1.95.0 (MIT)".into(),
+                    source: if id == "commandcode" { "built-in · macOS Command Code asset" } else { "built-in · @lobehub/icons-static-svg 1.95.0 (MIT)" }.into(),
                     ..Default::default()
                 });
             }
@@ -322,7 +327,7 @@ pub fn collect() -> HashMap<String, Glyph> {
 /// For doctor
 pub fn probe() -> String {
     let m = collect();
-    let mut lines = vec![format!("glyph directory: {} (drop claude/codex/cursor/grok/copilot/gemini/opencode .svg or .png files here)", user_dir().display())];
+    let mut lines = vec![format!("glyph directory: {} (drop a provider .svg or .png file here)", user_dir().display())];
     for id in IDS {
         lines.push(match m.get(id) {
             Some(g) => format!("  {id}: {} ← {}", g.kind, g.source),

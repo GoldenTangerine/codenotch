@@ -145,6 +145,19 @@ enum Percent {
         return "\(Int(value.rounded()))"
     }
 
+    /// The same figure from the other end, for a menu bar set to read what is
+    /// left. Derived from the *rounded* used half, the rule `halves` follows,
+    /// so the bar and the tooltip under it never disagree by a point — and
+    /// with `whole`'s two guards answered from this end: a window barely
+    /// touched says ">99" rather than a full hundred, and one with a little
+    /// left says "<1" rather than "0".
+    static func wholeRemaining(for fraction: Double) -> String {
+        let value = max(0, fraction * 100)
+        if value > 0, value < 1 { return ">99" }
+        if value > 99, value < 100 { return "<1" }
+        return "\(max(0, 100 - Int(value.rounded())))"
+    }
+
     /// The share of the allowance the meters draw: spent by default, what is
     /// left when the notch is set that way. The one rule behind the ring's
     /// sweep, the card's bars, and every flipped figure — callers clamp to
@@ -385,6 +398,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
     var dailyPaceOriginalQuotaIDs: DailyPace.OriginalQuotaIDs? = nil
     var codeSwitchDailyUsage: CodeSwitchDailyUsage.Sample? = nil
     var customIconFilename: String? = nil
+    var customStatusMessage: String? = nil
 
     var providerID: String { sourceProviderID ?? id }
 
@@ -635,6 +649,9 @@ struct ProviderSnapshot: Identifiable, Equatable {
         case "cursor":     return L10n.t("Sign in to Cursor in the editor", locale: locale)
         case "grokbot":    return L10n.t("Sign in to Grok Bot in the app", locale: locale)
         case "codex":      return L10n.t("Sign in to Codex to read your usage", locale: locale)
+        // Missing or refused, the remedy is the same: a working key.
+        case "deepseek" where Preferences.storedDeepSeekSource() == .apiKey:
+            return L10n.t("Paste a valid DeepSeek API key in Settings, or export DEEPSEEK_API_KEY", locale: locale)
         case "deepseek":   return L10n.t("Sign in to DeepSeek Platform to read your usage", locale: locale)
         case "qoder": return L10n.t("Sign in to Qoder to read your credit usage", locale: locale)
         case "qianwenai":  return L10n.t("Sign in to QianwenAI to read your Token Plan usage", locale: locale)
@@ -656,6 +673,8 @@ struct ProviderSnapshot: Identifiable, Equatable {
             let slug = CommandCodeProfile.slug(fromProviderID: id)!
             return L10n.t("Sign in to Command Code in ~/.commandcode-\(slug) to read your usage", locale: locale)
         case "kiro":       return L10n.t("Sign in with kiro-cli to read your usage", locale: locale)
+        case "higgsfield": return L10n.t("Run hf auth login in Terminal, or paste a Higgsfield API key in Settings", locale: locale)
+        case "krea":       return L10n.t("Run krea auth login in Terminal, or paste a Krea API key in Settings", locale: locale)
         // Two Ollamas, and they are stuck for different reasons: the hosted
         // one wants a key, the local one wants the daemon running.
         case "ollama":       return L10n.t("Enter an Ollama API key in Settings, or export OLLAMA_API_KEY", locale: locale)
@@ -684,6 +703,7 @@ struct ProviderSnapshot: Identifiable, Equatable {
 
     /// What the tooltip says instead of limit rows when there is nothing to show.
     var statusMessage: String? {
+        if let customStatusMessage { return customStatusMessage }
         if isActivityOnly { return L10n.t("Provider not linked yet") }
         if kind == .localRuntime {
             if localModel != nil { return nil }

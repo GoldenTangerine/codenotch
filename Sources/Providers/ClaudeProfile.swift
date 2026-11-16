@@ -81,8 +81,14 @@ struct ClaudeProfile: Equatable, Hashable {
             }
             return candidate
         }
+        // `.claude-ops` and `.claude_ops` would share a slug, and the slug is
+        // the ring's id. The hyphen, the original spelling, keeps it.
+        var seen = Set<String>()
+        let unique = extras
+            .sorted { $0.configDirectory.lastPathComponent < $1.configDirectory.lastPathComponent }
+            .filter { seen.insert($0.slug!).inserted }
         return [ClaudeProfile.default(home: home)]
-            + extras.sorted { $0.slug! < $1.slug! }
+            + unique.sorted { $0.slug! < $1.slug! }
     }
 
     /// Whether Claude Code has ever filed a token for this profile's directory.
@@ -102,11 +108,17 @@ struct ClaudeProfile: Equatable, Hashable {
     /// `.claude-work` → `work`; anything else → nil. The bare `.claude` is the
     /// default and is handled separately; `.claude.json` is a file that lives
     /// beside it and is not a profile at all.
+    /// `~/.claude-<slug>`, and `~/.claude_<slug>`: an underscore is a common
+    /// spelling for a `CLAUDE_CONFIG_DIR` alias, and its account is as real
+    /// (#546). The credential check in `discover` still keeps plugin state out.
     static func slug(fromDirectoryName name: String) -> String? {
-        let prefix = directoryPrefix + "-"
-        guard name.hasPrefix(prefix) else { return nil }
-        let slug = String(name.dropFirst(prefix.count))
-        return slug.isEmpty ? nil : slug
+        for separator in ["-", "_"] {
+            let prefix = directoryPrefix + separator
+            guard name.hasPrefix(prefix) else { continue }
+            let slug = String(name.dropFirst(prefix.count))
+            return slug.isEmpty ? nil : slug
+        }
+        return nil
     }
 
     /// Any of the files Claude Code creates the first time it runs against a
@@ -146,6 +158,9 @@ struct ClaudeProfile: Equatable, Hashable {
     /// The old spelling is kept as the fallback rather than dropped: a profile
     /// whose `.claude.json` has not been written yet, or was signed out, still
     /// has to be named something, and the directory is all there is then.
+    ///
+    /// This is the name that tells a profile apart. Whether it needs telling
+    /// apart at all is for `displayNames(for:)`, which sees every profile.
     var displayName: String {
         guard let label = accountLabel() else {
             return slug.map { "Claude (\($0))" } ?? "Claude"
@@ -188,7 +203,22 @@ struct ClaudeProfile: Equatable, Hashable {
     /// company domain — would draw two rings with identical names, which is
     /// worse than the directory names this replaced. Only the profiles that
     /// actually collide pay the longer name.
-    static func displayNames(for profiles: [ClaudeProfile]) -> [String: String] {
+    ///
+    /// And a lone account is just `Claude`. The label is there to tell one ring
+    /// from another; with nothing to tell it from, `Claude Gmail Usage` over
+    /// the only Claude card reads as a product that does not exist.
+    ///
+    /// Unless `anotherAccountInUse`: Claude Desktop signed in to an account no
+    /// profile here is (`ClaudeDesktopSessionIndex.untrackedAccounts`). That
+    /// account has no ring, so the lone one is not the only Claude account on
+    /// the Mac, and a bare `Claude` left nobody able to tell which of the two
+    /// it was showing (#509).
+    static func displayNames(for profiles: [ClaudeProfile],
+                             anotherAccountInUse: Bool = false) -> [String: String] {
+        if profiles.count == 1, let only = profiles.first, !anotherAccountInUse {
+            return [only.id: "Claude"]
+        }
+
         var sharing: [String: Int] = [:]
         for profile in profiles { sharing[profile.displayName, default: 0] += 1 }
 

@@ -7,6 +7,7 @@
  @LastEditTime: 2026-09-11 15:51:14
  @FilePath: Tests/AntigravityTests.swift
  */
+import SQLite3
 import XCTest
 import Sparkle
 @testable import Codenotch
@@ -491,6 +492,34 @@ final class AntigravityQuotaTests: XCTestCase {
         XCTAssertEqual(providerWindows[1].usedFraction ?? -1, 0.45, accuracy: 0.0001)
         XCTAssertEqual(providerWindows[2].usedFraction ?? -1, 0, accuracy: 0.0001)
         XCTAssertEqual(providerWindows[3].usedFraction ?? -1, 0, accuracy: 0.0001)
+    }
+
+    /// The server names groups and windows in English whatever the app's
+    /// language. They used to reach the card and the menu bar as sent, so a
+    /// Spanish Mac read "Weekly Limit" under "Claude and GPT models".
+    func testTheServersEnglishNamesAreShownInTheAppsLanguage() {
+        let previousLocale = L10n.testLocale
+        L10n.testLocale = Locale(identifier: "es")
+        defer { L10n.testLocale = previousLocale }
+
+        let grouped = Data("""
+        {"groups":[{"displayName":"Claude and GPT models","buckets":[
+          {"bucketId":"3p-5h","displayName":"Five Hour Limit Remaining","remainingFraction":1},
+          {"bucketId":"3p-weekly","displayName":"Weekly Limit","remainingFraction":1}]}]}
+        """.utf8)
+        let groupedWindows = AntigravityProvider.windows(in: grouped)
+        XCTAssertEqual(groupedWindows.map(\.group), ["Modelos Claude y GPT", "Modelos Claude y GPT"])
+        XCTAssertEqual(groupedWindows.map(\.label), ["Límite de 5 horas", "Límite semanal"])
+
+        let now = Date(timeIntervalSince1970: 1788900000)
+        let models = Data("""
+        {"buckets":[
+          {"modelId":"gemini-2.5-pro","remainingFraction":0.9,"resetTime":"2026-09-09T10:39:57Z"},
+          {"modelId":"claude-sonnet-4-6","remainingFraction":0.8,"resetTime":"2026-09-16T10:39:57Z"}]}
+        """.utf8)
+        let modelWindows = AntigravityProvider.windows(in: models, now: now)
+        XCTAssertEqual(modelWindows.map(\.group), ["Modelos Gemini", "Modelos Claude y GPT"])
+        XCTAssertEqual(modelWindows.map(\.label), ["Límite de 5 horas", "Límite semanal"])
     }
 
     func testDirectCloudCodeIgnoresInvalidFractions() {
@@ -1488,9 +1517,10 @@ final class StatusMenuTests: XCTestCase {
         XCTAssertEqual(details, ["Sign in to Codex to read your usage"])
     }
 
-    /// The header carries the headline figure and the reading's age — the same
-    /// pair the tooltip header shows.
-    func testTheMenuListsEveryProviderWithRefreshAndSettings() {
+    /// Every provider gets a card, and the card carries the headline figure
+    /// and the reading's age — the same pair the tooltip header shows — with
+    /// its windows in the words accessibility is handed.
+    func testTheMenuDrawsEveryProviderWithRefreshAndSettings() throws {
         let controller = StatusItemController(onOpenSettings: {})
         controller.snapshots = [snapshot(
             status: .stale(since: now.addingTimeInterval(-(20 * 3600 + 21 * 60))),
@@ -1503,12 +1533,15 @@ final class StatusMenuTests: XCTestCase {
         let titles = menu.items.map(\.title)
         XCTAssertTrue(titles[0].contains("Codex — 29%"), titles[0])
         XCTAssertTrue(titles[0].contains("20 hr 21 min ago"), titles[0])
-        XCTAssertTrue(titles[1].contains("Weekly limit"), titles[1])
-        XCTAssertTrue(titles[1].contains("29% Used · 71% left"), titles[1])
+        XCTAssertNotNil(menu.items[0].view, "the provider was drawn as text")
+        let heard = try XCTUnwrap(menu.items[0].accessibilityLabel())
+        XCTAssertTrue(heard.contains("Weekly limit"), heard)
+        XCTAssertTrue(heard.contains("29% Used · 71% left"), heard)
         XCTAssertTrue(titles.contains("Refresh all"))
         XCTAssertTrue(titles.contains("Settings…"))
         XCTAssertTrue(titles.contains("Quit Codenotch"))
-        // The header re-reads its own provider.
+        // The card knows which provider it is drawn for, so an open menu can
+        // put a fresh reading on it without being rebuilt.
         XCTAssertEqual(menu.items[0].representedObject as? String, "codex")
     }
 
@@ -1902,4 +1935,310 @@ private final class GoogleStub: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+
+final class AntigravityFlavorSelectionTests: XCTestCase {
+    func testRunningProcessBeatsNonRunningEvenWithOlderActivity() {
+        let ide = FlavorCandidate(
+            flavor: .ide,
+            credentials: nil,
+            isRunning: true,
+            lastActivity: Date(timeIntervalSince1970: 1000),
+            canProvideQuota: true,
+            isActive: true
+        )
+        let acp = FlavorCandidate(
+            flavor: .acp,
+            credentials: nil,
+            isRunning: false,
+            lastActivity: Date(timeIntervalSince1970: 2000),
+            canProvideQuota: true,
+            isActive: true
+        )
+
+        let ranked = AntigravityFlavor.rankCandidates([acp, ide])
+        XCTAssertEqual(ranked.first?.flavor, .ide, "A live running process must strictly beat a non-running one")
+    }
+
+    func testMultipleRunningTieBreaksByMostRecentActivity() {
+        let ide = FlavorCandidate(
+            flavor: .ide,
+            credentials: nil,
+            isRunning: true,
+            lastActivity: Date(timeIntervalSince1970: 1000),
+            canProvideQuota: true,
+            isActive: true
+        )
+        let acp = FlavorCandidate(
+            flavor: .acp,
+            credentials: nil,
+            isRunning: true,
+            lastActivity: Date(timeIntervalSince1970: 2000),
+            canProvideQuota: true,
+            isActive: true
+        )
+
+        let ranked = AntigravityFlavor.rankCandidates([ide, acp])
+        XCTAssertEqual(ranked.first?.flavor, .acp, "When multiple are running, newest activity wins")
+    }
+
+    func testMultipleRunningTieBreaksByPrecedenceWhenActivityIsMissingOrTied() {
+        let cli = FlavorCandidate(
+            flavor: .cli,
+            credentials: nil,
+            isRunning: true,
+            lastActivity: nil,
+            canProvideQuota: true,
+            isActive: true
+        )
+        let acp = FlavorCandidate(
+            flavor: .acp,
+            credentials: nil,
+            isRunning: true,
+            lastActivity: nil,
+            canProvideQuota: true,
+            isActive: true
+        )
+        let ide = FlavorCandidate(
+            flavor: .ide,
+            credentials: nil,
+            isRunning: true,
+            lastActivity: nil,
+            canProvideQuota: true,
+            isActive: true
+        )
+
+        let ranked = AntigravityFlavor.rankCandidates([cli, acp, ide])
+        XCTAssertEqual(ranked.map(\.flavor), [.ide, .acp, .cli], "Tie-breaker precedence must be IDE > ACP > CLI")
+    }
+
+    func testNoRunningProcessesTieBreaksByMostRecentActivity() {
+        let ide = FlavorCandidate(
+            flavor: .ide,
+            credentials: nil,
+            isRunning: false,
+            lastActivity: Date(timeIntervalSince1970: 1000),
+            canProvideQuota: true,
+            isActive: true
+        )
+        let cli = FlavorCandidate(
+            flavor: .cli,
+            credentials: nil,
+            isRunning: false,
+            lastActivity: Date(timeIntervalSince1970: 3000),
+            canProvideQuota: true,
+            isActive: true
+        )
+        let acp = FlavorCandidate(
+            flavor: .acp,
+            credentials: nil,
+            isRunning: false,
+            lastActivity: Date(timeIntervalSince1970: 2000),
+            canProvideQuota: true,
+            isActive: true
+        )
+
+        let ranked = AntigravityFlavor.rankCandidates([ide, cli, acp])
+        XCTAssertEqual(ranked.map(\.flavor), [.cli, .acp, .ide])
+    }
+
+    func testRunningFlavorsDetection() {
+        let table = """
+        100 /sbin/launchd
+        200 /Applications/Antigravity.app/Contents/Resources/bin/language_server --csrf_token 123
+        300 /usr/local/bin/agy
+        400 /Users/test/external_agents/antigravity-acp/agy_acp_server.par
+        """
+        let running = AntigravityFlavor.runningFlavors(processTable: table)
+        XCTAssertTrue(running.contains(.ide))
+        XCTAssertTrue(running.contains(.cli))
+        XCTAssertTrue(running.contains(.acp))
+    }
+
+    func testFlavorDisplayNames() {
+        XCTAssertEqual(AntigravityFlavor.ide.displayName, "Antigravity IDE")
+        XCTAssertEqual(AntigravityFlavor.cli.displayName, "Antigravity CLI")
+        XCTAssertEqual(AntigravityFlavor.acp.displayName, "Antigravity ACP")
+    }
+}
+
+/// The fallback that reads the last quota oh-my-pi (omp) recorded.
+///
+/// The table is built from omp's own `CREATE TABLE usage_history`
+/// (packages/ai/src/auth/sqlite-credential-store.ts) and the rows use the
+/// limit ids omp writes for an Antigravity quota summary
+/// (packages/ai/src/usage/google-antigravity.ts), so a query that names a
+/// column omp does not have fails here the way it fails on a real Mac.
+final class AntigravityOmpUsageTests: XCTestCase {
+    private let directory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("AntigravityOmpUsageTests", isDirectory: true)
+    private var databaseURL: URL { directory.appendingPathComponent("agent.db") }
+    private let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    override func setUpWithError() throws {
+        try? FileManager.default.removeItem(at: directory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(databaseURL.path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        XCTAssertEqual(sqlite3_exec(db, """
+            CREATE TABLE IF NOT EXISTS usage_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                recorded_at INTEGER NOT NULL,
+                provider TEXT NOT NULL,
+                account_key TEXT NOT NULL,
+                email TEXT,
+                account_id TEXT,
+                limit_id TEXT NOT NULL,
+                label TEXT NOT NULL,
+                window_label TEXT,
+                used_fraction REAL,
+                status TEXT,
+                resets_at INTEGER
+            );
+            """, nil, nil, nil), SQLITE_OK)
+    }
+
+    override func tearDownWithError() throws {
+        try? FileManager.default.removeItem(at: directory)
+    }
+
+    private func milliseconds(_ date: Date) -> Int64 { Int64(date.timeIntervalSince1970 * 1000) }
+
+    /// One row as omp's `recordUsageSnapshots` writes it.
+    private func record(_ limitID: String, label: String, window: String, used: Double,
+                        resetsIn: TimeInterval, email: String = "me@example.com",
+                        recordedAgo: TimeInterval = 60) {
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(databaseURL.path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let sql = """
+            INSERT INTO usage_history (recorded_at, provider, account_key, email, account_id,
+                limit_id, label, window_label, used_fraction, status, resets_at)
+            VALUES (\(milliseconds(now.addingTimeInterval(-recordedAgo))), 'google-antigravity',
+                '\(email)', '\(email)', NULL, 'google-antigravity:\(limitID)', '\(label)',
+                '\(window)', \(used), 'ok', \(milliseconds(now.addingTimeInterval(resetsIn))));
+            """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+    }
+
+    private func windows(forEmail email: String? = nil) -> [String: LimitWindow] {
+        let read = AntigravityProvider.ompUsage(forEmail: email, databaseURL: databaseURL, now: now).windows
+        return Dictionary(uniqueKeysWithValues: read.map { ($0.id, $0) })
+    }
+
+    func testItReadsTheQuotaOmpRecorded() throws {
+        record("google:default:gemini-5h", label: "Gemini", window: "5 Hour", used: 0.25, resetsIn: 3600)
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.4, resetsIn: 3 * 86400)
+        // omp files the one shared third-party bucket under both counters.
+        record("anthropic:default:3p-weekly", label: "Claude & GPT (shared)", window: "Weekly", used: 0.1, resetsIn: 2 * 86400)
+        record("openai:default:3p-weekly", label: "Claude & GPT (shared)", window: "Weekly", used: 0.1, resetsIn: 2 * 86400)
+
+        let read = windows()
+        XCTAssertEqual(Set(read.keys), ["gemini-hourly", "gemini-weekly", "3p-weekly"])
+        XCTAssertEqual(try XCTUnwrap(read["gemini-hourly"]?.usedFraction), 0.25, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(read["gemini-weekly"]?.usedFraction), 0.4, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(read["3p-weekly"]?.usedFraction), 0.1, accuracy: 1e-9)
+        XCTAssertEqual(read["gemini-weekly"]?.duration, 7 * 86400)
+        // resets_at is in milliseconds.
+        XCTAssertEqual(try XCTUnwrap(read["gemini-hourly"]?.resetsAt?.timeIntervalSince(now)), 3600, accuracy: 0.01)
+    }
+
+    /// The newest row per window wins: omp keeps a history, not a snapshot.
+    func testTheNewestReadingWins() throws {
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.2, resetsIn: 86400, recordedAgo: 7200)
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.3, resetsIn: 86400, recordedAgo: 60)
+        XCTAssertEqual(try XCTUnwrap(windows()["gemini-weekly"]?.usedFraction), 0.3, accuracy: 1e-9)
+    }
+
+    /// Another account's newer reading is not this account's.
+    func testItReadsOnlyTheSignedInAccount() throws {
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.6, resetsIn: 86400,
+               email: "me@example.com", recordedAgo: 600)
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.9, resetsIn: 86400,
+               email: "other@example.com", recordedAgo: 60)
+        XCTAssertEqual(try XCTUnwrap(windows(forEmail: "me@example.com")["gemini-weekly"]?.usedFraction), 0.6, accuracy: 1e-9)
+    }
+
+    /// A window that has reset since omp read it no longer has that usage.
+    func testAWindowThatHasResetIsLeftOut() {
+        record("google:default:gemini-5h", label: "Gemini", window: "5 Hour", used: 0.8, resetsIn: -60)
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.4, resetsIn: 86400)
+        XCTAssertEqual(Set(windows().keys), ["gemini-weekly"])
+    }
+
+    /// Argon's weekly allowance is its own; it must not stand in for Gemini's.
+    func testArgonIsNotReadAsGemini() throws {
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.1, resetsIn: 86400, recordedAgo: 120)
+        record("google:default:gemini-argon-weekly", label: "Gemini (Argon)", window: "Weekly", used: 0.95, resetsIn: 86400, recordedAgo: 60)
+        XCTAssertEqual(try XCTUnwrap(windows()["gemini-weekly"]?.usedFraction), 0.1, accuracy: 1e-9)
+    }
+
+    /// No reading is no window, never a made-up 0%.
+    func testAFamilyOmpNeverReadIsAbsent() {
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.4, resetsIn: 86400)
+        XCTAssertNil(windows()["3p-weekly"])
+        XCTAssertNil(windows()["3p-hourly"])
+    }
+
+    func testNoDatabaseIsNoReading() {
+        XCTAssertEqual(AntigravityProvider.ompUsage(
+            databaseURL: directory.appendingPathComponent("missing.db"), now: now).windows.count, 0)
+    }
+
+    /// The rows omp writes from `fetchAvailableModels`, one per tier.
+    func testItReadsThePerModelShapeAndKeepsTheMostUsedTier() throws {
+        record("google:standard-tier:weekly", label: "Usage (Google)", window: "Weekly", used: 0.2, resetsIn: 86400)
+        record("google:free-tier:weekly", label: "Usage (Google)", window: "Weekly", used: 0.7, resetsIn: 86400)
+        record("anthropic:standard-tier:daily", label: "Usage (Anthropic)", window: "Daily", used: 0.3, resetsIn: 3600)
+        let read = windows()
+        XCTAssertEqual(try XCTUnwrap(read["gemini-weekly"]?.usedFraction), 0.7, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(read["3p-hourly"]?.usedFraction), 0.3, accuracy: 1e-9)
+    }
+
+    /// omp's `default` counter is a quota it could not place in a family, so
+    /// it is not Claude and GPT's either.
+    func testAQuotaOfNoFamilyIsLeftOut() {
+        record("default:default:mystery-weekly", label: "Usage", window: "Weekly", used: 0.9, resetsIn: 86400)
+        XCTAssertTrue(windows().isEmpty)
+    }
+
+    /// A row with no reset time cannot age out by itself, so a week is the cap.
+    func testAnOldReadingWithNoResetIsLeftOut() {
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(databaseURL.path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let old = milliseconds(now.addingTimeInterval(-8 * 86400))
+        XCTAssertEqual(sqlite3_exec(db, """
+            INSERT INTO usage_history (recorded_at, provider, account_key, email, limit_id, label,
+                window_label, used_fraction, resets_at)
+            VALUES (\(old), 'google-antigravity', 'k', 'me@example.com',
+                'google-antigravity:google:default:gemini-weekly', 'Gemini', 'Weekly', 0.5, NULL);
+            """, nil, nil, nil), SQLITE_OK)
+        XCTAssertTrue(windows().isEmpty)
+    }
+
+    /// The caller needs the reading's age to call it stale rather than live.
+    func testItSaysWhenTheReadingWasTaken() throws {
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.4, resetsIn: 86400, recordedAgo: 3600)
+        let read = AntigravityProvider.ompUsage(databaseURL: databaseURL, now: now)
+        XCTAssertEqual(try XCTUnwrap(read.recordedAt?.timeIntervalSince(now)), -3600, accuracy: 0.01)
+    }
+
+    func testTheAccountMatchIgnoresCase() throws {
+        record("google:default:gemini-weekly", label: "Gemini", window: "Weekly", used: 0.4, resetsIn: 86400, email: "Me@Example.com")
+        XCTAssertEqual(try XCTUnwrap(windows(forEmail: "me@example.com")["gemini-weekly"]?.usedFraction), 0.4, accuracy: 1e-9)
+    }
+
+    /// Only our own server, and only once launchd has adopted it (#546).
+    func testOnlyOrphanedBridgeServersAreReaped() {
+        let table = """
+          101     1 /Applications/Antigravity.app/language_server_macos_arm --standalone --app_data_dir codenotch-bridge --csrf_token a
+          102   900 /Applications/Antigravity.app/language_server_macos_arm --standalone --app_data_dir codenotch-bridge --csrf_token b
+          103     1 /Applications/Antigravity.app/language_server_macos_arm --app_data_dir antigravity --csrf_token c
+          104     1 /bin/zsh -c echo --app_data_dir codenotch-bridge
+        """
+        XCTAssertEqual(AntigravityBridge.orphanPIDs(in: table), [101])
+    }
 }

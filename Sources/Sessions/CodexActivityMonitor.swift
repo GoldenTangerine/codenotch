@@ -223,6 +223,10 @@ final class CodexActivityMonitor: ObservableObject, AgentActivityMonitor {
                      usesRolloutCompletion: Bool = false,
                      rolloutCache: CodexRolloutActivity.Cache? = nil,
                      storeCache: CodexStoreCache = CodexStoreCache()) -> [AgentSession] {
+        // codex-auth 多账号共用同一个 ~/.codex，只有当前激活的账号才能认领活动。
+        if profile.isCodexAuth && !profile.isCurrentlyActive {
+            return []
+        }
         // Both surfaces, because "Codex" is two programs that record their work
         // in different places: the CLI and the VS Code extension append to a
         // rollout, and the desktop app writes to its own catalogue. Whichever

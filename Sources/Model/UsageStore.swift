@@ -325,7 +325,7 @@ final class UsageStore: ObservableObject {
         languageObserver = NotificationCenter.default.addObserver(
             forName: L10n.didChange, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshNow() }
+            MainActor.assumeIsolated { _ = self?.refreshNow() }
         }
     }
 
@@ -397,22 +397,33 @@ final class UsageStore: ObservableObject {
         isBusy || resetDue || sinceLastAttempt >= idleInterval
     }
 
-    func refreshNow(freshness: UsageFreshness = .fromSource) {
+    /// Starts a pass over every provider, or joins the one already running.
+    ///
+    /// Returns that pass for a caller that has to say when it is over — the
+    /// menu's "Refresh all" reads "Refreshing…" until then. A pass wedged
+    /// behind a keychain prompt can outlive `refreshDeadline`, so a caller
+    /// waiting on it needs a way to stop waiting of its own.
+    @discardableResult
+    func refreshNow(freshness: UsageFreshness = .fromSource) -> Task<Void, Never>? {
+        // 自定义查询周期下逐个条目刷新，返回一个等待全部条目完成的任务供菜单显示“刷新中”。
         if usesConfiguredSchedule {
-            for provider in providers { refresh(providerID: provider.id, freshness: freshness) }
-            return
+            let passes = providers.compactMap { refresh(providerID: $0.id, freshness: freshness) }
+            guard !passes.isEmpty else { return nil }
+            return Task { for pass in passes { await pass.value } }
         }
         guard !isRefreshing else {
             Log.usage.notice("refresh skipped: one already in flight")
-            return
+            return refreshTask
         }
         isRefreshing = true
         lastAttempt = pollingNow()
-        refreshTask = Task { [weak self] in
+        let pass = Task { [weak self] in
             await self?.refresh(freshness: freshness)
             self?.finish()
         }
+        refreshTask = pass
         armDeadline()
+        return pass
     }
 
     /// Stops waiting for a pass that has not come back, so the next tick can
@@ -879,6 +890,33 @@ final class UsageStore: ObservableObject {
         let age = Date().timeIntervalSince(previous.fetchedAt)
         var snapshot = previous.snapshot
         snapshot.status = age > staleAfter ? .stale(since: previous.fetchedAt) : previous.snapshot.status
+        // A quota that is effectively exhausted (about 1% left or less) and is
+        // now being rejected has, in practice, hit zero: the last successful
+        // poll simply never reached 100%. Reflect that rather than leaving a
+        // stuck 1% on screen. Muse is the case that trips this, but the rule
+        // is general — a 429 at ~1% remaining means there is nothing left.
+        if case UsageProviderError.rateLimited = error,
+           let used = snapshot.headline?.usedFraction, used >= 0.99 {
+            if let headlineID = snapshot.headlineID,
+               let idx = snapshot.windows.firstIndex(where: { $0.id == headlineID }) {
+                let w = snapshot.windows[idx]
+                snapshot.windows[idx] = LimitWindow(id: w.id, group: w.group, label: w.label,
+                    usedFraction: 1, remaining: w.remaining, used: w.used, usedText: w.usedText,
+                    detail: w.detail, money: w.money, resetsAt: w.resetsAt, quantity: w.quantity,
+                    duration: w.duration, bandOverride: w.bandOverride,
+                    prefersUsedText: w.prefersUsedText, estimate: w.estimate)
+            }
+            if let weeklyID = snapshot.weeklyID, weeklyID != snapshot.headlineID,
+               let idx = snapshot.windows.firstIndex(where: { $0.id == weeklyID }),
+               let used = snapshot.windows[idx].usedFraction, used >= 0.99 {
+                let w = snapshot.windows[idx]
+                snapshot.windows[idx] = LimitWindow(id: w.id, group: w.group, label: w.label,
+                    usedFraction: 1, remaining: w.remaining, used: w.used, usedText: w.usedText,
+                    detail: w.detail, money: w.money, resetsAt: w.resetsAt, quantity: w.quantity,
+                    duration: w.duration, bandOverride: w.bandOverride,
+                    prefersUsedText: w.prefersUsedText, estimate: w.estimate)
+            }
+        }
         return snapshot
     }
 

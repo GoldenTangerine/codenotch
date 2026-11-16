@@ -36,6 +36,24 @@ jobs:
       - name: Test Korean card localization
         run: node --test scripts/test-ko-i18n.cjs
 
+      - name: Test Claude quota freshness
+        run: node scripts/test-claude-quota-freshness.cjs
+
+      - name: Test notch percentages
+        run: node scripts/test-notch-pct.cjs
+
+      - name: Test the shipped language set
+        run: node --test scripts/test-language-set.cjs
+
+      - name: Test account and taskbar controls
+        run: node --test test-accounts-taskbar.cjs
+
+      - name: Test usage pace deficit
+        run: node --test test-deficit.cjs
+
+      - name: Test Qoder usage parsing
+        run: node test-qoder-usage.cjs
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy

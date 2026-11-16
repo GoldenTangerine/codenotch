@@ -133,6 +133,22 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         ("pt-BR", "refresh_now") => "Atualizar agora",
         ("pt-BR", "open_host") => "Abrir o %@",
         ("pt-BR", "keep_open") => "Manter aberto",
+        ("es", "open_data") => "Abrir carpeta de datos (registros / iconos)",
+        ("es", "install") => "Instalar hooks de Claude Code",
+        ("es", "uninstall") => "Desinstalar hooks",
+        ("es", "language") => "Idioma",
+        ("es", "lang_auto") => "Según el sistema",
+        ("es", "reset_pos") => "Restablecer posición de la barra",
+        ("es", "quit") => "Salir",
+        ("es", "hooks_missing") => "Hooks no instalados: clic derecho en el icono de la bandeja → Instalar hooks de Claude Code (la app de escritorio usa un respaldo automático)",
+        ("es", "autostart") => "Iniciar con Windows",
+        ("es", "refresh_all") => "Actualizar todo",
+        ("es", "waiting") => "Esperando la primera lectura…",
+        ("es", "quit_app") => "Salir de Codenotch",
+        ("es", "settings") => "Ajustes…",
+        ("es", "refresh_now") => "Actualizar ahora",
+        ("es", "open_host") => "Abrir %@",
+        ("es", "keep_open") => "Mantener abierto",
         ("zh", "install") => "安装 Claude Code 钩子",
         ("zh-Hant", "install") => "安裝 Claude Code 鉤子",
         ("zh", "uninstall") => "卸载钩子",
@@ -152,6 +168,7 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         ("ja", "autostart") => "Windows起動時に自動開始",
         ("ko", "autostart") => "Windows 시작 시 자동 실행",
         ("zh", "refresh_all") => "全部刷新",
+        ("zh-Hant", "refresh_all") => "全部重新整理",
         ("zh", "open_data") => "打开数据文件夹（日志 / 图标）",
         ("zh-Hant", "open_data") => "開啟資料資料夾（日誌 / 圖示）",
         ("ja", "open_data") => "データフォルダを開く（ログ / アイコン）",
@@ -174,7 +191,7 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         ("ko", "lang_auto") => "시스템 따르기",
         ("ko", "reset_pos") => "바 위치 초기화",
         ("ko", "quit") => "종료",
-        ("ko", "hooks_missing") => "후크 미설치: 트레이 우클릭 → 후크 설치 (데스크톱판은 자동 폴백)",
+        ("ko", "hooks_missing") => "후크 미설치: 트레이 우클릭 → Claude Code 후크 설치 (데스크톱 앱은 대체 방식을 자동으로 사용 중)",
         ("ru", "install") => "Установить хуки Claude Code",
         ("uk", "install") => "Встановити хуки Claude Code",
         ("ru", "uninstall") => "Удалить хуки",
@@ -204,6 +221,7 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         (_, "refresh_all") => "Refresh all",
 
         ("zh", "waiting") => "正在等待首次读数…",
+        ("zh-Hant", "waiting") => "正在等待首次讀數…",
         ("ja", "waiting") => "最初の読み取りを待っています…",
         ("ko", "waiting") => "첫 번째 읽기를 기다리는 중…",
         ("ru", "waiting") => "Ожидание первых данных…",
@@ -211,6 +229,7 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         (_, "waiting") => "Waiting for the first reading…",
 
         ("zh", "quit_app") => "退出 Codenotch",
+        ("zh-Hant", "quit_app") => "結束 Codenotch",
         ("ja", "quit_app") => "Codenotch を終了",
         ("ko", "quit_app") => "Codenotch 종료",
         ("ru", "quit_app") => "Выйти из Codenotch",
@@ -223,12 +242,27 @@ pub fn tr(lang: &str, key: &str) -> &'static str {
         ("ru", "settings") => "Настройки…",
         ("uk", "settings") => "Налаштування…",
         (_, "settings") => "Settings…",
-
-
-
-
-
-
+        ("zh", "refresh_now") => "立即刷新",
+        ("zh-Hant", "refresh_now") => "立即重新整理",
+        ("ja", "refresh_now") => "今すぐ更新",
+        ("ru", "refresh_now") => "Обновить сейчас",
+        ("uk", "refresh_now") => "Оновити зараз",
+        ("ko", "refresh_now") => "지금 새로 고침",
+        (_, "refresh_now") => "Refresh now",
+        ("zh", "open_host") => "打开 %@",
+        ("zh-Hant", "open_host") => "開啟 %@",
+        ("ja", "open_host") => "%@ を開く",
+        ("ru", "open_host") => "Открыть %@",
+        ("uk", "open_host") => "Відкрити %@",
+        ("ko", "open_host") => "%@ 열기",
+        (_, "open_host") => "Open %@",
+        ("zh", "keep_open") => "保持展开",
+        ("zh-Hant", "keep_open") => "保持展開",
+        ("ja", "keep_open") => "開いたままにする",
+        ("ko", "keep_open") => "열어 두기",
+        ("ru", "keep_open") => "Оставить открытым",
+        ("uk", "keep_open") => "Тримати відкритим",
+        (_, "keep_open") => "Keep open",
         _ => "?",
     }
 }
@@ -290,6 +324,129 @@ mod tests {
                 "missing Ukrainian translation for {key}"
             );
             assert_ne!(tr("uk", key), "?", "unknown Ukrainian key {key}");
+        }
+    }
+
+    const TRADITIONAL_CHINESE_KEYS: &[(&str, &str)] = &[
+        ("settings", "設定…"),
+        ("refresh_all", "全部重新整理"),
+        ("waiting", "正在等待首次讀數…"),
+        ("quit_app", "結束 Codenotch"),
+        ("refresh_now", "立即重新整理"),
+        ("open_host", "開啟 %@"),
+        ("quit", "結束"),
+        ("install", "安裝 Claude Code 鉤子"),
+        ("uninstall", "解除安裝鉤子"),
+        ("language", "語言"),
+        ("lang_auto", "跟隨系統"),
+        ("reset_pos", "重置懸浮列位置"),
+        ("hooks_missing", "鉤子未安裝：在系統匣圖示按右鍵 → 安裝 Claude Code 鉤子（桌面版無需，已自動後援）"),
+        ("autostart", "開機自動啟動（靜默待命）"),
+        ("open_data", "開啟資料資料夾（日誌 / 圖示）"),
+    ];
+
+    #[test]
+    fn traditional_chinese_translates_every_known_key() {
+        for (key, value) in TRADITIONAL_CHINESE_KEYS {
+            assert_eq!(
+                tr("zh-Hant", key),
+                *value,
+                "missing Traditional Chinese translation for {key}"
+            );
+            assert_ne!(tr("zh-Hant", key), "?", "unknown Traditional Chinese key {key}");
+        }
+    }
+
+    #[test]
+    fn traditional_chinese_locales_resolve_apart_from_simplified() {
+        use super::language_from_windows_locale;
+        assert_eq!(language_from_windows_locale("zh-TW"), Some("zh-Hant"));
+        assert_eq!(language_from_windows_locale("zh-Hant"), Some("zh-Hant"));
+        assert_eq!(language_from_windows_locale("zh-Hant-TW"), Some("zh-Hant"));
+        assert_eq!(language_from_windows_locale("zh-HK"), Some("zh-Hant"));
+        assert_eq!(language_from_windows_locale("zh-MO"), Some("zh-Hant"));
+        assert_eq!(language_from_windows_locale("zh-CN"), Some("zh"));
+        assert_eq!(language_from_windows_locale("zh-Hans"), Some("zh"));
+        assert_eq!(language_from_windows_locale("zh-Hans-CN"), Some("zh"));
+        assert_eq!(language_from_windows_locale("zh-SG"), Some("zh"));
+        assert_eq!(language_from_windows_locale("zh"), Some("zh"));
+    }
+
+    const BRAZILIAN_PORTUGUESE_KEYS: &[(&str, &str)] = &[
+        ("settings", "Ajustes…"),
+        ("refresh_all", "Atualizar tudo"),
+        ("waiting", "Aguardando a primeira leitura…"),
+        ("quit_app", "Encerrar o Codenotch"),
+        ("refresh_now", "Atualizar agora"),
+        ("open_host", "Abrir o %@"),
+        ("keep_open", "Manter aberto"),
+        ("quit", "Sair"),
+        ("install", "Instalar hooks do Claude Code"),
+        ("uninstall", "Desinstalar hooks"),
+        ("language", "Idioma"),
+        ("lang_auto", "Seguir o sistema"),
+        ("reset_pos", "Redefinir posição da barra"),
+        ("autostart", "Iniciar com o Windows"),
+        ("open_data", "Abrir pasta de dados (logs / ícones)"),
+    ];
+
+    #[test]
+    fn brazilian_portuguese_translates_every_known_key() {
+        for (key, value) in BRAZILIAN_PORTUGUESE_KEYS {
+            assert_eq!(tr("pt-BR", key), *value, "missing Brazilian Portuguese translation for {key}");
+            assert_ne!(tr("pt-BR", key), "?", "unknown Brazilian Portuguese key {key}");
+        }
+    }
+
+    #[test]
+    fn brazilian_portuguese_locale_resolves() {
+        use super::language_from_windows_locale;
+        assert_eq!(language_from_windows_locale("pt-BR"), Some("pt-BR"));
+        assert_eq!(language_from_windows_locale("pt-br"), Some("pt-BR"));
+        assert_eq!(language_from_windows_locale("pt-PT"), None);
+    }
+
+    #[test]
+    fn korean_locale_and_tray_copy() {
+        assert_eq!(super::language_from_windows_locale("ko-KR"), Some("ko"));
+        assert_eq!(super::language_from_windows_locale("ko"), Some("ko"));
+        for (key, expected) in [
+            ("settings", "설정…"),
+            ("refresh_all", "모두 새로 고침"),
+            ("refresh_now", "지금 새로 고침"),
+            ("open_host", "%@ 열기"),
+            ("waiting", "첫 번째 읽기를 기다리는 중…"),
+            ("keep_open", "열어 두기"),
+            ("install", "Claude Code 후크 설치"),
+        ] {
+            assert_eq!(tr("ko", key), expected);
+        }
+    }
+
+    const SPANISH_KEYS: &[(&str, &str)] = &[
+        ("open_data", "Abrir carpeta de datos (registros / iconos)"),
+        ("install", "Instalar hooks de Claude Code"),
+        ("uninstall", "Desinstalar hooks"),
+        ("language", "Idioma"),
+        ("lang_auto", "Según el sistema"),
+        ("reset_pos", "Restablecer posición de la barra"),
+        ("quit", "Salir"),
+        ("hooks_missing", "Hooks no instalados: clic derecho en el icono de la bandeja → Instalar hooks de Claude Code (la app de escritorio usa un respaldo automático)"),
+        ("autostart", "Iniciar con Windows"),
+        ("refresh_all", "Actualizar todo"),
+        ("waiting", "Esperando la primera lectura…"),
+        ("quit_app", "Salir de Codenotch"),
+        ("settings", "Ajustes…"),
+        ("refresh_now", "Actualizar ahora"),
+        ("open_host", "Abrir %@"),
+        ("keep_open", "Mantener abierto"),
+    ];
+
+    #[test]
+    fn spanish_translates_every_known_key() {
+        for (key, value) in SPANISH_KEYS {
+            assert_eq!(tr("es", key), *value, "missing Spanish translation for {key}");
+            assert_ne!(tr("es", key), "?", "unknown Spanish key {key}");
         }
     }
 

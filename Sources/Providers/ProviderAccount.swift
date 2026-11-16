@@ -57,7 +57,11 @@ enum SignInRoute: Equatable {
         case .modal(let name):     return L10n.t("Sign in to \(name)")
         case .openApp(_, let name): return L10n.t("Open \(name)")
         case .guidance:            return nil
-        case .command(_, let name, _): return L10n.t("Sign in to \(name)")
+        case .command(let command, let name, _):
+            if command.contains("switch") {
+                return L10n.t("Switch to \(name)")
+            }
+            return L10n.t("Sign in to \(name)")
         }
     }
 
@@ -73,6 +77,9 @@ enum SignInRoute: Equatable {
         case .command(let command, let name, _):
             guard TerminalCommand.isInstalled(command: command) else {
                 return L10n.t("Install the \(name) CLI first; Sign in opens its install page.")
+            }
+            if command.contains("switch") {
+                return L10n.t("Runs \(command) in your terminal to switch the active account.")
             }
             return command.hasSuffix("login")
                 ? L10n.t("Runs \(command) in your terminal; it opens the browser to sign in and saves the session this reads.")

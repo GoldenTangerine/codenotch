@@ -47,7 +47,7 @@ final class LMStudioViewTests: XCTestCase {
         vm.setLocalMetricsEnabled(false)
         XCTAssertNil(vm.snapshots[0].localPerformance)
         XCTAssertEqual(vm.snapshots.first { $0.id == qwen }?.localPerformance, speed)
-        XCTAssertEqual(vm.snapshots.first { $0.id == qwen }?.headlineText, "\(17.9.formatted(.number.precision(.fractionLength(0...1)))) tok/s")
+        XCTAssertEqual(vm.snapshots.first { $0.id == qwen }?.headlineText, "18 tok/s")
     }
 
     func testTheRingIsTheContextAndTheTooltipGetsTheLedger() throws {

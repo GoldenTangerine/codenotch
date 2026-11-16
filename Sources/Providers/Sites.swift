@@ -112,6 +112,11 @@ enum Sites {
             if (response.status < 200 || response.status >= 300) {
                 return JSON.stringify({ authenticated: false });
             }
+            // An expired token still answers HTTP 200, with 40002 or 40003.
+            const envelope = await response.json().catch(() => null);
+            if (envelope && [40002, 40003].includes(envelope.code)) {
+                return JSON.stringify({ authenticated: false });
+            }
             const bytes = new TextEncoder().encode(token);
             const digest = await crypto.subtle.digest('SHA-256', bytes);
             const fingerprint = Array.from(new Uint8Array(digest))
@@ -341,7 +346,10 @@ enum Sites {
                     .map(byte => byte.toString(16).padStart(2, '0')).join('');
             } catch (_) { return null; }
             """ : nil,
-            associatedHosts: [region.remainsURL.host].compactMap { $0 },
+            // China's console lived on minimaxi.com before it moved to
+            // minimax.cn; a session from then is still cleared on sign-out.
+            associatedHosts: [region.remainsURL.host].compactMap { $0 }
+                + (region == .china ? ["platform.minimaxi.com", "www.minimaxi.com"] : []),
             parse: { try MiniMaxUsage.windows(fromJSON: $0) }
         )
     }

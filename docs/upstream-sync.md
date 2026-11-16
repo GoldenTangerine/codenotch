@@ -8,6 +8,46 @@
 @FilePath: docs/upstream-sync.md
 -->
 
+# 2026-11-16 上游 v1.24.0 / v1.25.0 及后续修复整合（随 v1.25.0 发布）
+
+- 来源：<https://github.com/vinzdg/codenotch>；已整合基线 `9e7cd3d`（v1.23.0 appcast），目标 `8405178`（v1.25.0 之后 64 个提交，Fix #533/#546/#553/#554），229 个提交、238 个文件。后续同步以 `8405178` 计算增量。
+- 本地起点 `bdbe323`（`1.23.5` / build `757`），工作区干净；同步前已建立备份分支 `backup/main-before-upstream-sync-20261116`。以 `9e7cd3d` 为基线用 `git merge-tree` 生成三方合并结果落到工作区，没有建立上游合并历史，随后按用户要求将版本号更新为 `1.25.0` / build `758`（Windows 同步为 `1.25.0`），提交并以 `v1.25.0` 标签触发发布流程。
+- 三方合并共 52 个冲突文件，冲突时以本地功能为准。保留本地版本号、GoldenTangerine 更新源、公钥、签名、`site/` 发布产物、工作流和 `Makefile`（上游改为只认 project.yml 团队 ID 的签名判定未采纳）。
+- 注意：GitHub fork 页面显示的 “345 ahead / 1127 behind” 与冲突提示来自 `origin/main` 的发布机器人历史（只含 dmg/appcast 提交），与本地 `main` 没有共同祖先；不要点击 “Discard 345 commits”，否则会清掉已发布的站点产物。
+
+## 同步内容与本地适配
+
+| 范围 | 本次结果 | 本地兼容约束 |
+|---|---|---|
+| 菜单栏改版 | 菜单中改为与刘海一致的额度卡片（每张可展开 Detail）、点击动作、按剩余排序、可视化指示条（#376）、设置中的“菜单栏”分组、活动脉冲 / 等待红点 / 完成闪烁 | 按用户选择完整接入（含脉冲），StatusItem 相关源码与测试采用上游版本；“全部刷新”同时等待本机与 Code Switch R 联动读数完成；菜单栏仍显示联动环读数 |
+| 卡片共享 | 上游将提示卡拆为 `ProviderLimitsContent` / `ProviderDetailContent` 供刘海与菜单共用 | 本地 Code Switch R 联动卡片、刷新中提示、查询图标、完整高度模式（不限会话 / 费用行数）都放入共享视图；联动卡片在菜单中也带 Detail 开关 |
+| 环排序 | 排序方式改为手动 / 剩余 / 消耗缺口 / 最早到期（`RingOrder`），旧开关自动迁移 | 刘海中仍只对本机账号排序和隐藏，Code Switch R 联动环保持原顺序；设置说明同步补充 |
+| 自动隐藏 | 从不 / 全屏时 / 有窗口遮挡时（`AutoHideMode`），旧“全屏折叠”设置自动迁移 | 保留本地悬停延迟、触发高度、几何预览与双翼逻辑 |
+| 额度上限与提醒 | 计划额度上限（手动 / 推断 / 混合）、可选提醒阈值 75–90%、手动计数供应商 | 额度用尽仍只按“额度用尽时”开关提醒；联动额度也使用同一提醒阈值 |
+| 新供应商 | Higgsfield、Krea、手动计数、Grok 多 `GROK_HOME`、codex-auth 多账号、DeepSeek API Key 读取余额、MiMo 端点预设、Antigravity ACP / 多版本 | 新条目通过查询目录一次性导入，Higgsfield / Krea / 手动计数默认关闭，删除后不恢复；DeepSeek 改由 `DeepSeekProvider` 读取（登录或 API Key），条目 ID 不变；codex-auth 非激活账号不认领活动 |
+| 供应商修复 | Codex prolite 周额度、Claude 仅周额度、Kiro V2、Kimi 月额度、OpenCode Go 控制台 Key、Ollama 请求总数、Pi 会话、Claude 会话按标题命名、费用索引改用 stat 与读数不变时不重复采样等 | 随自动合并接入；Antigravity 账号显示保留本地逻辑（所有配置都可显示本地会话） |
+| MiniMax | 中国区控制台迁移到 minimax.cn，登出时同时清理旧域名 | 保留本地 Key → Cookie → WebView 回退链，`sk-api-` Key 仍不用于查询额度（上游 #516 中国区尝试 sk-api Key 的部分未采纳）；中国区登录标记随新域名重新生成，旧登录需要重新登录一次 |
+| 已用尽读数 | 被限流且读数已达 99% 以上时显示为 100% | 重建窗口时保留本地的 `quantity` 与估算标记 |
+| 未移植 | #544 折叠胶囊周边停留 0.3 秒后展开、点击穿透 | 依赖本地早已移除的 `CursorGeometry`，本地已有可配置悬停延迟；相关文件与测试继续移除 |
+| 语言 | 上游新增西班牙语 | macOS 与 Windows 语言选择保持本地集合，不开放西班牙语；目录中保留上游各语言译文数据 |
+| Windows | 任务栏圆环与悬停卡、Claude 多账号行、Qoder、Mistral、Command Code、DeepSeek Harness、消耗缺口、事件服务鉴权令牌、卡片滑动、韩语更新 | 保留本地设置页结构、托盘布局、拖放与“重新居中”、Claude 续期最多 3 次、版本号与更新源；西班牙语不开放，`test-es-i18n.cjs` 改为 `test-language-set.cjs` |
+| 本地化 | 按键、按语言三方合并目录：新增上游 210 个键，52 处简体中文冲突保留本地译文 | 新增及组合文案补齐简体中文，目录共 2029 键 |
+
+## 合并中顺带修复
+
+- 上游 `AgentSession.named(_:)`（会话按标题命名）重建会话时会丢掉进程、hook 与原生会话键，已改为完整保留，避免 Code Switch R 会话路由失效。
+- 上游菜单栏脉冲依赖活动回调调用 `StatusItemController.setActivity`，本地活动路由不经过该回调；改为在 `updateActivity()` 中按路由后的会话逐个下发（含 Code Switch R），会话消失的供应商补发空列表停止脉冲。
+- 上游“已用尽读数”的重建、DeepSeek 切换读取来源时的读数作废，都改用本地现有接口实现（本地没有 `providerContextChanged`）。
+- 读数超过一天显示为“N 天 / N 天前”，按本地 `ElapsedCopy.Span` 结构补充 `days`。
+- Code Switch R 设置页的供应商拖动排序原先使用 `draggable` 懒加载载荷，拖动开始时不记录来源，投放被一律拒绝；改为与账号页相同的 `onDrag` + `dropDestination` 写法，向下拖放在目标之后、向上拖放在目标之前。顺序写入 `codeSwitchProviderOrder` 后经 `ActivityRouting` 同步到刘海与菜单栏中的联动圆环顺序。
+
+## 验证与限制
+
+- macOS：SDK 26.5 + 临时编译的 SwiftNIO 2.x / Sparkle / swift-collections 1.2.1 依赖下，全部 318 个应用源码文件类型检查 0 错误（同步前基线同样 0 错误）；导出可测试模块后，13 个 Swift Testing 测试文件（含 Code Switch R 拖动排序测试）类型检查 0 错误。本机只有 Command Line Tools，没有 XCTest，XCTest 用例未编译；按项目约定未打包、未运行应用或测试。
+- 本地化：`Scripts/check-localization.py` 通过（2030 键，简体中文与格式参数一致）；`Scripts/test-notch-localization.mjs` 通过（`showPace` 随上游消耗缺口逻辑补入测试上下文）。
+- Windows：`check-ui-scripts.mjs` 及 notch / settings / taskbar 等页面内联脚本语法检查通过；`test-accounts-taskbar`（43）、`test-deficit`（25）、`test-qoder-usage`（9）、`test-codex-headline`（5）、`test-carry`（12）、`test-reset-card`（4）、`test-light-surface`（3）、`upstream-sync.test.mjs`（4）、韩语 / 语言集合 / Linux 刘海等脚本全部通过。本机无 Rust 工具链，Rust 代码只做了模块、引用、命令注册与配置默认值的脚本核对，未编译或运行单测。
+- 未验证：完整 XCTest、签名构建、菜单栏卡片 / 脉冲 / 指示条的实际效果、自动隐藏“有窗口遮挡时”模式、Higgsfield / Krea / 手动计数与 DeepSeek API Key 的真实读取、Windows 实机运行。
+
 # 2026-10-15 上游 v1.23.0 功能整合（随 v1.23.0 发布）
 
 - 来源：<https://github.com/vinzdg/codenotch>；已整合基线 `bcb28894d1514fef5a810595d64b44a3817c2076`（v1.22.0），目标 `9e7cd3d`（v1.23.0 appcast），61 个提交、146 个文件。后续同步以 `9e7cd3d` 计算增量。

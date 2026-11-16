@@ -132,7 +132,11 @@ final class NotchFleet {
     private var weeklyReading = false
     private var showsRemainingInNotch = false
     private var shutRingsWhenSpent = false
-    private var foldsForFullScreen = true
+    private var autoHideMode: AutoHideMode = .onFullscreen
+    private var foldsForFullScreen: Bool {
+        get { autoHideMode != .never }
+        set { autoHideMode = newValue ? .onFullscreen : .never }
+    }
     private var surfaceStyle: NotchSurfaceStyle = .glass
     private var deepSeekPricingEnabled = true
     private var deepSeekPricingSchedule = DeepSeekPricing.Schedule.current
@@ -178,7 +182,13 @@ final class NotchFleet {
             controller.apply(updatePrompt: updatePrompt)
         }
     }
-    var onFocusSession: ((pid_t) -> Void)?
+
+    /// Also given to `menuModel`, which has no controller to copy it from:
+    /// the Detail panel draws the same session rows the notch does, and a row
+    /// that takes you to its terminal in one place must do it in both.
+    var onFocusSession: ((pid_t) -> Void)? {
+        didSet { menuModel.onFocusSession = onFocusSession }
+    }
     var signInItems: [(title: String, action: () -> Void)] = []
     /// An ⌥-drag on any one panel settled at a new offset. Persisting it is
     /// Preferences' job, same division `apply(edge:)` already keeps.
@@ -276,10 +286,15 @@ final class NotchFleet {
         reconcile(screens: NSScreen.screens)
     }
 
+    /// Fanned to `models`, not to the controllers alone: `menuModel` is what
+    /// the menu bar's menu and its Detail panel read, and a reset worded one
+    /// way in the notch and another way in Detail is two answers to one
+    /// setting. The same goes for every apply below that writes a *model*
+    /// property rather than rebuilding a panel.
     func apply(resetTimeFormat: ResetTimeFormat) {
         self.resetTimeFormat = resetTimeFormat
-        for controller in controllers.values {
-            controller.model.resetTimeFormat = resetTimeFormat
+        for model in models {
+            model.resetTimeFormat = resetTimeFormat
         }
     }
 
@@ -304,10 +319,10 @@ final class NotchFleet {
         }
     }
 
-    func apply(foldsForFullScreen: Bool) {
-        self.foldsForFullScreen = foldsForFullScreen
+    func apply(autoHideMode: AutoHideMode) {
+        self.autoHideMode = autoHideMode
         for controller in controllers.values {
-            controller.apply(foldsForFullScreen: foldsForFullScreen)
+            controller.apply(autoHideMode: autoHideMode)
         }
     }
 
@@ -331,8 +346,8 @@ final class NotchFleet {
 
     func apply(weeklyRingDashed: Bool) {
         self.weeklyRingDashed = weeklyRingDashed
-        for controller in controllers.values {
-            controller.model.weeklyRingDashed = weeklyRingDashed
+        for model in models {
+            model.weeklyRingDashed = weeklyRingDashed
         }
     }
 
@@ -342,10 +357,14 @@ final class NotchFleet {
         for controller in controllers.values { controller.relocate() }
     }
 
+    func apply(foldsForFullScreen: Bool) {
+        apply(autoHideMode: foldsForFullScreen ? .onFullscreen : .never)
+    }
+
     func apply(weeklyRing: WeeklyRing) {
         self.weeklyRing = weeklyRing
-        for controller in controllers.values {
-            controller.model.weeklyRing = weeklyRing
+        for model in models {
+            model.weeklyRing = weeklyRing
         }
     }
 
@@ -359,10 +378,12 @@ final class NotchFleet {
         for controller in controllers.values { controller.model.weeklyReading = weeklyReading }
     }
 
+    /// Fanned to `models` like the band limits below it, so the menu's cards
+    /// and the notch's colour a bar by the same rule.
     func apply(colorTransitionStyle: ColorTransitionStyle) {
         self.colorTransitionStyle = colorTransitionStyle
-        for controller in controllers.values {
-            controller.model.colorTransitionStyle = colorTransitionStyle
+        for model in models {
+            model.colorTransitionStyle = colorTransitionStyle
         }
     }
 
@@ -378,12 +399,15 @@ final class NotchFleet {
         }
     }
 
+    /// The Watch and Critical thresholds from Appearance. One pair for every
+    /// surface: the notch, and the Detail panel reading `menuModel`, colour a
+    /// percentage by the same rule or they disagree about what is urgent.
     func apply(watchLimit: Double, criticalLimit: Double) {
         self.watchLimit = watchLimit
         self.criticalLimit = criticalLimit
-        for controller in controllers.values {
-            controller.model.watchLimit = watchLimit
-            controller.model.criticalLimit = criticalLimit
+        for model in models {
+            model.watchLimit = watchLimit
+            model.criticalLimit = criticalLimit
         }
     }
 
@@ -396,8 +420,8 @@ final class NotchFleet {
 
     func apply(accentColor: AccentColorChoice) {
         self.accentColor = accentColor
-        for controller in controllers.values {
-            controller.model.accentColor = accentColor
+        for model in models {
+            model.accentColor = accentColor
         }
     }
 
@@ -466,15 +490,15 @@ final class NotchFleet {
 
     func apply(deepSeekPricingEnabled: Bool) {
         self.deepSeekPricingEnabled = deepSeekPricingEnabled
-        for controller in controllers.values {
-            controller.model.deepSeekPricingEnabled = deepSeekPricingEnabled
+        for model in models {
+            model.deepSeekPricingEnabled = deepSeekPricingEnabled
         }
     }
 
     func apply(deepSeekPricingSchedule: DeepSeekPricing.Schedule) {
         self.deepSeekPricingSchedule = deepSeekPricingSchedule
-        for controller in controllers.values {
-            controller.model.deepSeekPricingSchedule = deepSeekPricingSchedule
+        for model in models {
+            model.deepSeekPricingSchedule = deepSeekPricingSchedule
         }
     }
 
@@ -516,12 +540,26 @@ final class NotchFleet {
     // MARK: - Readings
 
     func setSnapshots(_ snapshots: [ProviderSnapshot], now: Date = Date()) {
+        // A pure reorder (same rings, new order) glides: without the
+        // animation the rings jump to their new places, which is what
+        // enabling a sort looked like. Value changes ride unanimated, so a
+        // poll that moves a number does not also move every ring.
+        let oldIDs = self.snapshots.map(\.id)
+        let newIDs = snapshots.map(\.id)
+        let isReorder = oldIDs.count == newIDs.count
+            && !oldIDs.isEmpty && Set(oldIDs) == Set(newIDs) && oldIDs != newIDs
         self.snapshots = snapshots
         recordBotActivity(source: .codeSwitch, busy: snapshots.contains {
             $0.linked.map { $0.provider.status == "active" && $0.provider.activeRequests > 0 } ?? false
         }, now: now)
         for model in models {
-            model.updateSnapshots(snapshots)
+            if isReorder {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    model.updateSnapshots(snapshots)
+                }
+            } else {
+                model.updateSnapshots(snapshots)
+            }
             model.now = now
         }
     }
@@ -723,7 +761,7 @@ final class NotchFleet {
         let controller = NotchWindowController()
         controller.assignedScreen = scope == .allDisplays ? screen : nil
         controller.displayPreference = displayPreference
-        controller.foldsForFullScreen = foldsForFullScreen
+        controller.autoHideMode = autoHideMode
         controller.model.edge = edge
         controller.restore(position: savedPosition)
         controller.model.activitySourceIDs = activitySourceIDs

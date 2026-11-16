@@ -16,7 +16,7 @@ import XCTest
 @MainActor
 final class MiniMaxWebSessionTests: XCTestCase {
     private let signedInKey = "minimax.platform.minimax.io.signedIn"
-    private let chinaSignedInKey = "minimax.platform.minimaxi.com.signedIn"
+    private let chinaSignedInKey = "minimax.platform.minimax.cn.signedIn"
     private let deepSeekSignedInKey = "deepseek.signedIn"
     private var savedSignedIn: [String: Any] = [:]
 
@@ -60,21 +60,49 @@ final class MiniMaxWebSessionTests: XCTestCase {
         XCTAssertTrue(site.authFingerprintScript?.contains("localStorage.getItem('access_token')") == true)
     }
 
-    func testChinaSiteFetchesWwwMinimaxiComRemains() {
+    func testChinaSiteFetchesWwwMinimaxCnRemains() {
         let site = Sites.minimax(region: .china)
         XCTAssertEqual(site.id, "minimax")
         XCTAssertEqual(site.origin, MiniMaxRegion.china.platformOrigin)
         XCTAssertNil(site.requestOrigin)
         XCTAssertNil(site.authFingerprintScript)
         XCTAssertEqual(site.fidelity, .derived)
-        XCTAssertEqual(site.associatedHosts, ["www.minimaxi.com"])
-        XCTAssertTrue(site.script.contains("https://www.minimaxi.com/v1/api/openplatform/coding_plan/remains"))
+        XCTAssertEqual(site.associatedHosts, ["www.minimax.cn", "platform.minimaxi.com", "www.minimaxi.com"])
+        XCTAssertTrue(site.script.contains("https://www.minimax.cn/v1/api/openplatform/coding_plan/remains"))
         XCTAssertFalse(site.script.contains("https://www.minimax.io/"))
-        XCTAssertFalse(site.script.contains("https://platform.minimaxi.com/v1/"))
-        XCTAssertFalse(site.script.contains("https://api.minimaxi.com/"))
+        XCTAssertFalse(site.script.contains("minimaxi.com"))
+        XCTAssertFalse(site.script.contains("https://platform.minimax.cn/v1/"))
         XCTAssertTrue(site.script.contains("credentials: 'include'"))
         let probe = try! XCTUnwrap(site.authProbeScript)
-        XCTAssertTrue(probe.contains("https://www.minimaxi.com/v1/api/openplatform/coding_plan/remains"))
+        XCTAssertTrue(probe.contains("https://www.minimax.cn/v1/api/openplatform/coding_plan/remains"))
+    }
+
+    /// platform.minimaxi.com answers 302 to platform.minimax.cn. The sign-in
+    /// poll, the close-time probe and the usage read all wait for a page on
+    /// `site.origin`, so an origin the console redirects away from left a
+    /// finished sign-in unconfirmed and `minimax.signedIn` false (#516).
+    func testChinaOriginIsThePageTheConsoleSettlesOn() {
+        let origin = Sites.minimax(region: .china).origin
+        XCTAssertTrue(WebSessionProvider.matchesOrigin(
+            URL(string: "https://platform.minimax.cn/console/plan"), expected: origin
+        ))
+        XCTAssertFalse(WebSessionProvider.matchesOrigin(
+            URL(string: "https://platform.minimaxi.com/"), expected: origin
+        ))
+    }
+
+    /// The page reads remains with `credentials: 'include'`, so the remains
+    /// host has to sit under the console's cookie domain. A host on another
+    /// domain never receives the session, and the probe would always see 1004.
+    func testEachRegionReadsRemainsOnTheConsolesOwnSite() throws {
+        func site(of host: String?) -> String {
+            (host ?? "").lowercased().split(separator: ".").suffix(2).joined(separator: ".")
+        }
+        for region in MiniMaxRegion.allCases {
+            let web = Sites.minimax(region: region)
+            let remainsHost = try XCTUnwrap(region.remainsURL.host)
+            XCTAssertEqual(site(of: remainsHost), site(of: web.origin.host), "\(region)")
+        }
     }
 
     func testAProbeMeansOpeningTheSheetIsNotYetASignIn() {
@@ -133,7 +161,7 @@ final class MiniMaxWebSessionTests: XCTestCase {
         let china = WebSessionProvider(site: Sites.minimax(region: .china))
         XCTAssertNil(china.account(), "the international session is not a China login")
         UserDefaults.standard.set(true, forKey: chinaSignedInKey)
-        XCTAssertEqual(china.account()?.manageURL?.host, "platform.minimaxi.com")
+        XCTAssertEqual(china.account()?.manageURL?.host, "platform.minimax.cn")
     }
 
     func testApplySwitchesTheRegionalOriginWithoutChangingIdentity() {
@@ -148,13 +176,13 @@ final class MiniMaxWebSessionTests: XCTestCase {
         XCTAssertEqual(provider.displayName, "MiniMax")
         XCTAssertNil(provider.account(), "changing regions must not reuse the previous login")
         UserDefaults.standard.set(true, forKey: chinaSignedInKey)
-        XCTAssertEqual(provider.account()?.manageURL?.host, "platform.minimaxi.com")
+        XCTAssertEqual(provider.account()?.manageURL?.host, "platform.minimax.cn")
         provider.apply(site: Sites.deepSeek)
         XCTAssertEqual(provider.id, "minimax")
         XCTAssertEqual(provider.displayName, "MiniMax")
         XCTAssertNotNil(provider.account(),
                         "MiniMax's signed-in flag must not follow DeepSeek's site id")
-        XCTAssertEqual(provider.account()?.manageURL?.host, "platform.minimaxi.com",
+        XCTAssertEqual(provider.account()?.manageURL?.host, "platform.minimax.cn",
                        "a different site id must not replace MiniMax")
         XCTAssertFalse(UserDefaults.standard.bool(forKey: deepSeekSignedInKey))
         XCTAssertTrue(UserDefaults.standard.bool(forKey: signedInKey))
@@ -204,7 +232,7 @@ final class MiniMaxWebSessionTests: XCTestCase {
         )
         XCTAssertEqual(
             WebSessionProvider.websiteDataHosts(for: Sites.minimax(region: .china)),
-            ["platform.minimaxi.com", "www.minimaxi.com"]
+            ["platform.minimax.cn", "www.minimax.cn", "platform.minimaxi.com", "www.minimaxi.com"]
         )
     }
 

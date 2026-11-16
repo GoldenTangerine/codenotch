@@ -13,7 +13,7 @@ import Foundation
 @MainActor
 final class OllamaActivityRelay: ObservableObject {
     static let address = "http://127.0.0.1:11435"
-    @Published private(set) var status = "Off"
+    @Published private(set) var status = L10n.t("Off")
     @Published private(set) var ready = false
     @Published private(set) var thinkingModels: [String: Date] = [:]
     @Published private(set) var performances: [String: LocalModelPerformance] = [:]
@@ -29,7 +29,7 @@ final class OllamaActivityRelay: ObservableObject {
         thinkingModels = [:]
         performances = [:]
         ready = false
-        status = enabled ? "Starting…" : "Off"
+        status = enabled ? L10n.t("Starting…") : L10n.t("Off")
         let previous = configuration
         configuration = Task { [weak self] in
             await previous?.value
@@ -55,11 +55,11 @@ final class OllamaActivityRelay: ObservableObject {
                 _ = try await server.start()
                 guard self.revision == revision else { return }
                 self.ready = true
-                self.status = "Ready · \(Self.address)"
+                self.status = L10n.t("Ready · \(Self.address)")
             } catch {
                 if let server = self.server { await server.stop(); self.server = nil }
                 guard self.revision == revision else { return }
-                self.status = "Cannot start relay. Check that port 11435 is free and the server uses a different port."
+                self.status = L10n.t("Cannot start relay. Check that port 11435 is free and the server uses a different port.")
             }
         }
     }

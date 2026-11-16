@@ -40,6 +40,17 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.25.0",
+            headline: L10n.t("Upstream 1.25, a menu bar that does more"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Provider cards in the menu, a click action, usage bars and a pulse on working providers")),
+                ReleaseNote.Change(title: L10n.t("Order rings by burn deficit or soonest expiry, and fold when a window covers the notch")),
+                ReleaseNote.Change(title: L10n.t("Plan ceilings and an adjustable warning threshold")),
+                ReleaseNote.Change(title: L10n.t("Add Higgsfield, Krea, a manual counter and DeepSeek API keys")),
+                ReleaseNote.Change(title: L10n.t("Dragging Code Switch R providers reorders their rings"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.23.5",
             headline: L10n.t("Limit-reached alerts follow their switches"),
             changes: [
