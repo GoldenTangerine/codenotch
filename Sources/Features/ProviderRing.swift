@@ -65,6 +65,9 @@ struct ProviderRing: View {
     var innerFraction: Double?
     var expanded = false
     var emphasizeSingleRing = false
+    /// 有读数但没有分母（如余额、花费金额）：不画灰色空轨道，改为品牌色细线满环，
+    /// 既不冒充进度，也不会像“没有数据”一样空着。
+    var isUnmetered = false
 
     private var isExpanded: Bool { expanded || innerFraction != nil }
     private var hasSecondary: Bool {
@@ -121,6 +124,12 @@ struct ProviderRing: View {
     @Environment(\.colorTransitionStyle) private var colorTransitionStyle
     @Environment(\.weeklyRingDashed) private var weeklyRingDashed
     @Environment(\.busyIndicatorStyle) private var busyIndicatorStyle
+
+    /// 金额类读数用细线满环；被封禁时仍回落为灰色轨道，表示当前不可用。
+    private var showsUnmeteredRing: Bool {
+        isUnmetered && usedFraction == nil && !isBlocked
+            && localPerformance == nil && localContextFraction == nil
+    }
 
     private var refreshReadingOpacity: Double {
         isRefreshing ? (reduceTransparency ? 0.75 : 0.3) : 1
@@ -227,9 +236,20 @@ struct ProviderRing: View {
             // working right now is known first-hand and stays at full strength
             // even when the percentage behind it has gone stale.
             ZStack {
-                Circle()
-                    .inset(by: mainInset)
-                    .strokeBorder(Palette.ringTrack, lineWidth: mainTrackStroke)
+                if showsUnmeteredRing {
+                    // 与进度弧同一半径，线宽减半、品牌色淡显：一眼可知是金额而非百分比。
+                    Circle()
+                        .inset(by: mainInset + mainTrackStroke / 2)
+                        .stroke(glyph.brandColor,
+                                lineWidth: max(1, mainProgressStroke / 2))
+                        .opacity(reduceTransparency ? 0.7 : 0.4)
+                        .opacity(refreshReadingOpacity)
+                        .animation(.easeOut(duration: 0.2), value: isRefreshing)
+                } else {
+                    Circle()
+                        .inset(by: mainInset)
+                        .strokeBorder(Palette.ringTrack, lineWidth: mainTrackStroke)
+                }
 
                 if localPerformance != nil || localContextFraction != nil {
                     // Two facts on one ring: the arc is the context filling up,
@@ -558,7 +578,8 @@ struct ProviderCell: View {
                 bandOverride: reading.snapshot.bandOverride,
                 innerFraction: reading.inner?.fraction,
                 expanded: independentInnerRing,
-                emphasizeSingleRing: independentInnerRing && !dailyEstimateRingEnabled && !isLocal
+                emphasizeSingleRing: independentInnerRing && !dailyEstimateRingEnabled && !isLocal,
+                isUnmetered: !isLocal && snapshot.hasReading && reading.mainFraction == nil
             )
             .frame(width: cellDiameter, height: cellDiameter)
             if showsReading {

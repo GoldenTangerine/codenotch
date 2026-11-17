@@ -40,6 +40,13 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.25.1",
+            headline: L10n.t("Balance rings get a thin brand-colour circle"),
+            changes: [
+                ReleaseNote.Change(title: L10n.t("Balance and spend readings draw a faint full ring instead of an empty grey track"))
+            ]
+        ),
+        ReleaseNote(
             version: "1.25.0",
             headline: L10n.t("Upstream 1.25, a menu bar that does more"),
             changes: [

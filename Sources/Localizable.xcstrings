@@ -56,6 +56,28 @@
         }
       }
     },
+    "Balance rings get a thin brand-colour circle": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "金额圆环改为品牌色细线"
+          }
+        }
+      }
+    },
+    "Balance and spend readings draw a faint full ring instead of an empty grey track": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "余额、花费等金额读数改为淡色满环，不再只显示灰色空环"
+          }
+        }
+      }
+    },
     "Upstream 1.25, a menu bar that does more": {
       "extractionState": "manual",
       "localizations": {
