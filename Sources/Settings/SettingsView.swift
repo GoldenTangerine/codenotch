@@ -953,6 +953,11 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Picker(L10n.t("Amount ring style"), selection: $preferences.amountRingStyle) {
+                    ForEach(AmountRingStyle.allCases) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.menu)
+
                 Toggle(L10n.t("Show remaining instead of used"),
                        isOn: $preferences.showsRemainingInNotch)
                 Text(L10n.t("The notch and the menu bar read what is left — the figures, the rings' sweep, and the card's bars and percentages. Colours still judge by what is spent, so a nearly empty ring still reads red."))

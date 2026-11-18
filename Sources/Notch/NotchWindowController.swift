@@ -2057,6 +2057,7 @@ final class NotchWindowController {
             return PassageRing(id: snapshot.id, cell: ProviderCell(snapshot: snapshot,
                 activity: model.activity(for: snapshot), isRefreshing: model.isRefreshing(snapshot),
                 bot: model.botPresentation(for: snapshot), weeklyRing: model.weeklyRing,
+                amountRingStyle: model.amountRingStyle,
                 codeSwitchQuotaRatiosEnabled: model.codeSwitchQuotaRatiosEnabled,
                 independentInnerRing: model.independentInnerRing,
                 dailyEstimateRingEnabled: model.dailyEstimateRingEnabled, cellRingDiameter: model.cellRingDiameter,

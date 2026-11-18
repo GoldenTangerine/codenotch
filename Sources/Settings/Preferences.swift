@@ -548,6 +548,10 @@ final class Preferences: ObservableObject {
         didSet { defaults.set(weeklyRing.rawValue, forKey: Keys.weeklyRing) }
     }
 
+    @Published var amountRingStyle: AmountRingStyle {
+        didSet { defaults.set(amountRingStyle.rawValue, forKey: Keys.amountRingStyle) }
+    }
+
     /// Whether the move handle's arc is drawn above the notch.
     @Published var showsMoveHandle: Bool {
         didSet { defaults.set(showsMoveHandle, forKey: Keys.showsMoveHandle) }
@@ -1033,6 +1037,7 @@ final class Preferences: ObservableObject {
         // A new key, so there is nothing under the old app name to migrate.
         static let weeklyRing = "weeklyRing"
         static let weeklyRingDashed = "weeklyRingDashed"
+        static let amountRingStyle = "amountRingStyle"
         static let showsMoveHandle = "showsMoveHandle"
         static let showsSettingsHandle = "showsSettingsHandle"
         static let shutRingsWhenSpent = "shutRingsWhenSpent"
@@ -1538,6 +1543,8 @@ final class Preferences: ObservableObject {
 
         self.weeklyRing = defaults.string(forKey: Keys.weeklyRing)
             .flatMap(WeeklyRing.init(rawValue:)) ?? .off
+        self.amountRingStyle = defaults.string(forKey: Keys.amountRingStyle)
+            .flatMap(AmountRingStyle.init(rawValue:)) ?? .single
         // Preserve this fork's menu-based placement until the handle is enabled.
         self.showsMoveHandle = defaults.object(forKey: Keys.showsMoveHandle) as? Bool ?? false
         self.showsSettingsHandle = defaults.object(forKey: Keys.showsSettingsHandle) as? Bool ?? false

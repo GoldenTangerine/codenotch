@@ -125,6 +125,18 @@ final class AccentColorPreferencesTests: XCTestCase {
         XCTAssertEqual(Preferences(defaults: defaults).notchHoverDelay, 1)
     }
 
+    func testAmountRingStyleDefaultsAndPersists() {
+        let defaults = makeDefaults()
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.amountRingStyle, .single)
+        for style in AmountRingStyle.allCases {
+            preferences.amountRingStyle = style
+            XCTAssertEqual(Preferences(defaults: defaults).amountRingStyle, style)
+        }
+        defaults.set("unknown-style", forKey: "amountRingStyle")
+        XCTAssertEqual(Preferences(defaults: defaults).amountRingStyle, .single)
+    }
+
     private func makeDefaults() -> UserDefaults {
         let name = "AccentColorPreferencesTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

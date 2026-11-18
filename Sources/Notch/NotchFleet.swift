@@ -128,6 +128,7 @@ final class NotchFleet {
     private var criticalLimit: Double = 0.70
     private var colorTransitionStyle: ColorTransitionStyle = .hardStep
     private var weeklyRingDashed = false
+    private var amountRingStyle: AmountRingStyle = .single
     private var showsNotchReadings = true
     private var weeklyReading = false
     private var showsRemainingInNotch = false
@@ -348,6 +349,13 @@ final class NotchFleet {
         self.weeklyRingDashed = weeklyRingDashed
         for model in models {
             model.weeklyRingDashed = weeklyRingDashed
+        }
+    }
+
+    func apply(amountRingStyle: AmountRingStyle) {
+        self.amountRingStyle = amountRingStyle
+        for model in models {
+            model.amountRingStyle = amountRingStyle
         }
     }
 
@@ -800,6 +808,7 @@ final class NotchFleet {
         controller.model.colorTransitionStyle = colorTransitionStyle
         controller.model.busyIndicatorStyle = busyIndicatorStyle
         controller.model.weeklyRingDashed = weeklyRingDashed
+        controller.model.amountRingStyle = amountRingStyle
         controller.model.showsMoveHandle = showsMoveHandle
         controller.model.showsSettingsHandle = showsSettingsHandle
         controller.model.showsRemainingInNotch = showsRemainingInNotch

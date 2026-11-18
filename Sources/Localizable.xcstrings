@@ -1,6 +1,94 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Choose a ring style for balances and spending": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自选余额与花费的圆环样式"
+          }
+        }
+      }
+    },
+    "Amounts use a thick full ring by default": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "金额默认显示完整粗圆"
+          }
+        }
+      }
+    },
+    "Choose solid and dashed outer rings under Amount ring style in Appearance settings.": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在「设置 → 外观 → 金额圆环样式」可选择实线外圈、虚线外圈，或同时显示两种外圈。"
+          }
+        }
+      }
+    },
+    "Amount ring style": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "金额圆环样式"
+          }
+        }
+      }
+    },
+    "Full ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完整圆环"
+          }
+        }
+      }
+    },
+    "Full ring + solid outer ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完整圆环 + 实线外圈"
+          }
+        }
+      }
+    },
+    "Full ring + dashed outer ring": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完整圆环 + 虚线外圈"
+          }
+        }
+      }
+    },
+    "Full ring + solid and dashed outer rings": {
+      "extractionState": "manual",
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完整圆环 + 实线和虚线外圈"
+          }
+        }
+      }
+    },
     "Dragging Code Switch R providers reorders their rings": {
       "extractionState": "manual",
       "localizations": {

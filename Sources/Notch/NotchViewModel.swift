@@ -492,6 +492,7 @@ final class NotchViewModel: ObservableObject {
     var bodyDepth: CGFloat { baseBodyDepth + (usesHardwareWings ? 0 : ringEdgePadding) }
     var cellAlong: CGFloat { NotchLayout.cellAlong(for: edge, ringGrowth: ringGrowth) }
     @Published var weeklyRingDashed: Bool = false
+    @Published var amountRingStyle: AmountRingStyle = .single
     @Published var watchLimit: Double = 0.50
     @Published var criticalLimit: Double = 0.70
     /// Mirrors the persisted choice so every notch controller updates together.

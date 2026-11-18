@@ -954,6 +954,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .sink { [weak fleet] in fleet?.apply(weeklyRingDashed: $0) }
                 .store(in: &cancellables)
 
+            preferences.$amountRingStyle
+                .receive(on: RunLoop.main)
+                .sink { [weak fleet] in fleet?.apply(amountRingStyle: $0) }
+                .store(in: &cancellables)
+
             preferences.$colorTransitionStyle
                 .receive(on: RunLoop.main)
                 .sink { [weak fleet] in fleet?.apply(colorTransitionStyle: $0) }
@@ -1407,6 +1412,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         fleet.apply(colorTransitionStyle: preferences.colorTransitionStyle)
         fleet.apply(busyIndicatorStyle: preferences.busyIndicatorStyle)
         fleet.apply(weeklyRingDashed: preferences.weeklyRingDashed)
+        fleet.apply(amountRingStyle: preferences.amountRingStyle)
         fleet.apply(showsMoveHandle: preferences.showsMoveHandle)
         fleet.apply(showsSettingsHandle: preferences.showsSettingsHandle)
         fleet.apply(showsRemainingInNotch: preferences.showsRemainingInNotch)

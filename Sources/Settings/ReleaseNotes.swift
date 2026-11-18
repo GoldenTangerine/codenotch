@@ -40,6 +40,16 @@ struct ReleaseNote: Equatable {
 enum ReleaseNotes {
     private static var local: [ReleaseNote] { [
         ReleaseNote(
+            version: "1.25.2",
+            headline: L10n.t("Choose a ring style for balances and spending"),
+            changes: [
+                ReleaseNote.Change(
+                    title: L10n.t("Amounts use a thick full ring by default"),
+                    detail: L10n.t("Choose solid and dashed outer rings under Amount ring style in Appearance settings.")
+                )
+            ]
+        ),
+        ReleaseNote(
             version: "1.25.1",
             headline: L10n.t("Balance rings get a thin brand-colour circle"),
             changes: [

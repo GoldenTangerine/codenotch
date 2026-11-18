@@ -68,6 +68,7 @@ struct ProviderRing: View {
     /// 有读数但没有分母（如余额、花费金额）：不画灰色空轨道，改为品牌色细线满环，
     /// 既不冒充进度，也不会像“没有数据”一样空着。
     var isUnmetered = false
+    var amountRingStyle: AmountRingStyle? = nil
 
     private var isExpanded: Bool { expanded || innerFraction != nil }
     private var hasSecondary: Bool {
@@ -129,6 +130,41 @@ struct ProviderRing: View {
     private var showsUnmeteredRing: Bool {
         isUnmetered && usedFraction == nil && !isBlocked
             && localPerformance == nil && localContextFraction == nil
+    }
+
+    private var activeAmountRingStyle: AmountRingStyle? {
+        isBlocked || localPerformance != nil || localContextFraction != nil ? nil : amountRingStyle
+    }
+
+    private var amountOuterInset: CGFloat {
+        isExpanded ? NotchLayout.expandedSecondaryOutsideInset : diameter / 2 - NotchLayout.weeklyOutsideRadius
+    }
+    private var amountMiddleInset: CGFloat { amountOuterInset + NotchLayout.weeklyRingStroke + 1 }
+    private var amountInnerInset: CGFloat {
+        amountMiddleInset + (NotchLayout.weeklyRingStroke + NotchLayout.independentRingStroke) / 2 + 1
+    }
+
+    private func amountRings(_ style: AmountRingStyle) -> some View {
+        let color = glyph.brandColor
+        let outerColor = color.opacity(reduceTransparency ? 1 : 0.65)
+        return ZStack {
+            Circle()
+                .inset(by: amountInnerInset)
+                .stroke(color, lineWidth: NotchLayout.independentRingStroke)
+
+            if style == .solidOuter || style == .solidAndDashedOuter {
+                Circle()
+                    .inset(by: style == .solidOuter ? amountOuterInset : amountMiddleInset)
+                    .stroke(outerColor, lineWidth: NotchLayout.weeklyRingStroke)
+            }
+            if style == .dashedOuter || style == .solidAndDashedOuter {
+                Circle()
+                    .inset(by: amountOuterInset)
+                    .stroke(outerColor, style: StrokeStyle(lineWidth: NotchLayout.weeklyRingStroke, dash: [4, 2]))
+            }
+        }
+        .opacity(refreshReadingOpacity)
+        .animation(.easeOut(duration: 0.2), value: isRefreshing)
     }
 
     private var refreshReadingOpacity: Double {
@@ -225,6 +261,8 @@ struct ProviderRing: View {
     }
 
     var body: some View {
+        let amountStyle = activeAmountRingStyle
+        let showsAmountRing = amountStyle != nil
         ZStack {
             // Under the group that dims a stale reading, and so under the
             // glyph too: whether an agent is working is known first-hand and
@@ -236,7 +274,9 @@ struct ProviderRing: View {
             // working right now is known first-hand and stays at full strength
             // even when the percentage behind it has gone stale.
             ZStack {
-                if showsUnmeteredRing {
+                if let amountStyle {
+                    amountRings(amountStyle)
+                } else if showsUnmeteredRing {
                     // 与进度弧同一半径，线宽减半、品牌色淡显：一眼可知是金额而非百分比。
                     Circle()
                         .inset(by: mainInset + mainTrackStroke / 2)
@@ -271,7 +311,7 @@ struct ProviderRing: View {
                         .animation(.easeOut(duration: 0.2), value: isRefreshing)
                         .animation(NotchMotion.reading, value: localSweep)
                         .animation(NotchMotion.reading, value: localPerformance?.band)
-                } else if usedFraction != nil {
+                } else if usedFraction != nil && !showsAmountRing {
                     Circle()
                         .inset(by: mainInset + mainTrackStroke / 2)
                         .trim(from: 0, to: sweep)
@@ -303,7 +343,7 @@ struct ProviderRing: View {
                 // the case this exists for, and painting them the same colour
                 // would hide it. Held slightly back in opacity so the headline
                 // stays the one the eye lands on first.
-                if hasSecondary {
+                if hasSecondary && !showsAmountRing {
                     let inset = secondaryInset
 
                     // A track of its own, for the same reason the headline has
@@ -334,7 +374,7 @@ struct ProviderRing: View {
                         .animation(NotchMotion.reading, value: weeklyBand)
                 }
 
-                if let innerFraction {
+                if let innerFraction, !showsAmountRing {
                     Circle()
                         .inset(by: NotchLayout.independentRingInset)
                         .stroke(Palette.ringTrack, lineWidth: NotchLayout.independentRingStroke)
@@ -369,8 +409,10 @@ struct ProviderRing: View {
 
             if isRefreshing {
                 SpinningArc(color: refreshColor, arcFraction: 0.16, dashed: false,
-                            inset: mainInset + mainTrackStroke / 2, turns: !reduceMotion,
-                            lineWidth: mainProgressStroke, duration: 0.85, startAngle: .pi / 2)
+                            inset: showsAmountRing ? amountInnerInset : mainInset + mainTrackStroke / 2,
+                            turns: !reduceMotion,
+                            lineWidth: showsAmountRing ? NotchLayout.independentRingStroke : mainProgressStroke,
+                            duration: 0.85, startAngle: .pi / 2)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -483,6 +525,7 @@ struct ProviderCell: View {
     var isRefreshing: Bool = false
     var bot: BotPresentation?
     var weeklyRing: WeeklyRing = .off
+    var amountRingStyle: AmountRingStyle = .single
     var codeSwitchQuotaRatiosEnabled: Bool = false
     var independentInnerRing: Bool = false
     var dailyEstimateRingEnabled: Bool = true
@@ -522,6 +565,15 @@ struct ProviderCell: View {
     var displayedMainFraction: Double? { quotaReading.mainFraction }
     var displayedSecondaryFraction: Double? { quotaReading.secondaryFraction }
 
+    private static let currencyCodes = Set(Locale.Currency.isoCurrencies.map(\.identifier))
+
+    private func isAmountReading(_ text: String) -> Bool {
+        guard snapshot.localModel == nil, snapshot.block == nil else { return false }
+        if text.unicodeScalars.contains(where: { $0.properties.generalCategory == .currencySymbol }) { return true }
+        let parts = text.split(maxSplits: 1, whereSeparator: \.isWhitespace)
+        return parts.count == 2 && Self.currencyCodes.contains(String(parts[0]))
+    }
+
     /// A dash, not "0%": nothing read is not the same as nothing used.
     private func makeReadingText(_ reading: QuotaReading) -> String {
         if snapshot.hasReading, let fraction = reading.inner?.fraction ?? reading.ratios?.main.fraction {
@@ -556,7 +608,8 @@ struct ProviderCell: View {
         let isLocal = snapshot.localModel != nil
         let cellSize = NotchLayout.cellSize(ringDiameter: cellDiameter, isLocal: isLocal)
         let readingText = makeReadingText(reading)
-        let ringText = makeRingText(reading)
+        let showsAmount = isAmountReading(readingText)
+        let ringText = showsAmount ? nil : makeRingText(reading)
         VStack(spacing: NotchLayout.ringLabelGap) {
             ProviderRing(
                 usedFraction: snapshot.localModel == nil && snapshot.hasReading
@@ -579,7 +632,8 @@ struct ProviderCell: View {
                 innerFraction: reading.inner?.fraction,
                 expanded: independentInnerRing,
                 emphasizeSingleRing: independentInnerRing && !dailyEstimateRingEnabled && !isLocal,
-                isUnmetered: !isLocal && snapshot.hasReading && reading.mainFraction == nil
+                isUnmetered: !isLocal && snapshot.hasReading && reading.mainFraction == nil,
+                amountRingStyle: showsAmount ? amountRingStyle : nil
             )
             .frame(width: cellDiameter, height: cellDiameter)
             if showsReading {
@@ -606,7 +660,9 @@ struct ProviderCell: View {
     /// Everything the cell says, as one sentence for VoiceOver and the tests.
     var accessibilityText: String {
         let reading = quotaReading
-        return makeAccessibilityText(ringText: makeRingText(reading), readingText: makeReadingText(reading))
+        let readingText = makeReadingText(reading)
+        let ringText = isAmountReading(readingText) ? nil : makeRingText(reading)
+        return makeAccessibilityText(ringText: ringText, readingText: readingText)
     }
 
     private func makeAccessibilityText(ringText: String?, readingText: String) -> String {
@@ -616,7 +672,8 @@ struct ProviderCell: View {
     }
 
     var quotaRingText: String? {
-        makeRingText(quotaReading)
+        let reading = quotaReading
+        return isAmountReading(makeReadingText(reading)) ? nil : makeRingText(reading)
     }
 
     private func makeRingText(_ reading: QuotaReading) -> String? {
